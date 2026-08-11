@@ -4,10 +4,12 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mobitem/pages/employee_managment_page.dart';
 import 'package:mobitem/pages/product_tracking_service.dart';
+import 'package:mobitem/pages/track_order.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
 import '../models/employee_model.dart';
 import '../models/product_tracking_model.dart';
+import '../services/audit_service.dart';
 import '../services/csv_export_service.dart';
 import '../services/employee_service.dart';
 import '../services/sap_service.dart';
@@ -135,6 +137,27 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // Add audit service
+  final AuditService _auditService = AuditService(Supabase.instance.client);
+
+ // Helper to get current user info
+  String get _currentUserName => widget.loggedInEmployee?.fullName ?? 'Unknown';
+  String get _currentUserId => widget.loggedInEmployee?.id ?? '';
+
+ // Get old value before update (from the current order object)
+  String? _getCurrentFieldValue(SAPMainOrder order, String field) {
+    switch (field) {
+      case 'status': return order.status;
+      case 'design_team': return order.designTeam;
+      case 'responsible_engineer': return order.responsibleEngineer;
+      case 'reviewer': return order.reviewer;
+      case 'correspondence_engineer': return order.correspondenceEngineer;
+      case 'sales_engineer': return order.salesEngineer;
+      case 'factory': return order.factory;
+      default: return null;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
@@ -157,10 +180,9 @@ class _OrdersPageState extends State<OrdersPage> {
     return role == 'admin' || role == 'software head' || role == 'head' || username == 'abd.elmoen';
   }
 
-  Future<void> _updateOrderDesignTeam(
-    SAPMainOrder order,
-    String newValue,
-  ) async {
+  Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
+    final oldValue = order.designTeam;
+
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -168,12 +190,23 @@ class _OrdersPageState extends State<OrdersPage> {
           .update({'design_team': newValue})
           .eq('id', order.id);
 
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: 'design_team',
+        oldValue: oldValue,
+        newValue: newValue,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
+
       _showSnackBar('Design team updated!');
       _loadAllDataOnce();
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
   }
+
 
   // ==================== SCROLL SYNC ====================
   bool _onLeftScrollNotification(ScrollNotification notification) {
@@ -254,11 +287,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Update engineer assignment in database
-  Future<void> _updateOrderEngineer(
-    SAPMainOrder order,
-    String field,
-    String? newValue,
-  ) async {
+  Future<void> _updateOrderEngineer(SAPMainOrder order, String field, String? newValue) async {
+    final oldValue = _getCurrentFieldValue(order, field);
+
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -266,8 +297,18 @@ class _OrdersPageState extends State<OrdersPage> {
           .update({field: newValue})
           .eq('id', order.id);
 
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: field,
+        oldValue: oldValue,
+        newValue: newValue,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
+
       _showSnackBar('Updated successfully!');
-      _loadAllDataOnce(); // Reload all data
+      _loadAllDataOnce();
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
@@ -410,13 +451,32 @@ class _OrdersPageState extends State<OrdersPage> {
     final supabase = Supabase.instance.client;
     int deleted = 0;
     int failed = 0;
+    final deletedOrders = <Map<String, String>>[];
 
     for (var index in _selectedRows.toList()) {
       if (index < _allOrders.length) {
         final order = _allOrders[index];
         try {
+          // Log the deletion before actually deleting
+          await _auditService.logChange(
+            orderId: order.id,
+            designOrder: order.designOrder,
+            fieldName: 'order_deleted',
+            oldValue: '${order.designOrder} | ${order.customerName} | ${order.description}',
+            newValue: null,
+            changedBy: _currentUserName,
+            changedById: _currentUserId,
+            actionType: 'delete',
+            notes: 'Order permanently deleted',
+          );
+
+          // Delete the order
           await supabase.from('sap_main_orders').delete().eq('id', order.id);
           deleted++;
+          deletedOrders.add({
+            'designOrder': order.designOrder,
+            'customerName': order.customerName,
+          });
         } catch (e) {
           failed++;
           print('Failed to delete ${order.id}: $e');
@@ -440,12 +500,32 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
+    // Log summary if multiple orders were deleted
+    if (deleted > 1) {
+      await _auditService.logChange(
+        orderId: 'bulk_delete',
+        fieldName: 'bulk_delete',
+        oldValue: null,
+        newValue: '$deleted orders deleted',
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+        actionType: 'delete',
+        notes: 'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
+      );
+    }
+
     _loadAllDataOnce();
   }
 
-  // Add this method in the _OrdersPageState class
-  // Update order status in database and locally
+  bool get _isAdmin {
+    final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
+    return role == 'admin' || role == 'software head' || role == 'head';
+  }
+
+  // Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
+    final oldStatus = order.status;
+
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -453,45 +533,51 @@ class _OrdersPageState extends State<OrdersPage> {
           .update({'status': newStatus})
           .eq('id', order.id);
 
-      // Find and update the order in the local list
-      final index = _orderIndexMap[order];
-      if (index != null && index < _allOrders.length) {
-        // Create a new SAPMainOrder with updated status
-        final updatedOrder = SAPMainOrder(
-          id: order.id,
-          status: newStatus,
-          customerName: order.customerName,
-          itemNumber: order.itemNumber,
-          productCode: order.productCode,
-          contractNumber: order.contractNumber,
-          description: order.description,
-          designOrder: order.designOrder,
-          quantity: order.quantity,
-          unitOfMeasure: order.unitOfMeasure,
-          value: order.value,
-          salesEngineer: order.salesEngineer,
-          orderDate: order.orderDate,
-          deliveryDate: order.deliveryDate,
-          factory: order.factory,
-          designTeam: order.designTeam,
-          responsibleEngineer: order.responsibleEngineer,
-          reviewer: order.reviewer,
-          correspondenceEngineer: order.correspondenceEngineer,
-          createdAt: order.createdAt,
-        );
+      // Log the change
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: 'status',
+        oldValue: oldStatus,
+        newValue: newStatus,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
 
-        setState(() {
-          _allOrders[index] = updatedOrder;
-          // Update the index map
-          _orderIndexMap.remove(order);
-          _orderIndexMap[updatedOrder] = index;
-        });
-      }
-
-      _rebuildGroups();
+      _showSnackBar('Status updated!');
+      _loadAllDataOnce();
     } catch (e) {
       _showSnackBar('Error updating status: $e');
     }
+  }
+
+// Log import action
+  Future<void> _logImportAction(int recordCount) async {
+    await _auditService.logChange(
+      orderId: 'import_batch',
+      fieldName: 'import',
+      oldValue: null,
+      newValue: '$recordCount records imported',
+      changedBy: _currentUserName,
+      changedById: _currentUserId,
+      actionType: 'import',
+      notes: 'Bulk import of $recordCount records',
+    );
+  }
+
+// Log delete action
+  Future<void> _logDeleteAction(String orderId, String designOrder) async {
+    await _auditService.logChange(
+      orderId: orderId,
+      designOrder: designOrder,
+      fieldName: 'delete',
+      oldValue: designOrder,
+      newValue: null,
+      changedBy: _currentUserName,
+      changedById: _currentUserId,
+      actionType: 'delete',
+      notes: 'Order deleted',
+    );
   }
 
   // Add this method
@@ -1831,6 +1917,15 @@ class _OrdersPageState extends State<OrdersPage> {
     final isSelected = _selectedRows.contains(index);
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
+      onLongPress: _isAdmin ? () {
+      // Navigate to order tracking page on long press (admin only)
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderTrackingPage(order: order),
+        ),
+      );
+    } : null,
       child: Container(
         height: 48,
         decoration: BoxDecoration(
