@@ -21,7 +21,7 @@ class CSVExportService {
 
     // Headers - All 18 columns
     List<String> headers = [
-      'Status', 'Name', 'Item', 'Product Code', 'Contract Num',
+      'Name', 'Status', 'Item', 'Product Code', 'Contract Num',
       'Description', 'Design Order', 'QTY', 'Unit of Measure', 'Value',
       'Sales Engineer', 'O-Date', 'Delivery Date', 'Factory',
       'Design Team', 'Responsible Engineer', 'Reviewer', 'Correspondence Engineer'
@@ -31,8 +31,8 @@ class CSVExportService {
     // Data rows
     for (var order in orders) {
       List<String> row = [
-        _escapeCSV(order.status),
         _escapeCSV(order.customerName),
+        _escapeCSV(order.status),
         _escapeCSV(order.itemNumber),
         _escapeCSV(order.productCode),
         _escapeCSV(order.contractNumber),
@@ -83,7 +83,7 @@ class CSVExportService {
     csvContent.write('\u{FEFF}');
 
     List<String> headers = [
-      'Status', 'Name', 'Item', 'Product Code', 'Contract Num',
+      'Name', 'Status', 'Item', 'Product Code', 'Contract Num',
       'Description', 'Design Order', 'QTY', 'Unit of Measure', 'Value',
       'Sales Engineer', 'O-Date', 'Delivery Date', 'Factory',
       'Design Team', 'Responsible Engineer', 'Reviewer', 'Correspondence Engineer'
@@ -92,8 +92,8 @@ class CSVExportService {
 
     for (var order in orders) {
       List<String> row = [
-        _escapeCSV(order.status),
         _escapeCSV(order.customerName),
+        _escapeCSV(order.status),
         _escapeCSV(order.itemNumber),
         _escapeCSV(order.productCode),
         _escapeCSV(order.contractNumber),
@@ -265,7 +265,7 @@ class CSVExportService {
   static Future<void> shareCSVFile(List<SAPOrderHeader> orders, {String? text}) async {
     try {
       final csvString = await _generateCSVString(orders);
-      final fileName = 'orders_export_${DateTime.now().millisecondsSinceEpoch}.csv';
+      final fileName = 'exported_report_${DateTime.now().millisecondsSinceEpoch}.csv';
 
       if (kIsWeb) {
         // On web: download directly

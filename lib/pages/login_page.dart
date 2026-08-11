@@ -46,21 +46,19 @@ class _LoginPageState extends State<LoginPage> {
       if (savedUsername != null && savedPassword != null) {
         _usernameController.text = savedUsername;
         _passwordController.text = savedPassword;
-        _rememberMe = true;
+        // Auto login if credentials are saved
+        _signIn();
       }
     } catch (e) {
       print('Error loading credentials: $e');
     }
   }
+
   void _saveCredentials(String username, String password) {
     try {
-      if (_rememberMe) {
-        html.window.localStorage['remembered_username'] = username;
-        html.window.localStorage['remembered_password'] = password;
-      } else {
-        html.window.localStorage.remove('remembered_username');
-        html.window.localStorage.remove('remembered_password');
-      }
+      // Always save credentials (automatic remember me)
+      html.window.localStorage['remembered_username'] = username;
+      html.window.localStorage['remembered_password'] = password;
     } catch (e) {
       print('Error saving credentials: $e');
     }

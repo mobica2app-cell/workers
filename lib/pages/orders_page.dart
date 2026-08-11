@@ -150,6 +150,13 @@ class _OrdersPageState extends State<OrdersPage> {
     super.dispose();
   }
 
+  // Check if user can import/delete (admin role or specific username)
+  bool get _canImportDelete {
+    final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
+    final username = widget.loggedInEmployee?.username?.toLowerCase() ?? '';
+    return role == 'admin' || role == 'software head' || role == 'head' || username == 'abd.elmoen';
+  }
+
   Future<void> _updateOrderDesignTeam(
     SAPMainOrder order,
     String newValue,
@@ -1163,7 +1170,6 @@ class _OrdersPageState extends State<OrdersPage> {
         final isWide = constraints.maxWidth > 1100;
 
         if (isWide) {
-          // Desktop: All in one row
           return Row(children: [
             Expanded(child: _buildHeaderInfo()),
             _buildSearchField(),
@@ -1175,30 +1181,29 @@ class _OrdersPageState extends State<OrdersPage> {
             _buildActionBtn(Icons.download, 'Export', () async {
               if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
             }),
-            const SizedBox(width: 8),
-            _buildImportButton(),
+            // Only show Import for admin or abd.elmoen
+            if (_canImportDelete) ...[
+              const SizedBox(width: 8),
+              _buildImportButton(),
+            ],
             const SizedBox(width: 8),
             _buildRefreshButton(),
           ]);
         } else {
-          // Mobile/Tablet: Info on top, controls wrapped below
           return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             _buildHeaderInfo(),
             const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: [
-                _buildSearchField(),
-                _buildSortButton(),
-                _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
-                _buildActionBtn(Icons.download, 'Export', () async {
-                  if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
-                }),
-                _buildImportButton(),
-                _buildRefreshButton(),
-              ],
-            ),
+            Wrap(spacing: 8, runSpacing: 8, children: [
+              _buildSearchField(),
+              _buildSortButton(),
+              _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+              _buildActionBtn(Icons.download, 'Export', () async {
+                if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
+              }),
+              // Only show Import for admin or abd.elmoen
+              if (_canImportDelete) _buildImportButton(),
+              _buildRefreshButton(),
+            ]),
           ]);
         }
       },
@@ -1447,25 +1452,16 @@ class _OrdersPageState extends State<OrdersPage> {
           const SizedBox(width: 8),
           Text(
             '${_selectedRows.length} selected',
-            style: GoogleFonts.cairo(
-              fontSize: 13,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF6366F1),
-            ),
+            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
           ),
           const Spacer(),
-          _buildSmallBtn(
-            Icons.download,
-            'Export Selected',
-            _exportSelectedOrders,
-          ),
+          _buildSmallBtn(Icons.download, 'Export Selected', _exportSelectedOrders),
           const SizedBox(width: 8),
-          _buildSmallBtn(
-            Icons.delete_outline,
-            'Delete',
-            _deleteSelectedOrders,
-          ),
-          const SizedBox(width: 8),
+          // Only show Delete for admin or abd.elmoen
+          if (_canImportDelete) ...[
+            _buildSmallBtn(Icons.delete_outline, 'Delete', _deleteSelectedOrders),
+            const SizedBox(width: 8),
+          ],
           _buildSmallBtn(Icons.close, 'Clear', _clearSelection),
         ],
       ),
