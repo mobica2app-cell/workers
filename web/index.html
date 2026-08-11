@@ -1,4 +1,5 @@
 <!DOCTYPE html>
+
 <html>
 <head>
   <base href="$FLUTTER_BASE_HREF">
@@ -6,38 +7,13 @@
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
 
-  <!-- Force Desktop View -->
-  <meta name="viewport" content="width=1400, minimum-scale=0.3, maximum-scale=2.0, initial-scale=0.5, user-scalable=yes">
-
-  <style>
-    html, body {
-      width: 100%;
-      height: 100%;
-      margin: 0;
-      padding: 0;
-      overflow: hidden;
-    }
-    flutter-view {
-      min-width: 1400px !important;
-      width: 100% !important;
-      height: 100% !important;
-    }
-    @media (max-width: 1400px) {
-      body {
-        overflow: auto !important;
-      }
-      flutter-view {
-        width: 1400px !important;
-        transform-origin: top left;
-      }
-    }
-  </style>
-
   <!-- SEO -->
+
   <title>Mobica</title>
   <meta name="description" content="Mobica - The new Monday">
 
-  <!-- Open Graph -->
+  <!-- Open Graph / WhatsApp / Facebook / LinkedIn -->
+
   <meta property="og:title" content="Mobica">
   <meta property="og:description" content="Mobica - The new Monday">
   <meta property="og:type" content="website">
@@ -46,49 +22,29 @@
   <meta property="og:image:width" content="1200">
   <meta property="og:image:height" content="630">
 
-  <!-- Twitter -->
+  <!-- Twitter / X -->
+
   <meta name="twitter:card" content="summary_large_image">
   <meta name="twitter:title" content="Mobica">
   <meta name="twitter:description" content="Mobica - The new Monday">
 
-  <!-- iOS -->
+  <!-- iOS meta tags & icons -->
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Mobica">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
+
   <link rel="icon" type="image/png" href="favicon.png">
 
   <!-- Manifest -->
+
   <link rel="manifest" href="manifest.json">
 </head>
 
 <body>
 <script src="flutter_bootstrap.js" async></script>
-
-<script>
-  function adjustViewport() {
-    var flutterView = document.querySelector('flutter-view');
-    if (!flutterView) {
-      flutterView = document.body;
-    }
-    var screenWidth = window.innerWidth;
-    var minWidth = 1400;
-    if (screenWidth < minWidth) {
-      var scale = screenWidth / minWidth;
-      flutterView.style.transform = 'scale(' + scale + ')';
-      flutterView.style.transformOrigin = 'top left';
-      flutterView.style.width = minWidth + 'px';
-      document.body.style.width = minWidth + 'px';
-      document.body.style.height = (window.innerHeight / scale) + 'px';
-    }
-  }
-  window.addEventListener('resize', adjustViewport);
-  window.addEventListener('load', adjustViewport);
-  setTimeout(adjustViewport, 500);
-  setTimeout(adjustViewport, 1500);
-  setTimeout(adjustViewport, 3000);
-</script>
 </body>
 </html>
