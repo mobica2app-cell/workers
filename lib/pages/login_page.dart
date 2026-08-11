@@ -171,7 +171,7 @@ class _LoginPageState extends State<LoginPage> {
 
                   // Title
                   Text(
-                    'MOBICA System',
+                    'MOBICA Workers',
                     style: GoogleFonts.cairo(
                       fontSize: 30,
                       fontWeight: FontWeight.bold,
