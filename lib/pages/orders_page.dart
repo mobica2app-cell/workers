@@ -1157,298 +1157,161 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildHeaderRow() {
-    return Row(
-      children: [
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Total: ${_allOrders.length} records',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  color: const Color(0xFF45464D),
-                ),
-              ),
-              if (_searchQuery.isNotEmpty)
-                Text(
-                  'Filtered: "$_searchQuery"',
-                  style: GoogleFonts.cairo(
-                    fontSize: 10,
-                    color: const Color(0xFF6366F1),
-                  ),
-                ),
-              if (_hasActiveFilters)
-                GestureDetector(
-                  onTap: () {
-                    setState(() {
-                      _filterStatus = null; _filterFactory = null; _filterDesignTeam = null;
-                      _filterContractNumber = null; _filterDesignOrder = null;
-                      _filterSalesEngineer = null; _filterResponsibleEngineer = null;
-                      _filterReviewer = null; _filterCorrespondenceEngineer = null;
-                    });
-                    _rebuildGroups();
-                  },
-                  child: Text('Clear filters', style: GoogleFonts.cairo(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
-                ),
-            ],
-          ),
-        ),
-        SizedBox(
-          width: 280,
-          child: TextField(
-            controller: _searchController,
-            onChanged: (v) {
-              _searchQuery = v;
-              _rebuildGroups();
-            },
-            style: GoogleFonts.cairo(fontSize: 14),
-            decoration: InputDecoration(
-              hintText: 'Search Contract or Name...',
-              hintStyle: GoogleFonts.cairo(
-                color: Colors.grey.shade400,
-                fontSize: 14,
-              ),
-              prefixIcon: Icon(
-                Icons.search,
-                color: Colors.grey.shade400,
-                size: 20,
-              ),
-              suffixIcon: _searchQuery.isNotEmpty
-                  ? IconButton(
-                      icon: const Icon(Icons.clear, size: 18),
-                      onPressed: () {
-                        _searchController.clear();
-                        _searchQuery = '';
-                        _rebuildGroups();
-                      },
-                    )
-                  : null,
-              filled: true,
-              fillColor: Colors.white,
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: BorderSide(color: Colors.grey.shade300),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(8),
-                borderSide: const BorderSide(color: Color(0xFF6366F1)),
-              ),
-              contentPadding: const EdgeInsets.symmetric(
-                horizontal: 16,
-                vertical: 10,
-              ),
-            ),
-          ),
-        ),
-        // Add this after the search bar in _buildHeaderRow, before the filter button:
-        const SizedBox(width: 8),
-        PopupMenuButton<String>(
-          onSelected: (value) {
-            setState(() => _sortBy = value);
-            _rebuildGroups();
-          },
-          tooltip: 'Sort by',
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-            decoration: BoxDecoration(
-              border: Border.all(color: const Color(0xFFCBD5E1)),
-              borderRadius: BorderRadius.circular(6),
-              color: _sortBy != 'default'
-                  ? const Color(0xFF6366F1).withOpacity(0.05)
-                  : Colors.white,
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Use Wrap for screens narrower than 1200px
+        final isWide = constraints.maxWidth > 1100;
+
+        if (isWide) {
+          // Desktop: All in one row
+          return Row(children: [
+            Expanded(child: _buildHeaderInfo()),
+            _buildSearchField(),
+            const SizedBox(width: 8),
+            _buildSortButton(),
+            const SizedBox(width: 12),
+            _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+            const SizedBox(width: 8),
+            _buildActionBtn(Icons.download, 'Export', () async {
+              if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
+            }),
+            const SizedBox(width: 8),
+            _buildImportButton(),
+            const SizedBox(width: 8),
+            _buildRefreshButton(),
+          ]);
+        } else {
+          // Mobile/Tablet: Info on top, controls wrapped below
+          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            _buildHeaderInfo(),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
               children: [
-                Icon(
-                  Icons.sort,
-                  size: 16,
-                  color: _sortBy != 'default'
-                      ? const Color(0xFF6366F1)
-                      : const Color(0xFF334155),
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  _getSortLabel(),
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _sortBy != 'default'
-                        ? const Color(0xFF6366F1)
-                        : const Color(0xFF334155),
-                  ),
-                ),
-                const Icon(Icons.arrow_drop_down, size: 16),
+                _buildSearchField(),
+                _buildSortButton(),
+                _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+                _buildActionBtn(Icons.download, 'Export', () async {
+                  if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
+                }),
+                _buildImportButton(),
+                _buildRefreshButton(),
               ],
             ),
-          ),
-          itemBuilder: (context) => [
-            PopupMenuItem(
-              value: 'default',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.sort,
-                    size: 16,
-                    color: _sortBy == 'default'
-                        ? const Color(0xFF6366F1)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Default',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: _sortBy == 'default'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
-                  if (_sortBy == 'default') const Spacer(),
-                  if (_sortBy == 'default')
-                    const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'value_desc',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.arrow_downward,
-                    size: 14,
-                    color: _sortBy == 'value_desc'
-                        ? const Color(0xFF6366F1)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Value (High to Low)',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: _sortBy == 'value_desc'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
-                  if (_sortBy == 'value_desc') const Spacer(),
-                  if (_sortBy == 'value_desc')
-                    const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              value: 'value_asc',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.arrow_upward,
-                    size: 14,
-                    color: _sortBy == 'value_asc'
-                        ? const Color(0xFF6366F1)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Value (Low to High)',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: _sortBy == 'value_asc'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
-                  if (_sortBy == 'value_asc') const Spacer(),
-                  if (_sortBy == 'value_asc')
-                    const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
-            PopupMenuItem(
-              value: 'date_desc',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: _sortBy == 'date_desc'
-                        ? const Color(0xFF6366F1)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Date (Newest First)',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: _sortBy == 'date_desc'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
-                  if (_sortBy == 'date_desc') const Spacer(),
-                  if (_sortBy == 'date_desc')
-                    const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ],
-              ),
-            ),
-            PopupMenuItem(
-              value: 'date_asc',
-              child: Row(
-                children: [
-                  Icon(
-                    Icons.calendar_today,
-                    size: 14,
-                    color: _sortBy == 'date_asc'
-                        ? const Color(0xFF6366F1)
-                        : Colors.grey,
-                  ),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Date (Oldest First)',
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      fontWeight: _sortBy == 'date_asc'
-                          ? FontWeight.w700
-                          : FontWeight.w400,
-                    ),
-                  ),
-                  if (_sortBy == 'date_asc') const Spacer(),
-                  if (_sortBy == 'date_asc')
-                    const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ],
-              ),
-            ),
-          ],
+          ]);
+        }
+      },
+    );
+  }
+
+// Header info (record count + filters)
+  Widget _buildHeaderInfo() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          'Total: ${_allOrders.length} records',
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF45464D)),
         ),
-        const SizedBox(width: 12),
-        _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
-        const SizedBox(width: 8),
-        _buildActionBtn(Icons.download, 'Export', () async {
-          if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
-        }),
-        const SizedBox(width: 8),
-        _buildImportButton(),
-        const SizedBox(width: 8),
-        ElevatedButton.icon(
-          onPressed: _loadAllDataOnce,
-          icon: const Icon(Icons.refresh, size: 18),
-          label: Text(
-            'Refresh',
-            style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
+        if (_searchQuery.isNotEmpty)
+          Text(
+            'Filtered: "$_searchQuery"',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.cairo(fontSize: 10, color: const Color(0xFF6366F1)),
           ),
-          style: ElevatedButton.styleFrom(
-            backgroundColor: const Color(0xFF0F172A),
-            foregroundColor: Colors.white,
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+        if (_hasActiveFilters)
+          GestureDetector(
+            onTap: () {
+              setState(() {
+                _filterStatus = null; _filterFactory = null; _filterDesignTeam = null;
+                _filterContractNumber = null; _filterDesignOrder = null;
+                _filterSalesEngineer = null; _filterResponsibleEngineer = null;
+                _filterReviewer = null; _filterCorrespondenceEngineer = null;
+              });
+              _rebuildGroups();
+            },
+            child: Text(
+              'Clear filters',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.cairo(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600),
             ),
           ),
-        ),
       ],
+    );
+  }
+
+// Search field
+  Widget _buildSearchField() {
+    return SizedBox(
+      width: 260,
+      child: TextField(
+        controller: _searchController,
+        onChanged: (v) { _searchQuery = v; _rebuildGroups(); },
+        style: GoogleFonts.cairo(fontSize: 14),
+        decoration: InputDecoration(
+          hintText: 'Search...',
+          hintStyle: GoogleFonts.cairo(color: Colors.grey.shade400, fontSize: 14),
+          prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
+          suffixIcon: _searchQuery.isNotEmpty
+              ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); _searchQuery = ''; _rebuildGroups(); })
+              : null,
+          filled: true, fillColor: Colors.white,
+          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
+          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF6366F1))),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        ),
+      ),
+    );
+  }
+
+// Sort button
+  Widget _buildSortButton() {
+    return PopupMenuButton<String>(
+      onSelected: (value) { setState(() => _sortBy = value); _rebuildGroups(); },
+      tooltip: 'Sort by',
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFCBD5E1)),
+          borderRadius: BorderRadius.circular(6),
+          color: _sortBy != 'default' ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.white,
+        ),
+        child: Row(mainAxisSize: MainAxisSize.min, children: [
+          Icon(Icons.sort, size: 16, color: _sortBy != 'default' ? const Color(0xFF6366F1) : const Color(0xFF334155)),
+          const SizedBox(width: 4),
+          Text(_getSortLabel(), style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _sortBy != 'default' ? const Color(0xFF6366F1) : const Color(0xFF334155))),
+          const Icon(Icons.arrow_drop_down, size: 16),
+        ]),
+      ),
+      itemBuilder: (context) => [
+        PopupMenuItem(value: 'default', child: Row(children: [Icon(Icons.sort, size: 16, color: _sortBy == 'default' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Default', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'default' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'default') const Spacer(), if (_sortBy == 'default') const Icon(Icons.check, size: 16, color: Color(0xFF6366F1))])),
+        const PopupMenuDivider(),
+        PopupMenuItem(value: 'value_desc', child: Row(children: [Icon(Icons.arrow_downward, size: 14, color: _sortBy == 'value_desc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Value ↓', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'value_desc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'value_desc') const Spacer(), if (_sortBy == 'value_desc') const Icon(Icons.check, size: 16)])),
+        PopupMenuItem(value: 'value_asc', child: Row(children: [Icon(Icons.arrow_upward, size: 14, color: _sortBy == 'value_asc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Value ↑', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'value_asc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'value_asc') const Spacer(), if (_sortBy == 'value_asc') const Icon(Icons.check, size: 16)])),
+        const PopupMenuDivider(),
+        PopupMenuItem(value: 'date_desc', child: Row(children: [Icon(Icons.calendar_today, size: 14, color: _sortBy == 'date_desc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Date ↓', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'date_desc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'date_desc') const Spacer(), if (_sortBy == 'date_desc') const Icon(Icons.check, size: 16)])),
+        PopupMenuItem(value: 'date_asc', child: Row(children: [Icon(Icons.calendar_today, size: 14, color: _sortBy == 'date_asc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Date ↑', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'date_asc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'date_asc') const Spacer(), if (_sortBy == 'date_asc') const Icon(Icons.check, size: 16)])),
+      ],
+    );
+  }
+
+// Refresh button
+  Widget _buildRefreshButton() {
+    return ElevatedButton.icon(
+      onPressed: _loadAllDataOnce,
+      icon: const Icon(Icons.refresh, size: 18),
+      label: Text('Refresh', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
+      style: ElevatedButton.styleFrom(
+        backgroundColor: const Color(0xFF0F172A),
+        foregroundColor: Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+      ),
     );
   }
 
