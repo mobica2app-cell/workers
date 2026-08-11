@@ -1,47 +1,50 @@
 <!DOCTYPE html>
+
 <html>
 <head>
-  <!--
-    If you are serving your web app in a path other than the root, change the
-    href value below to reflect the base path you are serving from.
-
-    The path provided below has to start and end with a slash "/" in order for
-    it to work correctly.
-
-    For more details:
-    * https://developer.mozilla.org/en-US/docs/Web/HTML/Element/base
-
-    This is a placeholder for base href that will be replaced by the value of
-    the `--base-href` argument provided to `flutter build`.
-  -->
   <base href="$FLUTTER_BASE_HREF">
 
   <meta charset="UTF-8">
   <meta content="IE=Edge" http-equiv="X-UA-Compatible">
+
+  <!-- SEO -->
+
+  <title>Mobica</title>
+  <meta name="description" content="Mobica - The new Monday">
+
+  <!-- Open Graph / WhatsApp / Facebook / LinkedIn -->
+
   <meta property="og:title" content="Mobica">
-  <meta name="description" content="The new Monday">
+  <meta property="og:description" content="Mobica - The new Monday">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://workers.mobica2app.workers.dev">
+  <meta property="og:site_name" content="Mobica">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+
+  <!-- Twitter / X -->
+
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Mobica">
+  <meta name="twitter:description" content="Mobica - The new Monday">
 
   <!-- iOS meta tags & icons -->
+
   <meta name="mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black">
   <meta name="apple-mobile-web-app-title" content="Mobica">
   <link rel="apple-touch-icon" href="icons/Icon-192.png">
 
   <!-- Favicon -->
-  <link rel="icon" type="image/png" href="favicon.png"/>
 
-  <title>Mobica</title>
+  <link rel="icon" type="image/png" href="favicon.png">
+
+  <!-- Manifest -->
+
   <link rel="manifest" href="manifest.json">
 </head>
-<body>
-  <!--
-    You can customize the "flutter_bootstrap.js" script.
-    This is useful to provide a custom configuration to the Flutter loader
-    or to give the user feedback during the initialization process.
 
-    For more details:
-    * https://docs.flutter.dev/platform-integration/web/initialization
-  -->
-  <script src="flutter_bootstrap.js" async></script>
+<body>
+<script src="flutter_bootstrap.js" async></script>
 </body>
 </html>
