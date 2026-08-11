@@ -181,13 +181,11 @@ class EmployeeAuthService {
 }
 
 /*
-flutter build web --base-href /omar-portfolio/
 
-cp -r build/web/* . -Force
-
+flutter pub get
+flutter build web --release
 git add .
-git commit -m "Deploy Flutter web to GitHub Pages"
-git push origin main
+git commit -m "Update"
+git push
 
- */
 */

@@ -66,7 +66,15 @@ class _OrdersPageState extends State<OrdersPage> {
   // Filters
   String? _filterStatus;
   String? _filterFactory;
+  String? _filterContractNumber;
+  String? _filterDesignOrder;
+  String? _filterSalesEngineer;
+  String? _filterResponsibleEngineer;
+  String? _filterReviewer;
+  String? _filterCorrespondenceEngineer;
   List<String> _sortedStatuses = [];
+
+  int? _lastSelectedIndex;
 
   // Expandable sections
   final Set<String> _expandedSections = {};
@@ -516,31 +524,26 @@ class _OrdersPageState extends State<OrdersPage> {
     var result = _allOrders;
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase().trim();
-      result = result
-          .where(
-            (o) =>
-                o.contractNumber.toLowerCase().contains(q) ||
-                o.customerName.toLowerCase().contains(q),
-          )
-          .toList();
+      result = result.where((o) => o.contractNumber.toLowerCase().contains(q) || o.customerName.toLowerCase().contains(q)).toList();
     }
-    if (_filterStatus != null)
-      result = result.where((o) => o.status == _filterStatus).toList();
-    if (_filterFactory != null)
-      result = result.where((o) => o.factory == _filterFactory).toList();
-    if (_filterDesignTeam != null)
-      result = result.where((o) => o.designTeam == _filterDesignTeam).toList();
-
-    // Apply sorting
+    if (_filterStatus != null) result = result.where((o) => o.status == _filterStatus).toList();
+    if (_filterFactory != null) result = result.where((o) => o.factory == _filterFactory).toList();
+    if (_filterDesignTeam != null) result = result.where((o) => o.designTeam == _filterDesignTeam).toList();
+    if (_filterContractNumber != null) result = result.where((o) => o.contractNumber.toLowerCase().contains(_filterContractNumber!.toLowerCase())).toList();
+    if (_filterDesignOrder != null) result = result.where((o) => o.designOrder.toLowerCase().contains(_filterDesignOrder!.toLowerCase())).toList();
+    if (_filterSalesEngineer != null) result = result.where((o) => o.salesEngineer == _filterSalesEngineer).toList();
+    if (_filterResponsibleEngineer != null) result = result.where((o) => o.responsibleEngineer == _filterResponsibleEngineer).toList();
+    if (_filterReviewer != null) result = result.where((o) => o.reviewer == _filterReviewer).toList();
+    if (_filterCorrespondenceEngineer != null) result = result.where((o) => o.correspondenceEngineer == _filterCorrespondenceEngineer).toList();
     _applySorting(result);
-
     return result;
   }
 
   bool get _hasActiveFilters =>
-      _filterStatus != null ||
-      _filterFactory != null ||
-      _filterDesignTeam != null;
+      _filterStatus != null || _filterFactory != null || _filterDesignTeam != null ||
+          _filterContractNumber != null || _filterDesignOrder != null ||
+          _filterSalesEngineer != null || _filterResponsibleEngineer != null ||
+          _filterReviewer != null || _filterCorrespondenceEngineer != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -553,9 +556,27 @@ class _OrdersPageState extends State<OrdersPage> {
 
   void _toggleRowSelection(int index) {
     setState(() {
-      _selectedRows.contains(index)
-          ? _selectedRows.remove(index)
-          : _selectedRows.add(index);
+      // Check if Shift key is pressed (for range selection)
+      final isShiftPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
+          RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
+
+      if (isShiftPressed && _lastSelectedIndex != null) {
+        // Range selection: select all rows between last selected and current
+        final start = _lastSelectedIndex! < index ? _lastSelectedIndex! : index;
+        final end = _lastSelectedIndex! < index ? index : _lastSelectedIndex!;
+
+        for (int i = start; i <= end; i++) {
+          _selectedRows.add(i);
+        }
+      } else {
+        // Normal toggle
+        if (_selectedRows.contains(index)) {
+          _selectedRows.remove(index);
+        } else {
+          _selectedRows.add(index);
+        }
+        _lastSelectedIndex = index;
+      }
     });
   }
 
@@ -580,7 +601,12 @@ class _OrdersPageState extends State<OrdersPage> {
     });
   }
 
-  void _clearSelection() => setState(() => _selectedRows.clear());
+  void _clearSelection() {
+    setState(() {
+      _selectedRows.clear();
+      _lastSelectedIndex = null;
+    });
+  }
 
   List<SAPMainOrder> _getSelectedOrders() =>
       _selectedRows.map((i) => _allOrders[i]).toList();
@@ -684,141 +710,223 @@ class _OrdersPageState extends State<OrdersPage> {
   void _showFilterDialog() {
     String? tempStatus = _filterStatus;
     String? tempFactory = _filterFactory;
-    String? tempDesignTeam = _filterDesignTeam; // Add this state variable
+    String? tempDesignTeam = _filterDesignTeam;
+    String? tempContractNumber = _filterContractNumber;
+    String? tempDesignOrder = _filterDesignOrder;
+    String? tempSalesEngineer = _filterSalesEngineer;
+    String? tempResponsibleEngineer = _filterResponsibleEngineer;
+    String? tempReviewer = _filterReviewer;
+    String? tempCorrespondenceEngineer = _filterCorrespondenceEngineer;
 
-    // Get unique factories from data
+    // Get unique values from data
     final factories = <String>{};
     final designTeams = <String>{};
+    final salesEngineers = <String>{};
+    final responsibleEngineers = <String>{};
+    final reviewers = <String>{};
+    final correspondenceEngineers = <String>{};
+
     for (var order in _allOrders) {
-      if (order.factory != null && order.factory!.isNotEmpty) {
-        factories.add(order.factory!);
-      }
-      if (order.designTeam != null && order.designTeam!.isNotEmpty) {
-        designTeams.add(order.designTeam!);
-      }
+      if (order.factory != null && order.factory!.isNotEmpty) factories.add(order.factory!);
+      if (order.designTeam != null && order.designTeam!.isNotEmpty) designTeams.add(order.designTeam!);
+      if (order.salesEngineer.isNotEmpty) salesEngineers.add(order.salesEngineer);
+      if (order.responsibleEngineer != null && order.responsibleEngineer!.isNotEmpty) responsibleEngineers.add(order.responsibleEngineer!);
+      if (order.reviewer != null && order.reviewer!.isNotEmpty) reviewers.add(order.reviewer!);
+      if (order.correspondenceEngineer != null && order.correspondenceEngineer!.isNotEmpty) correspondenceEngineers.add(order.correspondenceEngineer!);
     }
+
+    final contractCtrl = TextEditingController(text: _filterContractNumber);
+    final designOrderCtrl = TextEditingController(text: _filterDesignOrder);
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          title: Text(
-            'Filter Orders',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-          ),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Status Filter
-                DropdownButtonFormField<String>(
-                  value: tempStatus,
-                  decoration: InputDecoration(
-                    labelText: 'Status',
-                    labelStyle: GoogleFonts.cairo(),
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: ['All', ..._allStatuses]
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s == 'All' ? null : s,
-                          child: Text(
-                            s,
-                            style: GoogleFonts.cairo(fontSize: 12),
-                          ),
+          title: Row(children: [
+            const Icon(Icons.filter_list, color: Color(0xFF0F172A), size: 22),
+            const SizedBox(width: 8),
+            Text('Filter Orders', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 18)),
+            const Spacer(),
+            if (tempStatus != null || tempFactory != null || tempDesignTeam != null ||
+                tempContractNumber != null || tempSalesEngineer != null ||
+                tempResponsibleEngineer != null || tempReviewer != null ||
+                tempCorrespondenceEngineer != null)
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(color: const Color(0xFF6366F1).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
+                child: Text('Active', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1))),
+              ),
+          ]),
+          content: SizedBox(
+            width: 500,
+            child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+                // ===== ORDER INFO =====
+                _buildFilterSection('📋 Order Information', children: [
+                  Row(children: [
+                    Expanded(
+                      child: TextField(
+                        controller: contractCtrl,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Contract Number',
+                          labelStyle: GoogleFonts.cairo(fontSize: 12),
+                          hintText: 'e.g. 9100035288',
+                          hintStyle: GoogleFonts.cairo(fontSize: 11, color: Colors.grey),
+                          prefixIcon: const Icon(Icons.description, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setDlg(() => tempStatus = v),
-                ),
-                const SizedBox(height: 12),
+                        onChanged: (v) => tempContractNumber = v.isEmpty ? null : v,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: designOrderCtrl,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: InputDecoration(
+                          labelText: 'Design Order',
+                          labelStyle: GoogleFonts.cairo(fontSize: 12),
+                          hintText: 'e.g. 20083982',
+                          hintStyle: GoogleFonts.cairo(fontSize: 11, color: Colors.grey),
+                          prefixIcon: const Icon(Icons.receipt, size: 18),
+                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        ),
+                        onChanged: (v) => tempDesignOrder = v.isEmpty ? null : v,
+                      ),
+                    ),
+                  ]),
+                ]),
+                const SizedBox(height: 16),
 
-                // Factory Filter - REAL data
-                DropdownButtonFormField<String>(
-                  value: tempFactory,
-                  decoration: InputDecoration(
-                    labelText: 'Factory (${factories.length} available)',
-                    labelStyle: GoogleFonts.cairo(),
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: ['All', ...factories.toList()..sort()]
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s == 'All' ? null : s,
-                          child: Text(
-                            s,
-                            style: GoogleFonts.cairo(fontSize: 12),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setDlg(() => tempFactory = v),
-                ),
-                const SizedBox(height: 12),
+                // ===== STATUS & DEPARTMENT =====
+                _buildFilterSection('📊 Status & Department', children: [
+                  Row(children: [
+                    Expanded(
+                      child: _buildFilterDropdown('Status', tempStatus, ['All', ..._allStatuses], (v) => setDlg(() => tempStatus = v)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildFilterDropdown('Factory (${factories.length})', tempFactory, ['All', ...factories.toList()..sort()], (v) => setDlg(() => tempFactory = v)),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  _buildFilterDropdown('Design Team (${designTeams.length})', tempDesignTeam, ['All', ...designTeams.toList()..sort()], (v) => setDlg(() => tempDesignTeam = v)),
+                ]),
+                const SizedBox(height: 16),
 
-                // Design Team Filter - REAL data
-                DropdownButtonFormField<String>(
-                  value: tempDesignTeam,
-                  decoration: InputDecoration(
-                    labelText: 'Design Team (${designTeams.length} available)',
-                    labelStyle: GoogleFonts.cairo(),
-                    border: const OutlineInputBorder(),
-                  ),
-                  items: ['All', ...designTeams.toList()..sort()]
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s == 'All' ? null : s,
-                          child: Text(
-                            s,
-                            style: GoogleFonts.cairo(fontSize: 12),
-                          ),
-                        ),
-                      )
-                      .toList(),
-                  onChanged: (v) => setDlg(() => tempDesignTeam = v),
-                ),
-              ],
+                // ===== ENGINEERS =====
+                _buildFilterSection('👨‍💼 Employee', children: [
+                  Row(children: [
+                    Expanded(
+                      child: _buildFilterDropdown('Sales Eng. (${salesEngineers.length})', tempSalesEngineer, ['All', ...salesEngineers.toList()..sort()], (v) => setDlg(() => tempSalesEngineer = v)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildFilterDropdown('Resp. Eng. (${responsibleEngineers.length})', tempResponsibleEngineer, ['All', ...responsibleEngineers.toList()..sort()], (v) => setDlg(() => tempResponsibleEngineer = v)),
+                    ),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(
+                      child: _buildFilterDropdown('Reviewer (${reviewers.length})', tempReviewer, ['All', ...reviewers.toList()..sort()], (v) => setDlg(() => tempReviewer = v)),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: _buildFilterDropdown('Alt. Eng. (${correspondenceEngineers.length})', tempCorrespondenceEngineer, ['All', ...correspondenceEngineers.toList()..sort()], (v) => setDlg(() => tempCorrespondenceEngineer = v)),
+                    ),
+                  ]),
+                ]),
+              ]),
             ),
           ),
           actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: Text('Cancel', style: GoogleFonts.cairo()),
-            ),
-            TextButton(
-              onPressed: () {
-                setDlg(() {
-                  tempStatus = null;
-                  tempFactory = null;
-                  tempDesignTeam = null;
-                });
-              },
-              child: Text('Clear', style: GoogleFonts.cairo(color: Colors.red)),
-            ),
-            ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _filterStatus = tempStatus;
-                  _filterFactory = tempFactory;
-                  _filterDesignTeam = tempDesignTeam; // Add this
-                });
-                _rebuildGroups();
-                Navigator.pop(ctx);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
+            Row(children: [
+              TextButton(
+                onPressed: () {
+                  setDlg(() {
+                    tempStatus = null; tempFactory = null; tempDesignTeam = null;
+                    tempContractNumber = null; tempDesignOrder = null;
+                    tempSalesEngineer = null; tempResponsibleEngineer = null;
+                    tempReviewer = null; tempCorrespondenceEngineer = null;
+                    contractCtrl.clear(); designOrderCtrl.clear();
+                  });
+                },
+                child: Row(children: [const Icon(Icons.clear_all, size: 16, color: Colors.red), const SizedBox(width: 4), Text('Clear All', style: GoogleFonts.cairo(color: Colors.red, fontSize: 13))]),
               ),
-              child: Text(
-                'Apply',
-                style: GoogleFonts.cairo(color: Colors.white),
+              const Spacer(),
+              TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo(fontSize: 13))),
+              const SizedBox(width: 8),
+              ElevatedButton.icon(
+                onPressed: () {
+                  setState(() {
+                    _filterStatus = tempStatus;
+                    _filterFactory = tempFactory;
+                    _filterDesignTeam = tempDesignTeam;
+                    _filterContractNumber = tempContractNumber;
+                    _filterDesignOrder = tempDesignOrder;
+                    _filterSalesEngineer = tempSalesEngineer;
+                    _filterResponsibleEngineer = tempResponsibleEngineer;
+                    _filterReviewer = tempReviewer;
+                    _filterCorrespondenceEngineer = tempCorrespondenceEngineer;
+                  });
+                  _rebuildGroups();
+                  Navigator.pop(ctx);
+                },
+                icon: const Icon(Icons.check, size: 18),
+                label: Text('Apply Filters', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF0F172A),
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                ),
               ),
-            ),
+            ]),
           ],
         ),
       ),
     );
   }
 
+// Helper widget for filter sections
+  Widget _buildFilterSection(String title, {required List<Widget> children}) {
+    return Container(
+      padding: const EdgeInsets.all(14),
+      decoration: BoxDecoration(
+        color: const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: const Color(0xFFE2E8F0)),
+      ),
+      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+        Text(title, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
+        const SizedBox(height: 10),
+        ...children,
+      ]),
+    );
+  }
+
+// Helper widget for filter dropdowns
+  Widget _buildFilterDropdown(String label, String? value, List<String> items, Function(String?) onChanged) {
+    return DropdownButtonFormField<String>(
+      value: value,
+      isExpanded: true,
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: GoogleFonts.cairo(fontSize: 12),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+      ),
+      style: GoogleFonts.cairo(fontSize: 13),
+      items: items.map((s) => DropdownMenuItem(
+        value: s == 'All' ? null : s,
+        child: Text(s == 'All' ? 'All' : s, style: GoogleFonts.cairo(fontSize: 12), overflow: TextOverflow.ellipsis),
+      )).toList(),
+      onChanged: (v) => onChanged(v),
+    );
+  }
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
@@ -1074,19 +1182,14 @@ class _OrdersPageState extends State<OrdersPage> {
                 GestureDetector(
                   onTap: () {
                     setState(() {
-                      _filterStatus = null;
-                      _filterFactory = null;
+                      _filterStatus = null; _filterFactory = null; _filterDesignTeam = null;
+                      _filterContractNumber = null; _filterDesignOrder = null;
+                      _filterSalesEngineer = null; _filterResponsibleEngineer = null;
+                      _filterReviewer = null; _filterCorrespondenceEngineer = null;
                     });
                     _rebuildGroups();
                   },
-                  child: Text(
-                    'Clear filters',
-                    style: GoogleFonts.cairo(
-                      fontSize: 11,
-                      color: Colors.red,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
+                  child: Text('Clear filters', style: GoogleFonts.cairo(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600)),
                 ),
             ],
           ),
