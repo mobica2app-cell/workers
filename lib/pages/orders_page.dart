@@ -37,6 +37,8 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _isLoading = false;
   String _searchQuery = '';
   String? _filterDesignTeam;
+  bool _filterMyWork = false;
+
   String _sortBy =
       'default'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
@@ -156,6 +158,26 @@ class _OrdersPageState extends State<OrdersPage> {
       case 'factory': return order.factory;
       default: return null;
     }
+  }
+
+  void _applyMyWorkFilter() {
+    setState(() {
+      if (_filterMyWork) {
+        // Already filtered - clear it
+        _filterMyWork = false;
+        _filterResponsibleEngineer = null;
+        _filterReviewer = null;
+        _filterCorrespondenceEngineer = null;
+      } else {
+        // Apply my work filter
+        _filterMyWork = true;
+        final myName = widget.loggedInEmployee?.fullName ?? '';
+        _filterResponsibleEngineer = myName;
+        _filterReviewer = myName;
+        _filterCorrespondenceEngineer = myName;
+      }
+      _rebuildGroups();
+    });
   }
 
   @override
@@ -625,9 +647,22 @@ class _OrdersPageState extends State<OrdersPage> {
     if (_filterContractNumber != null) result = result.where((o) => o.contractNumber.toLowerCase().contains(_filterContractNumber!.toLowerCase())).toList();
     if (_filterDesignOrder != null) result = result.where((o) => o.designOrder.toLowerCase().contains(_filterDesignOrder!.toLowerCase())).toList();
     if (_filterSalesEngineer != null) result = result.where((o) => o.salesEngineer == _filterSalesEngineer).toList();
-    if (_filterResponsibleEngineer != null) result = result.where((o) => o.responsibleEngineer == _filterResponsibleEngineer).toList();
-    if (_filterReviewer != null) result = result.where((o) => o.reviewer == _filterReviewer).toList();
-    if (_filterCorrespondenceEngineer != null) result = result.where((o) => o.correspondenceEngineer == _filterCorrespondenceEngineer).toList();
+
+    // My Work filter - check if employee is in ANY of these 3 fields
+    if (_filterMyWork) {
+      final myName = widget.loggedInEmployee?.fullName ?? '';
+      result = result.where((o) {
+        return o.responsibleEngineer == myName ||
+            o.reviewer == myName ||
+            o.correspondenceEngineer == myName;
+      }).toList();
+    } else {
+      // Normal individual filters
+      if (_filterResponsibleEngineer != null) result = result.where((o) => o.responsibleEngineer == _filterResponsibleEngineer).toList();
+      if (_filterReviewer != null) result = result.where((o) => o.reviewer == _filterReviewer).toList();
+      if (_filterCorrespondenceEngineer != null) result = result.where((o) => o.correspondenceEngineer == _filterCorrespondenceEngineer).toList();
+    }
+
     _applySorting(result);
     return result;
   }
@@ -1105,6 +1140,8 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ],
           const Spacer(),
+          _buildMyWorkButton(),
+          const SizedBox(width: 8),
           // Only show people icon for admin/head users
           if (isAdmin)
             _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
@@ -1742,6 +1779,42 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildMyWorkButton() {
+    final hasMyWork = _filterMyWork;
+    final myName = widget.loggedInEmployee?.fullName ?? '';
+
+    // Count my work items
+    final myWorkCount = _allOrders.where((o) {
+      return o.responsibleEngineer == myName ||
+          o.reviewer == myName ||
+          o.correspondenceEngineer == myName;
+    }).length;
+
+    return OutlinedButton.icon(
+      onPressed: _applyMyWorkFilter,
+      icon: Icon(
+        hasMyWork ? Icons.work : Icons.work_outline,
+        size: 16,
+        color: hasMyWork ? Colors.white : const Color(0xFF6366F1),
+      ),
+      label: Text(
+        hasMyWork ? 'My Work ($myWorkCount)' : 'My Work',
+        style: GoogleFonts.cairo(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: hasMyWork ? Colors.white : const Color(0xFF6366F1),
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFF6366F1),
+        side: BorderSide(color: hasMyWork ? const Color(0xFF6366F1) : const Color(0xFF6366F1)),
+        backgroundColor: hasMyWork ? const Color(0xFF6366F1) : Colors.white,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
     );
   }
