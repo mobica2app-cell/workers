@@ -9,12 +9,6 @@ import '../models/sap_models.dart';
 
 class CSVExportService {
 
-  // Add these imports at the top if not already there
-
-// Add these methods inside the CSVExportService class:
-
-// ==================== SAPMainOrder Methods ====================
-
   static Future<String> exportOrdersToCSVMain(List<SAPMainOrder> orders) async {
     StringBuffer csvContent = StringBuffer();
     csvContent.write('\u{FEFF}');
@@ -262,112 +256,5 @@ class CSVExportService {
     return value;
   }
 
-  static Future<void> shareCSVFile(List<SAPOrderHeader> orders, {String? text}) async {
-    try {
-      final csvString = await _generateCSVString(orders);
-      final fileName = 'exported_report_${DateTime.now().millisecondsSinceEpoch}.csv';
-
-      if (kIsWeb) {
-        // On web: download directly
-        final bytes = utf8.encode(csvString);
-        final blob = html.Blob([bytes], 'text/csv');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.document.createElement('a') as html.AnchorElement
-          ..href = url
-          ..style.display = 'none'
-          ..download = fileName;
-        html.document.body!.children.add(anchor);
-        anchor.click();
-        html.document.body!.children.remove(anchor);
-        html.Url.revokeObjectUrl(url);
-      } else {
-        // On mobile/desktop: use share_plus
-        String filePath = await exportOrdersToCSV(orders);
-      }
-    } catch (e) {
-      throw Exception('Error exporting to CSV: $e');
-    }
-  }
-
-  static Future<String> _generateCSVString(List<SAPOrderHeader> orders) async {
-    StringBuffer csvContent = StringBuffer();
-    csvContent.write('\u{FEFF}');
-
-    List<String> headers = [
-      'Name', 'Contract Num', 'Design Order', 'Item',
-      'Product Code', 'Description', 'QTY', 'Unit', 'Value'
-    ];
-    csvContent.writeln(headers.join(','));
-
-    for (var order in orders) {
-      var firstItem = order.items.isNotEmpty ? order.items.first : null;
-      List<String> row = [
-        _escapeCSV(order.kunnrName ?? ''),
-        _escapeCSV(order.vbelnContract ?? ''),
-        _escapeCSV(order.vbeln ?? ''),
-        _escapeCSV(firstItem?.posnr?.toString() ?? '-'),
-        _escapeCSV(firstItem?.matnr ?? '-'),
-        _escapeCSV(firstItem?.arktx ?? '-'),
-        firstItem?.kwmeng?.toString() ?? '0',
-        _escapeCSV(firstItem?.vrkme ?? 'EA'),
-        _escapeCSV(_formatNumber(firstItem?.netwr ?? 0)), // Formatted with commas
-      ];
-      csvContent.writeln(row.join(','));
-    }
-    return csvContent.toString();
-  }
-
-  static Future<String> saveCSVFile(List<SAPOrderHeader> orders, String fileName) async {
-    try {
-      final csvString = await _generateCSVString(orders);
-
-      if (kIsWeb) {
-        // On web: trigger download
-        final bytes = utf8.encode(csvString);
-        final blob = html.Blob([bytes], 'text/csv');
-        final url = html.Url.createObjectUrlFromBlob(blob);
-        final anchor = html.document.createElement('a') as html.AnchorElement
-          ..href = url
-          ..style.display = 'none'
-          ..download = '$fileName.csv';
-        html.document.body!.children.add(anchor);
-        anchor.click();
-        html.document.body!.children.remove(anchor);
-        html.Url.revokeObjectUrl(url);
-        return '$fileName.csv (downloaded)';
-      } else {
-        // On desktop: save to Downloads folder
-        String tempPath = await exportOrdersToCSV(orders);
-        final tempFile = File(tempPath);
-
-        Directory saveDirectory;
-        try {
-          String? userProfile = Platform.environment['USERPROFILE'];
-          if (userProfile != null) {
-            saveDirectory = Directory('$userProfile\\Downloads');
-          } else {
-            saveDirectory = await getApplicationDocumentsDirectory();
-          }
-          if (!await saveDirectory.exists()) {
-            await saveDirectory.create(recursive: true);
-          }
-        } catch (e) {
-          saveDirectory = await getApplicationDocumentsDirectory();
-        }
-
-        final finalPath = '${saveDirectory.path}\\$fileName.csv';
-        final savedFile = File(finalPath);
-        await savedFile.writeAsBytes(await tempFile.readAsBytes());
-
-        if (await tempFile.exists()) {
-          await tempFile.delete();
-        }
-
-        print('✅ CSV saved to: $finalPath');
-        return finalPath;
-      }
-    } catch (e) {
-      throw Exception('Error saving CSV file: $e');
-    }
-  }
 }
+

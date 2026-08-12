@@ -1,9 +1,6 @@
 // lib/services/sap_service.dart
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import '../models/sap_models.dart';
-import '../repositories/sap_repository.dart';
-
 class SAPMainService {
   final SupabaseClient _client;
 
@@ -66,8 +63,9 @@ class SAPMainService {
           .from('sap_main_orders')
           .select('*')
           .eq('design_order', designOrder)
-          .single();
+          .maybeSingle();
 
+      if (response == null) return null;
       return SAPMainOrder.fromJson(response as Map<String, dynamic>);
     } catch (e) {
       print('Error fetching order: $e');
@@ -75,17 +73,40 @@ class SAPMainService {
     }
   }
 
-  // Get all orders (no pagination)
+  // Get ALL orders (no pagination) - Loops through all pages
   Future<List<SAPMainOrder>> getAllOrders() async {
     try {
-      final response = await _client
-          .from('sap_main_orders')
-          .select('*')
-          .order('design_order', ascending: false)
-          .limit(100000);
+      List<Map<String, dynamic>> allData = [];
+      int page = 0;
+      const pageSize = 1000;
+      bool hasMore = true;
 
-      return (response as List)
-          .map((json) => SAPMainOrder.fromJson(json as Map<String, dynamic>))
+      while (hasMore) {
+        final start = page * pageSize;
+        final end = start + pageSize - 1;
+
+        final response = await _client
+            .from('sap_main_orders')
+            .select('*')
+            .order('design_order', ascending: false)
+            .range(start, end);
+
+        final batch = List<Map<String, dynamic>>.from(response);
+
+        if (batch.isEmpty || batch.length < pageSize) {
+          hasMore = false;
+        }
+
+        allData.addAll(batch);
+        page++;
+
+        print('📦 Fetched page $page: ${batch.length} records (total: ${allData.length})');
+      }
+
+      print('✅ Total orders loaded: ${allData.length}');
+
+      return allData
+          .map((json) => SAPMainOrder.fromJson(json))
           .toList();
     } catch (e) {
       print('Error fetching all orders: $e');
@@ -98,25 +119,25 @@ class SAPMainService {
     return getOrders(searchTerm: query, pageSize: 100);
   }
 
-  // Get statistics
+  // Get statistics - also needs to fetch ALL records
   Future<Map<String, dynamic>> getStatistics() async {
     try {
-      final response = await _client.from('sap_main_orders').select('*');
+      final orders = await getAllOrders();
 
       double totalValue = 0;
       double totalQty = 0;
       final factories = <String>{};
       final engineers = <String>{};
 
-      for (var item in response) {
-        totalValue += (item['value'] ?? 0).toDouble();
-        totalQty += (item['quantity'] ?? 0).toDouble();
-        if (item['factory'] != null) factories.add(item['factory']);
-        if (item['sales_engineer'] != null) engineers.add(item['sales_engineer']);
+      for (var order in orders) {
+        totalValue += order.value;
+        totalQty += order.quantity;
+        if (order.factory != null && order.factory!.isNotEmpty) factories.add(order.factory!);
+        if (order.salesEngineer.isNotEmpty) engineers.add(order.salesEngineer);
       }
 
       return {
-        'total_orders': response.length,
+        'total_orders': orders.length,
         'total_value': totalValue,
         'total_quantity': totalQty,
         'unique_factories': factories.length,
