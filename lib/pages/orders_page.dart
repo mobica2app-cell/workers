@@ -85,12 +85,13 @@ class _OrdersPageState extends State<OrdersPage> {
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
   static const List<String> _allStatuses = [
+    'Drawing Submittal',
+    'Approval',
+    'modifications submitted',
+    'Manufacturing Drawing',
+    'Done',
     'مطلوب اكوادها الاسترشاديه',
     'تحت المراجعة',
-    'Drawing Submittal',
-    'modifications submitted',
-    'Approval',
-    'Manufacturing Drawing',
     'Review',
     'Master Data',
     'Sales',
@@ -98,7 +99,6 @@ class _OrdersPageState extends State<OrdersPage> {
     'Tasks',
     'planning',
     'partation  master data',
-    'Done',
     'الادارة الهندسه',
     'design studio',
     'Unknown',
@@ -345,11 +345,19 @@ class _OrdersPageState extends State<OrdersPage> {
       final status = order.status;
       _groupedOrders.putIfAbsent(status, () => []).add(order);
     }
+
+    // Sort sections based on _allStatuses order instead of count
     _sortedStatuses = _groupedOrders.keys.toList()
-      ..sort(
-        (a, b) =>
-            _groupedOrders[b]!.length.compareTo(_groupedOrders[a]!.length),
-      );
+      ..sort((a, b) {
+        final indexA = _allStatuses.indexOf(a);
+        final indexB = _allStatuses.indexOf(b);
+        // If not found in list, put at end
+        if (indexA == -1 && indexB == -1) return a.compareTo(b);
+        if (indexA == -1) return 1;
+        if (indexB == -1) return -1;
+        return indexA.compareTo(indexB);
+      });
+
     _rebuildFlatList();
   }
 
