@@ -2164,23 +2164,12 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  // Employee dropdown cell widget
   Widget _employeeDropdownCell(
-    String? currentValue,
-    SAPMainOrder order,
-    String field,
-  ) {
-    final canEdit = _isOrderEditable(order);
-
-    if (!canEdit) {
-      // Plain text for non-Tasks
-      return _cell(
-        currentValue ?? '-',
-        field == 'responsible_engineer' ? 130 : 120,
-      );
-    }
-
-    // Dropdown for Tasks
+      String? currentValue,
+      SAPMainOrder order,
+      String field,
+      ) {
+    // Remove the canEdit check - always show dropdown
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
@@ -2672,14 +2661,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _designTeamDropdownCell(String? currentValue, SAPMainOrder order) {
-    final canEdit = _isOrderEditable(order);
-
-    if (!canEdit) {
-      // Plain text for non-Tasks
-      return _cell(currentValue ?? '-', 130);
-    }
-
-    // Dropdown for Tasks
+    // Remove the canEdit check - always show dropdown
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
@@ -3531,43 +3513,39 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _statusCell(String status, SAPMainOrder order) {
-    final canEdit = _isOrderEditable(order);
 
-    if (!canEdit) {
-      // Plain text for non-Tasks orders
-      return SizedBox(
-        width: 140,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 4),
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-            decoration: BoxDecoration(
-              color: _getStatusColor(status).withOpacity(0.1),
-              borderRadius: BorderRadius.circular(4),
-              border: Border.all(
-                color: _getStatusColor(status).withOpacity(0.3),
-              ),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    _getStatusLabel(status),
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: _getStatusColor(status),
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-              ],
+    SizedBox(
+      width: 140,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          decoration: BoxDecoration(
+            color: _getStatusColor(status).withOpacity(0.1),
+            borderRadius: BorderRadius.circular(4),
+            border: Border.all(
+              color: _getStatusColor(status).withOpacity(0.3),
             ),
           ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Flexible(
+                child: Text(
+                  _getStatusLabel(status),
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: _getStatusColor(status),
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ],
+          ),
         ),
-      );
-    }
+      ),
+    );
 
     // Dropdown only for Tasks orders
     return SizedBox(
