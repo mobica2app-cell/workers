@@ -1445,10 +1445,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _saveOrders(List<SAPMainOrder> orders, String prefix) async {
     try {
-      final path = await CSVExportService.saveCSVFileMain(
-        orders,
-        '${prefix}_${DateFormat('yyyyMMdd_HHmmss').format(DateTime.now())}',
-      );
+      final path = await ExcelExportService.exportOrdersToExcel(orders);
       _showSnackBar('✅ Saved: $path');
     } catch (e) {
       _showSnackBar('Error: $e');
@@ -1969,38 +1966,27 @@ class _OrdersPageState extends State<OrdersPage> {
           _buildMyWorkButton(),
           const SizedBox(width: 8),
           // Edit Mode checkbox - beside My Work button
-          if (_isDataEntry || _isAdmin) ...[
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                SizedBox(
-                  width: 20,
-                  height: 20,
-                  child: Checkbox(
-                    value: _editMode,
-                    onChanged: (v) => setState(() => _editMode = v ?? false),
-                    activeColor: Colors.orange,
-                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                  ),
-                ),
-                const SizedBox(width: 4),
-                GestureDetector(
-                  onTap: () => setState(() => _editMode = !_editMode),
-                  child: Text(
-                    'Edit Mode',
-                    style: GoogleFonts.cairo(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w600,
-                      color: _editMode
-                          ? Colors.orange
-                          : const Color(0xFF64748B),
-                    ),
-                  ),
-                ),
-              ],
+          Row(mainAxisSize: MainAxisSize.min, children: [
+            SizedBox(
+              width: 20, height: 20,
+              child: Checkbox(
+                value: _editMode,
+                onChanged: (v) => setState(() => _editMode = v ?? false),
+                activeColor: Colors.orange,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              ),
             ),
-            const SizedBox(width: 8),
-          ],
+            const SizedBox(width: 4),
+            GestureDetector(
+              onTap: () => setState(() => _editMode = !_editMode),
+              child: Text(
+                'Edit Mode',
+                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _editMode ? Colors.orange : const Color(0xFF64748B)),
+              ),
+            ),
+          ]),
+          const SizedBox(width: 8),
+
           // Only show people icon for admin/head users
           if (isAdmin)
             _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
@@ -2936,45 +2922,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         child: Row(
           children: [
-            Icon(
-              isExpanded ? Icons.expand_less : Icons.expand_more,
-              size: 18,
-              color: _getStatusColor(status),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              width: 10,
-              height: 10,
-              decoration: BoxDecoration(
-                color: _getStatusColor(status),
-                shape: BoxShape.circle,
-              ),
-            ),
-            const SizedBox(width: 6),
-            Text(
-              _getStatusLabel(status),
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: _getStatusColor(status),
-              ),
-            ),
-            const SizedBox(width: 6),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1),
-              decoration: BoxDecoration(
-                color: _getStatusColor(status).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Text(
-                '${orders.length}',
-                style: GoogleFonts.cairo(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: _getStatusColor(status),
-                ),
-              ),
-            ),
+
             const Spacer(),
           ],
         ),
@@ -3199,7 +3147,7 @@ class _OrdersPageState extends State<OrdersPage> {
       }) {
     final editKey = '${order.id}_$field';
     final isEditing = _editingField == editKey;
-    final canEdit = _editMode && (_isDataEntry || _isAdmin) && _isOrderEditable(order);
+    final canEdit = _editMode  && _isOrderEditable(order);
 
     if (canEdit) {
       if (isEditing) {
