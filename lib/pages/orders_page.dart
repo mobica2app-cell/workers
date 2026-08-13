@@ -296,6 +296,156 @@ class _OrdersPageState extends State<OrdersPage> {
         _isDataEntry;
   }
 
+  // Add this method to show manual task creation dialog
+  Future<void> _showAddTaskDialog() async {
+    final nameController = TextEditingController();
+    final contractController = TextEditingController();
+    final designOrderController = TextEditingController();
+    final itemController = TextEditingController();
+    final productCodeController = TextEditingController();
+    final descriptionController = TextEditingController();
+    final qtyController = TextEditingController();
+    final unitController = TextEditingController(text: 'EA');
+    final valueController = TextEditingController();
+    final factoryController = TextEditingController();
+    final deliveryDateController = TextEditingController();
+
+    final newOrder = await showDialog<SAPMainOrder>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Add New Task', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 18)),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              TextField(controller: nameController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Customer Name')),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: TextField(controller: contractController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Contract Number'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: designOrderController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Design Order'))),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: TextField(controller: itemController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Item'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: productCodeController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Product Code'))),
+              ]),
+              const SizedBox(height: 10),
+              TextField(controller: descriptionController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Description'), maxLines: 2),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: TextField(controller: qtyController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('QTY'), keyboardType: TextInputType.number)),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: unitController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Unit'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: valueController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Value'), keyboardType: TextInputType.number)),
+              ]),
+              const SizedBox(height: 10),
+              Row(children: [
+                Expanded(child: TextField(controller: factoryController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Factory'))),
+                const SizedBox(width: 10),
+                Expanded(child: TextField(controller: deliveryDateController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Delivery Date (YYYY-MM-DD)'))),
+              ]),
+            ]),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          ElevatedButton(
+            onPressed: () {
+              if (nameController.text.isEmpty || designOrderController.text.isEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Customer Name and Design Order are required', style: GoogleFonts.cairo()), backgroundColor: Colors.red),
+                );
+                return;
+              }
+
+              final order = SAPMainOrder(
+                id: '',
+                status: 'Tasks',
+                customerName: nameController.text.trim(),
+                itemNumber: itemController.text.trim().isEmpty ? '1' : itemController.text.trim(),
+                productCode: productCodeController.text.trim(),
+                contractNumber: contractController.text.trim(),
+                description: descriptionController.text.trim(),
+                designOrder: designOrderController.text.trim(),
+                quantity: double.tryParse(qtyController.text.replaceAll(',', '')) ?? 0,
+                unitOfMeasure: unitController.text.trim().isEmpty ? 'EA' : unitController.text.trim(),
+                value: double.tryParse(valueController.text.replaceAll(',', '').replaceAll('\$', '')) ?? 0,
+                salesEngineer: _currentUserName,
+                orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                deliveryDate: deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
+                factory: factoryController.text.trim().isEmpty ? null : factoryController.text.trim(),
+                designTeam: widget.loggedInEmployee?.department,
+                responsibleEngineer: null,
+                reviewer: null,
+                correspondenceEngineer: null,
+                createdAt: DateTime.now(),
+              );
+
+              Navigator.pop(ctx, order);
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+            child: Text('Add Task', style: GoogleFonts.cairo(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newOrder != null) {
+      setState(() => _isLoading = true);
+      try {
+        final supabase = Supabase.instance.client;
+        final response = await supabase.from('sap_main_orders').insert({
+          'status': 'Tasks',
+          'customer_name': newOrder.customerName,
+          'item_number': newOrder.itemNumber,
+          'product_code': newOrder.productCode,
+          'contract_number': newOrder.contractNumber,
+          'description': newOrder.description,
+          'design_order': newOrder.designOrder,
+          'quantity': newOrder.quantity,
+          'unit_of_measure': newOrder.unitOfMeasure,
+          'value': newOrder.value,
+          'sales_engineer': newOrder.salesEngineer,
+          'order_date': newOrder.orderDate,
+          'delivery_date': newOrder.deliveryDate,
+          'factory': newOrder.factory,
+          'design_team': newOrder.designTeam,
+          'responsible_engineer': newOrder.responsibleEngineer,
+          'reviewer': newOrder.reviewer,
+          'correspondence_engineer': newOrder.correspondenceEngineer,
+        }).select().single();
+
+        final createdOrder = SAPMainOrder.fromJson(response);
+
+        // Add to local list
+        setState(() {
+          _allOrders.add(createdOrder);
+          _orderIndexMap[createdOrder] = _allOrders.length - 1;
+          _isLoading = false;
+        });
+
+        _rebuildGroups();
+        _showSnackBar('✅ Task created successfully!');
+      } catch (e) {
+        setState(() => _isLoading = false);
+        _showSnackBar('Error creating task: $e');
+      }
+    }
+  }
+
+// Helper for input decoration
+  InputDecoration _buildInputDecoration(String label) {
+    return InputDecoration(
+      labelText: label,
+      labelStyle: GoogleFonts.cairo(fontSize: 12),
+      border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+      contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+    );
+  }
+
   Future<void> _bulkEditField(String field, String currentValue) async {
     final controller = TextEditingController();
 
@@ -1985,6 +2135,25 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
           ]),
+
+          const SizedBox(width: 8),
+
+          OutlinedButton.icon(
+            onPressed: _showAddTaskDialog,
+            icon: const Icon(Icons.add_task, size: 16),
+            label: Text(
+              'Add Task',
+              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFF059669),
+              side: const BorderSide(color: Color(0xFF059669)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              backgroundColor: Colors.white,
+            ),
+          ),
+
           const SizedBox(width: 8),
 
           // Only show people icon for admin/head users
