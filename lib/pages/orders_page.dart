@@ -17,6 +17,10 @@ import 'excel_dialog.dart';
 import 'order_detail_page.dart';
 import 'package:flutter/services.dart';
 
+extension FirstOrNull<T> on Iterable<T> {
+  T? get firstOrNull => isEmpty ? null : first;
+}
+
 class OrdersPage extends StatefulWidget {
   final SAPMainService sapService;
   final EmployeeAuth? loggedInEmployee;
@@ -40,7 +44,7 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _filterMyWork = false;
   bool _editMode = false;
   String _sortBy =
-      'default'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
+      'date_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
   // Fast O(1) Lookups & Pre-computed Lists
   Map<SAPMainOrder, int> _orderIndexMap = {};
@@ -56,7 +60,8 @@ class _OrdersPageState extends State<OrdersPage> {
   List<EmployeeAuth> _allEmployees = [];
 
   // Selection
-  final Set<int> _selectedRows = {};
+  final Set<String> _selectedRowsIds = {};
+  bool _isOrderSelected(SAPMainOrder order) => _selectedRowsIds.contains(order.id);
 
   // Services
   final EmployeeService _employeeService = EmployeeService();
@@ -210,7 +215,7 @@ class _OrdersPageState extends State<OrdersPage> {
       builder: (ctx) => AlertDialog(
         title: Text('Bulk Edit', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('${_selectedRows.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+          Text('${_selectedRowsIds.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
           const SizedBox(height: 16),
           Wrap(spacing: 8, children: [
             _buildBulkEditOption('Status', 'status'),
@@ -260,7 +265,7 @@ class _OrdersPageState extends State<OrdersPage> {
       builder: (ctx) => AlertDialog(
         title: Text('Bulk Edit ${_formatFieldName(field)}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Apply to ${_selectedRows.length} selected rows', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+          Text('Apply to ${_selectedRowsIds.length} selected rows', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
           const SizedBox(height: 12),
           TextField(
             controller: controller,
@@ -278,7 +283,7 @@ class _OrdersPageState extends State<OrdersPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
-            child: Text('Apply to ${_selectedRows.length} rows', style: GoogleFonts.cairo(color: Colors.white)),
+            child: Text('Apply to ${_selectedRowsIds.length} rows', style: GoogleFonts.cairo(color: Colors.white)),
           ),
         ],
       ),
@@ -296,9 +301,9 @@ class _OrdersPageState extends State<OrdersPage> {
         parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
       }
 
-      for (var index in _selectedRows) {
-        if (index < _allOrders.length) {
-          final order = _allOrders[index];
+      for (var orderId in _selectedRowsIds) {
+        final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        if (order != null) {
           try {
             await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
 
@@ -321,14 +326,14 @@ class _OrdersPageState extends State<OrdersPage> {
 
       setState(() => _isLoading = false);
       _showSnackBar('✅ $updated rows updated!');
-      _loadAllDataOnce();
+      _updateMultipleOrdersLocally(field, parsedValue);
     }
   }
 
   // Add this method to show an edit dialog for any field
   Future<void> _editOrderField(SAPMainOrder order, String field, String currentValue) async {
     // If multiple rows are selected in edit mode, apply to ALL selected rows
-    if (_editMode && _selectedRows.length > 1) {
+    if (_editMode && _selectedRowsIds.length > 1) {
       // Just call bulk edit directly
       _bulkEditField(field, currentValue);
       return;
@@ -389,7 +394,7 @@ class _OrdersPageState extends State<OrdersPage> {
         );
 
         _showSnackBar('${_formatFieldName(field)} updated!');
-        _loadAllDataOnce();
+        _updateOrderLocally(order.id, field, parsedValue); // ✅ Local update instead of reload
       } catch (e) {
         _showSnackBar('Error updating: $e');
       }
@@ -420,19 +425,54 @@ class _OrdersPageState extends State<OrdersPage> {
       default: return field;
     }
   }
+  // Update order locally without full reload
+  void _updateOrderLocally(String orderId, String field, dynamic newValue) {
+    setState(() {
+      final index = _allOrders.indexWhere((o) => o.id == orderId);
+      if (index != -1) {
+        final oldOrder = _allOrders[index];
+        final updatedOrder = SAPMainOrder(
+          id: oldOrder.id,
+          status: field == 'status' ? newValue.toString() : oldOrder.status,
+          customerName: field == 'customer_name' ? newValue.toString() : oldOrder.customerName,
+          itemNumber: field == 'item_number' ? newValue.toString() : oldOrder.itemNumber,
+          productCode: field == 'product_code' ? newValue.toString() : oldOrder.productCode,
+          contractNumber: field == 'contract_number' ? newValue.toString() : oldOrder.contractNumber,
+          description: field == 'description' ? newValue.toString() : oldOrder.description,
+          designOrder: field == 'design_order' ? newValue.toString() : oldOrder.designOrder,
+          quantity: field == 'quantity' ? (newValue as double) : oldOrder.quantity,
+          unitOfMeasure: field == 'unit_of_measure' ? newValue.toString() : oldOrder.unitOfMeasure,
+          value: field == 'value' ? (newValue as double) : oldOrder.value,
+          salesEngineer: field == 'sales_engineer' ? newValue.toString() : oldOrder.salesEngineer,
+          orderDate: field == 'order_date' ? newValue.toString() : oldOrder.orderDate,
+          deliveryDate: field == 'delivery_date' ? newValue.toString() : oldOrder.deliveryDate,
+          factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
+          designTeam: field == 'design_team' ? newValue.toString() : oldOrder.designTeam,
+          responsibleEngineer: field == 'responsible_engineer' ? newValue.toString() : oldOrder.responsibleEngineer,
+          reviewer: field == 'reviewer' ? newValue.toString() : oldOrder.reviewer,
+          correspondenceEngineer: field == 'correspondence_engineer' ? newValue.toString() : oldOrder.correspondenceEngineer,
+          createdAt: oldOrder.createdAt,
+        );
+        _allOrders[index] = updatedOrder;
+        _orderIndexMap.remove(oldOrder);
+        _orderIndexMap[updatedOrder] = index;
+      }
+    });
+    _rebuildGroups();
+  }
 
   Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
     final oldValue = order.designTeam;
 
     // If multiple rows selected, apply to all
-    if (_selectedRows.length > 1) {
+    if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
 
-      for (var index in _selectedRows) {
-        if (index < _allOrders.length) {
-          final selectedOrder = _allOrders[index];
+      for (var orderId in _selectedRowsIds) {
+        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        if (selectedOrder != null) {
           try {
             await supabase
                 .from('sap_main_orders')
@@ -458,7 +498,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
       setState(() => _isLoading = false);
       _showSnackBar('✅ Design Team updated for $updated rows!');
-      _loadAllDataOnce();
+      _updateMultipleOrdersLocally('design_team', newValue);
       return;
     }
 
@@ -481,7 +521,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('Design team updated!');
-      _loadAllDataOnce();
+      _updateOrderLocally(order.id, 'design_team', newValue);
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
@@ -524,6 +564,44 @@ class _OrdersPageState extends State<OrdersPage> {
       buffer.write(parts[0][i]);
     }
     return '${buffer.toString()}.${parts[1]}';
+  }
+
+  // Replace the bulk update reload:
+  void _updateMultipleOrdersLocally(String field, dynamic newValue) {
+    setState(() {
+      for (var orderId in _selectedRowsIds) {
+        final index = _allOrders.indexWhere((o) => o.id == orderId);
+        if (index != -1) {
+          final oldOrder = _allOrders[index];
+          final updatedOrder = SAPMainOrder(
+            id: oldOrder.id,
+            status: field == 'status' ? newValue.toString() : oldOrder.status,
+            customerName: field == 'customer_name' ? newValue.toString() : oldOrder.customerName,
+            itemNumber: field == 'item_number' ? newValue.toString() : oldOrder.itemNumber,
+            productCode: field == 'product_code' ? newValue.toString() : oldOrder.productCode,
+            contractNumber: field == 'contract_number' ? newValue.toString() : oldOrder.contractNumber,
+            description: field == 'description' ? newValue.toString() : oldOrder.description,
+            designOrder: field == 'design_order' ? newValue.toString() : oldOrder.designOrder,
+            quantity: field == 'quantity' ? (newValue as double) : oldOrder.quantity,
+            unitOfMeasure: field == 'unit_of_measure' ? newValue.toString() : oldOrder.unitOfMeasure,
+            value: field == 'value' ? (newValue as double) : oldOrder.value,
+            salesEngineer: field == 'sales_engineer' ? newValue.toString() : oldOrder.salesEngineer,
+            orderDate: field == 'order_date' ? newValue.toString() : oldOrder.orderDate,
+            deliveryDate: field == 'delivery_date' ? newValue.toString() : oldOrder.deliveryDate,
+            factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
+            designTeam: field == 'design_team' ? newValue.toString() : oldOrder.designTeam,
+            responsibleEngineer: field == 'responsible_engineer' ? newValue.toString() : oldOrder.responsibleEngineer,
+            reviewer: field == 'reviewer' ? newValue.toString() : oldOrder.reviewer,
+            correspondenceEngineer: field == 'correspondence_engineer' ? newValue.toString() : oldOrder.correspondenceEngineer,
+            createdAt: oldOrder.createdAt,
+          );
+          _allOrders[index] = updatedOrder;
+          _orderIndexMap.remove(oldOrder);
+          _orderIndexMap[updatedOrder] = index;
+        }
+      }
+    });
+    _rebuildGroups();
   }
 
   // ==================== DATA LOADING ====================
@@ -571,14 +649,14 @@ class _OrdersPageState extends State<OrdersPage> {
     final oldValue = _getCurrentFieldValue(order, field);
 
     // If multiple rows selected, apply to all
-    if (_selectedRows.length > 1) {
+    if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
 
-      for (var index in _selectedRows) {
-        if (index < _allOrders.length) {
-          final selectedOrder = _allOrders[index];
+      for (var orderId in _selectedRowsIds) {
+        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        if (selectedOrder != null) {
           try {
             await supabase
                 .from('sap_main_orders')
@@ -604,7 +682,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
       setState(() => _isLoading = false);
       _showSnackBar('✅ ${_formatFieldName(field)} updated for $updated rows!');
-      _loadAllDataOnce();
+      _updateMultipleOrdersLocally(field, newValue);
       return;
     }
 
@@ -627,7 +705,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('Updated successfully!');
-      _loadAllDataOnce();
+      _updateOrderLocally(order.id, field, newValue);
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
@@ -744,7 +822,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method to _OrdersPageState class
   Future<void> _deleteSelectedOrders() async {
-    if (_selectedRows.isEmpty) {
+    if (_selectedRowsIds.isEmpty) {
       _showSnackBar('No orders selected');
       return;
     }
@@ -754,7 +832,7 @@ class _OrdersPageState extends State<OrdersPage> {
       builder: (ctx) => AlertDialog(
         title: Text('Delete Orders', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         content: Text(
-          'Are you sure you want to delete ${_selectedRows.length} selected orders?\n\nThis action cannot be undone.',
+          'Are you sure you want to delete ${_selectedRowsIds.length} selected orders?\n\nThis action cannot be undone.',
           style: GoogleFonts.cairo(),
         ),
         actions: [
@@ -765,7 +843,7 @@ class _OrdersPageState extends State<OrdersPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Delete ${_selectedRows.length} orders', style: GoogleFonts.cairo(color: Colors.white)),
+            child: Text('Delete ${_selectedRowsIds.length} orders', style: GoogleFonts.cairo(color: Colors.white)),
           ),
         ],
       ),
@@ -779,10 +857,18 @@ class _OrdersPageState extends State<OrdersPage> {
     int deleted = 0;
     int failed = 0;
     final deletedOrders = <Map<String, String>>[];
+    final deletedIds = <String>[];
 
-    for (var index in _selectedRows.toList()) {
-      if (index < _allOrders.length) {
-        final order = _allOrders[index];
+    for (var orderId in _selectedRowsIds.toList()) {
+      SAPMainOrder? order;
+      for (var o in _allOrders) {
+        if (o.id == orderId) {
+          order = o;
+          break;
+        }
+      }
+
+      if (order != null) {
         try {
           // Log the deletion before actually deleting
           await _auditService.logChange(
@@ -800,6 +886,7 @@ class _OrdersPageState extends State<OrdersPage> {
           // Delete the order
           await supabase.from('sap_main_orders').delete().eq('id', order.id);
           deleted++;
+          deletedIds.add(order.id);
           deletedOrders.add({
             'designOrder': order.designOrder,
             'customerName': order.customerName,
@@ -811,8 +898,17 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
 
-    setState(() => _isLoading = false);
-    _clearSelection();
+    // Remove deleted orders from local list (no full reload needed)
+    setState(() {
+      _allOrders.removeWhere((o) => deletedIds.contains(o.id));
+      _orderIndexMap.removeWhere((key, value) => deletedIds.contains(key.id));
+      _selectedRowsIds.clear();
+      _lastSelectedIndex = null;
+      _isLoading = false;
+    });
+
+    // Rebuild groups with updated list
+    _rebuildGroups();
 
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -840,8 +936,6 @@ class _OrdersPageState extends State<OrdersPage> {
         notes: 'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
       );
     }
-
-    _loadAllDataOnce();
   }
 
   bool get _isAdmin {
@@ -854,14 +948,14 @@ class _OrdersPageState extends State<OrdersPage> {
     final oldStatus = order.status;
 
     // If multiple rows selected, apply to all
-    if (_selectedRows.length > 1) {
+    if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
 
-      for (var index in _selectedRows) {
-        if (index < _allOrders.length) {
-          final selectedOrder = _allOrders[index];
+      for (var orderId in _selectedRowsIds) {
+        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        if (selectedOrder != null) {
           try {
             await supabase
                 .from('sap_main_orders')
@@ -887,7 +981,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
       setState(() => _isLoading = false);
       _showSnackBar('✅ Status updated for $updated rows!');
-      _loadAllDataOnce();
+      _updateMultipleOrdersLocally('status', newStatus);
       return;
     }
 
@@ -910,7 +1004,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('Status updated!');
-      _loadAllDataOnce();
+      _updateOrderLocally(order.id, 'status', newStatus);
     } catch (e) {
       _showSnackBar('Error updating status: $e');
     }
@@ -1025,28 +1119,12 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  void _toggleRowSelection(int index) {
+  void _toggleRowSelection(SAPMainOrder order) {
     setState(() {
-      // Check if Shift key is pressed (for range selection)
-      final isShiftPressed = RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftLeft) ||
-          RawKeyboard.instance.keysPressed.contains(LogicalKeyboardKey.shiftRight);
-
-      if (isShiftPressed && _lastSelectedIndex != null) {
-        // Range selection: select all rows between last selected and current
-        final start = _lastSelectedIndex! < index ? _lastSelectedIndex! : index;
-        final end = _lastSelectedIndex! < index ? index : _lastSelectedIndex!;
-
-        for (int i = start; i <= end; i++) {
-          _selectedRows.add(i);
-        }
+      if (_selectedRowsIds.contains(order.id)) {
+        _selectedRowsIds.remove(order.id);
       } else {
-        // Normal toggle
-        if (_selectedRows.contains(index)) {
-          _selectedRows.remove(index);
-        } else {
-          _selectedRows.add(index);
-        }
-        _lastSelectedIndex = index;
+        _selectedRowsIds.add(order.id);
       }
     });
   }
@@ -1055,18 +1133,14 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() {
       final sectionOrders = _groupedOrders[status] ?? [];
       if (sectionOrders.isEmpty) return;
-      final allSelected = sectionOrders.every(
-        (o) => _selectedRows.contains(_orderIndexMap[o] ?? -1),
-      );
+      final allSelected = sectionOrders.every((o) => _selectedRowsIds.contains(o.id));
       if (allSelected) {
         for (var o in sectionOrders) {
-          final idx = _orderIndexMap[o];
-          if (idx != null) _selectedRows.remove(idx);
+          _selectedRowsIds.remove(o.id);
         }
       } else {
         for (var o in sectionOrders) {
-          final idx = _orderIndexMap[o];
-          if (idx != null) _selectedRows.add(idx);
+          _selectedRowsIds.add(o.id);
         }
       }
     });
@@ -1074,16 +1148,17 @@ class _OrdersPageState extends State<OrdersPage> {
 
   void _clearSelection() {
     setState(() {
-      _selectedRows.clear();
+      _selectedRowsIds.clear();
       _lastSelectedIndex = null;
     });
   }
 
+
   List<SAPMainOrder> _getSelectedOrders() =>
-      _selectedRows.map((i) => _allOrders[i]).toList();
+      _allOrders.where((o) => _selectedRowsIds.contains(o.id)).toList();
 
   Future<void> _exportSelectedOrders() async {
-    if (_selectedRows.isEmpty) {
+    if (_selectedRowsIds.isEmpty) {
       _showSnackBar('No orders selected');
       return;
     }
@@ -1418,7 +1493,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   children: [
                     _buildHeaderRow(),
                     const SizedBox(height: 16),
-                    if (_selectedRows.isNotEmpty) _buildSelectionToolbar(),
+                    if (_selectedRowsIds.isNotEmpty) _buildSelectionToolbar(),
                     Expanded(child: _buildTableContainer()),
                   ],
                 ),
@@ -1449,7 +1524,7 @@ class _OrdersPageState extends State<OrdersPage> {
             'Orders',
             style: GoogleFonts.cairo(fontSize: 24, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
           ),
-          if (_selectedRows.isNotEmpty) ...[
+          if (_selectedRowsIds.isNotEmpty) ...[
             const SizedBox(width: 16),
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
@@ -1458,7 +1533,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
-                '${_selectedRows.length} selected',
+                '${_selectedRowsIds.length} selected',
                 style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
               ),
             ),
@@ -1926,12 +2001,12 @@ class _OrdersPageState extends State<OrdersPage> {
           const Icon(Icons.check_circle, size: 18, color: Color(0xFF6366F1)),
           const SizedBox(width: 8),
           Text(
-            '${_selectedRows.length} selected',
+            '${_selectedRowsIds.length} selected',
             style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
           ),
           const Spacer(),
           // Bulk edit button (only in edit mode with selections)
-          if (_editMode && _selectedRows.isNotEmpty) ...[
+          if (_editMode && _selectedRowsIds.isNotEmpty) ...[
             _buildSmallBtn(Icons.edit, 'Bulk Edit', () => _showBulkEditDialog()),
             const SizedBox(width: 8),
           ],
@@ -2064,7 +2139,7 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildSectionHeader(String status, List<SAPMainOrder> orders) {
     final isExpanded = _expandedSections.contains(status);
     final allSelected = orders.every(
-      (o) => _selectedRows.contains(_orderIndexMap[o] ?? -1),
+          (o) => _selectedRowsIds.contains(o.id),
     );
     return GestureDetector(
       onTap: () => _toggleSection(status),
@@ -2266,9 +2341,9 @@ class _OrdersPageState extends State<OrdersPage> {
   );
 
   Widget _buildNameCell(SAPMainOrder order, int index) {
-    final isSelected = _selectedRows.contains(index);
+    final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
-      onTap: () => _toggleRowSelection(index),
+      onTap: () => _toggleRowSelection(order),
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 12),
@@ -2288,7 +2363,7 @@ class _OrdersPageState extends State<OrdersPage> {
               height: 24,
               child: Checkbox(
                 value: isSelected,
-                onChanged: (v) => _toggleRowSelection(index),
+                onChanged: (v) => _toggleRowSelection(order),
                 activeColor: const Color(0xFF6366F1),
                 materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
                 visualDensity: VisualDensity.compact,
@@ -2343,7 +2418,7 @@ class _OrdersPageState extends State<OrdersPage> {
   );
 
   Widget _buildDataRow(SAPMainOrder order, int index) {
-    final isSelected = _selectedRows.contains(index);
+    final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
       onLongPress: _isAdmin ? () {
@@ -2484,7 +2559,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (newValue.isEmpty || newValue == oldValue || newValue == (oldValue == '-' ? '' : oldValue)) return;
 
     // If multiple rows selected, apply to all
-    if (_editMode && _selectedRows.length > 1) {
+    if (_editMode && _selectedRowsIds.length > 1) {
       await _applyBulkEditToSelected(field, newValue);
       return;
     }
@@ -2516,7 +2591,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('${_formatFieldName(field)} updated!');
-      _loadAllDataOnce();
+      _updateOrderLocally(order.id, field, parsedValue);
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
@@ -2535,9 +2610,9 @@ class _OrdersPageState extends State<OrdersPage> {
       parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
     }
 
-    for (var index in _selectedRows) {
-      if (index < _allOrders.length) {
-        final order = _allOrders[index];
+    for (var orderId in _selectedRowsIds) {
+      final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
+      if (order != null) {
         try {
           await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
 
@@ -2560,7 +2635,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     setState(() => _isLoading = false);
     _showSnackBar('✅ $updated rows updated!');
-    _loadAllDataOnce();
+    _updateMultipleOrdersLocally(field, parsedValue); // ✅ Use local update, not full reload
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>

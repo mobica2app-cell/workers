@@ -88,7 +88,7 @@ class SAPMainService {
         final response = await _client
             .from('sap_main_orders')
             .select('*')
-            .order('design_order', ascending: false)
+            .order('order_date', ascending: true) // Oldest first
             .range(start, end);
 
         final batch = List<Map<String, dynamic>>.from(response);
