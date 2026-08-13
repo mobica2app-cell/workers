@@ -38,7 +38,7 @@ class _OrdersPageState extends State<OrdersPage> {
   String _searchQuery = '';
   String? _filterDesignTeam;
   bool _filterMyWork = false;
-
+  bool _editMode = false;
   String _sortBy =
       'default'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
@@ -66,6 +66,9 @@ class _OrdersPageState extends State<OrdersPage> {
   Map<String, ProductTracking> _allTrackingCache = {};
   Map<String, List<JobAssignment>> _jobsCache = {};
   Map<String, Employee?> _employeeCache = {};
+
+  String? _editingField; // Which field is being edited (orderId_field)
+  final Map<String, TextEditingController> _editControllers = {};
 
   // Filters
   String? _filterStatus;
@@ -160,6 +163,12 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // Check if user is from Data Entry department (can edit any row)
+  bool get _isDataEntry {
+    final department = widget.loggedInEmployee?.department?.toLowerCase() ?? '';
+    return department == 'data entry';
+  }
+
   void _applyMyWorkFilter() {
     setState(() {
       if (_filterMyWork) {
@@ -195,16 +204,265 @@ class _OrdersPageState extends State<OrdersPage> {
     super.dispose();
   }
 
+  void _showBulkEditDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Bulk Edit', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('${_selectedRows.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+          const SizedBox(height: 16),
+          Wrap(spacing: 8, children: [
+            _buildBulkEditOption('Status', 'status'),
+            _buildBulkEditOption('Design Team', 'design_team'),
+            _buildBulkEditOption('Factory', 'factory'),
+            _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
+            _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
+            _buildBulkEditOption('Reviewer', 'reviewer'),
+            _buildBulkEditOption('Alt. Engineer', 'correspondence_engineer'),
+            _buildBulkEditOption('Value', 'value'),
+            _buildBulkEditOption('Delivery Date', 'delivery_date'),
+          ]),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildBulkEditOption(String label, String field) {
+    return OutlinedButton(
+      onPressed: () {
+        Navigator.pop(context);
+        _bulkEditField(field, '');
+      },
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      child: Text(label, style: GoogleFonts.cairo(fontSize: 11)),
+    );
+  }
+
   // Check if user can import/delete (admin role or specific username)
   bool get _canImportDelete {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
     final username = widget.loggedInEmployee?.username?.toLowerCase() ?? '';
-    return role == 'admin' || role == 'software head' || role == 'head' || username == 'abd.elmoen';
+    return role == 'admin' || role == 'software head' || role == 'head' ||  _isDataEntry;
+  }
+
+  Future<void> _bulkEditField(String field, String currentValue) async {
+    final controller = TextEditingController();
+
+    final newValue = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Bulk Edit ${_formatFieldName(field)}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('Apply to ${_selectedRows.length} selected rows', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+          const SizedBox(height: 12),
+          TextField(
+            controller: controller,
+            style: GoogleFonts.cairo(fontSize: 14),
+            decoration: InputDecoration(
+              labelText: _formatFieldName(field),
+              hintText: 'Enter new value for all selected',
+              border: const OutlineInputBorder(),
+            ),
+            keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
+          ),
+        ]),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+            child: Text('Apply to ${_selectedRows.length} rows', style: GoogleFonts.cairo(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newValue != null && newValue.isNotEmpty) {
+      setState(() => _isLoading = true);
+      final supabase = Supabase.instance.client;
+      int updated = 0;
+
+      dynamic parsedValue = newValue;
+      if (field == 'quantity') {
+        parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
+      } else if (field == 'value') {
+        parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+      }
+
+      for (var index in _selectedRows) {
+        if (index < _allOrders.length) {
+          final order = _allOrders[index];
+          try {
+            await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
+
+            await _auditService.logChange(
+              orderId: order.id,
+              designOrder: order.designOrder,
+              fieldName: field,
+              oldValue: _getCurrentFieldValue(order, field),
+              newValue: newValue,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+            updated++;
+          } catch (e) {
+            print('Failed to update ${order.id}: $e');
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+      _showSnackBar('✅ $updated rows updated!');
+      _loadAllDataOnce();
+    }
+  }
+
+  // Add this method to show an edit dialog for any field
+  Future<void> _editOrderField(SAPMainOrder order, String field, String currentValue) async {
+    // If multiple rows are selected in edit mode, apply to ALL selected rows
+    if (_editMode && _selectedRows.length > 1) {
+      // Just call bulk edit directly
+      _bulkEditField(field, currentValue);
+      return;
+    }
+
+    // Single row edit (normal behavior)
+    final controller = TextEditingController(text: currentValue);
+
+    final newValue = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text('Edit ${_formatFieldName(field)}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        content: TextField(
+          controller: controller,
+          style: GoogleFonts.cairo(fontSize: 14),
+          decoration: InputDecoration(
+            labelText: _formatFieldName(field),
+            border: const OutlineInputBorder(),
+          ),
+          maxLines: field == 'description' ? 3 : 1,
+          keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, controller.text),
+            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+            child: Text('Save', style: GoogleFonts.cairo(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (newValue != null && newValue != currentValue) {
+      try {
+        final supabase = Supabase.instance.client;
+        dynamic parsedValue = newValue;
+
+        if (field == 'quantity') {
+          parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
+        } else if (field == 'value') {
+          parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+        }
+
+        await supabase
+            .from('sap_main_orders')
+            .update({field: parsedValue})
+            .eq('id', order.id);
+
+        await _auditService.logChange(
+          orderId: order.id,
+          designOrder: order.designOrder,
+          fieldName: field,
+          oldValue: currentValue,
+          newValue: newValue,
+          changedBy: _currentUserName,
+          changedById: _currentUserId,
+        );
+
+        _showSnackBar('${_formatFieldName(field)} updated!');
+        _loadAllDataOnce();
+      } catch (e) {
+        _showSnackBar('Error updating: $e');
+      }
+    }
+  }
+
+// Helper to format field names nicely
+  String _formatFieldName(String field) {
+    switch (field) {
+      case 'customer_name': return 'Customer Name';
+      case 'contract_number': return 'Contract Number';
+      case 'design_order': return 'Design Order';
+      case 'item_number': return 'Item';
+      case 'product_code': return 'Product Code';
+      case 'description': return 'Description';
+      case 'quantity': return 'QTY';
+      case 'unit_of_measure': return 'Unit';
+      case 'value': return 'Value';
+      case 'sales_engineer': return 'Sales Engineer';
+      case 'order_date': return 'O-Date';
+      case 'delivery_date': return 'Delivery Date';
+      case 'factory': return 'Factory';
+      case 'design_team': return 'Design Team';
+      case 'responsible_engineer': return 'Resp. Engineer';
+      case 'reviewer': return 'Reviewer';
+      case 'correspondence_engineer': return 'Alt. Engineer';
+      case 'status': return 'Status';
+      default: return field;
+    }
   }
 
   Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
     final oldValue = order.designTeam;
 
+    // If multiple rows selected, apply to all
+    if (_selectedRows.length > 1) {
+      setState(() => _isLoading = true);
+      final supabase = Supabase.instance.client;
+      int updated = 0;
+
+      for (var index in _selectedRows) {
+        if (index < _allOrders.length) {
+          final selectedOrder = _allOrders[index];
+          try {
+            await supabase
+                .from('sap_main_orders')
+                .update({'design_team': newValue})
+                .eq('id', selectedOrder.id);
+
+            await _auditService.logChange(
+              orderId: selectedOrder.id,
+              designOrder: selectedOrder.designOrder,
+              fieldName: 'design_team',
+              oldValue: selectedOrder.designTeam,
+              newValue: newValue,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+            updated++;
+          } catch (e) {
+            print('Failed: $e');
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+      _showSnackBar('✅ Design Team updated for $updated rows!');
+      _loadAllDataOnce();
+      return;
+    }
+
+    // Single row update
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -312,6 +570,45 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _updateOrderEngineer(SAPMainOrder order, String field, String? newValue) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
+    // If multiple rows selected, apply to all
+    if (_selectedRows.length > 1) {
+      setState(() => _isLoading = true);
+      final supabase = Supabase.instance.client;
+      int updated = 0;
+
+      for (var index in _selectedRows) {
+        if (index < _allOrders.length) {
+          final selectedOrder = _allOrders[index];
+          try {
+            await supabase
+                .from('sap_main_orders')
+                .update({field: newValue})
+                .eq('id', selectedOrder.id);
+
+            await _auditService.logChange(
+              orderId: selectedOrder.id,
+              designOrder: selectedOrder.designOrder,
+              fieldName: field,
+              oldValue: _getCurrentFieldValue(selectedOrder, field),
+              newValue: newValue,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+            updated++;
+          } catch (e) {
+            print('Failed: $e');
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+      _showSnackBar('✅ ${_formatFieldName(field)} updated for $updated rows!');
+      _loadAllDataOnce();
+      return;
+    }
+
+    // Single row update
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -556,6 +853,45 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
     final oldStatus = order.status;
 
+    // If multiple rows selected, apply to all
+    if (_selectedRows.length > 1) {
+      setState(() => _isLoading = true);
+      final supabase = Supabase.instance.client;
+      int updated = 0;
+
+      for (var index in _selectedRows) {
+        if (index < _allOrders.length) {
+          final selectedOrder = _allOrders[index];
+          try {
+            await supabase
+                .from('sap_main_orders')
+                .update({'status': newStatus})
+                .eq('id', selectedOrder.id);
+
+            await _auditService.logChange(
+              orderId: selectedOrder.id,
+              designOrder: selectedOrder.designOrder,
+              fieldName: 'status',
+              oldValue: selectedOrder.status,
+              newValue: newStatus,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+            updated++;
+          } catch (e) {
+            print('Failed to update ${selectedOrder.id}: $e');
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+      _showSnackBar('✅ Status updated for $updated rows!');
+      _loadAllDataOnce();
+      return;
+    }
+
+    // Single row update (original behavior)
     try {
       final supabase = Supabase.instance.client;
       await supabase
@@ -563,7 +899,6 @@ class _OrdersPageState extends State<OrdersPage> {
           .update({'status': newStatus})
           .eq('id', order.id);
 
-      // Log the change
       await _auditService.logChange(
         orderId: order.id,
         designOrder: order.designOrder,
@@ -1096,11 +1431,10 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildTopBar() {
-    // Check if user is admin/head
     final isAdmin =
         widget.loggedInEmployee?.role?.toLowerCase() == 'admin' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'head';
+            widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
+            widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
     return Container(
       height: 64,
@@ -1113,11 +1447,7 @@ class _OrdersPageState extends State<OrdersPage> {
         children: [
           Text(
             'Orders',
-            style: GoogleFonts.cairo(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
-            ),
+            style: GoogleFonts.cairo(fontSize: 24, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
           ),
           if (_selectedRows.isNotEmpty) ...[
             const SizedBox(width: 16),
@@ -1129,27 +1459,41 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
               child: Text(
                 '${_selectedRows.length} selected',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6366F1),
-                ),
+                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
               ),
             ),
             TextButton(
               onPressed: _clearSelection,
-              child: Text(
-                'Clear',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  color: const Color(0xFF64748B),
-                ),
-              ),
+              child: Text('Clear', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
             ),
           ],
           const Spacer(),
+          // My Work button
           _buildMyWorkButton(),
           const SizedBox(width: 8),
+          // Edit Mode checkbox - beside My Work button
+          if (_isDataEntry || _isAdmin) ...[
+            Row(mainAxisSize: MainAxisSize.min, children: [
+              SizedBox(
+                width: 20, height: 20,
+                child: Checkbox(
+                  value: _editMode,
+                  onChanged: (v) => setState(() => _editMode = v ?? false),
+                  activeColor: Colors.orange,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              ),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => setState(() => _editMode = !_editMode),
+                child: Text(
+                  'Edit Mode',
+                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _editMode ? Colors.orange : const Color(0xFF64748B)),
+                ),
+              ),
+            ]),
+            const SizedBox(width: 8),
+          ],
           // Only show people icon for admin/head users
           if (isAdmin)
             _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
@@ -1586,9 +1930,13 @@ class _OrdersPageState extends State<OrdersPage> {
             style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
           ),
           const Spacer(),
+          // Bulk edit button (only in edit mode with selections)
+          if (_editMode && _selectedRows.isNotEmpty) ...[
+            _buildSmallBtn(Icons.edit, 'Bulk Edit', () => _showBulkEditDialog()),
+            const SizedBox(width: 8),
+          ],
           _buildSmallBtn(Icons.download, 'Export Selected', _exportSelectedOrders),
           const SizedBox(width: 8),
-          // Only show Delete for admin or abd.elmoen
           if (_canImportDelete) ...[
             _buildSmallBtn(Icons.delete_outline, 'Delete', _deleteSelectedOrders),
             const SizedBox(width: 8),
@@ -1999,79 +2347,220 @@ class _OrdersPageState extends State<OrdersPage> {
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
       onLongPress: _isAdmin ? () {
-      // Navigate to order tracking page on long press (admin only)
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => OrderTrackingPage(order: order),
-        ),
-      );
-    } : null,
+        Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)));
+      } : null,
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: isSelected
-              ? const Color(0xFF6366F1).withOpacity(0.05)
-              : Colors.white,
+          color: isSelected ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.white,
           border: Border(bottom: BorderSide(color: Colors.grey.shade50)),
         ),
         child: Row(
           children: [
-            _statusCell(order.status, order), // Changed: pass order too
-            _cell(order.itemNumber, 60),
-            _cell(
-              order.productCode,
-              120,
-              style: GoogleFonts.cairo(fontSize: 11),
-            ),
-            _cell(order.contractNumber, 110),
-            _cell(
-              order.description,
-              200,
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
-            _cell(
-              order.designOrder,
-              110,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF6366F1),
-              ),
-            ),
-            _cell('${order.quantity}', 70, align: TextAlign.right),
-            _cell(order.unitOfMeasure, 50),
-            _cell(
-              _formatNumber(order.value),
-              110,
-              align: TextAlign.right,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF059669),
-              ),
-            ),
-            _cell(order.salesEngineer, 150),
-            _cell(order.orderDate ?? '-', 100),
-            _cell(order.deliveryDate ?? '-', 100),
-            _cell(order.factory ?? '-', 70),
+            _statusCell(order.status, order),
+            _editableCell(order.itemNumber, 60, order, 'item_number'),
+            _editableCell(order.productCode, 120, order, 'product_code', style: GoogleFonts.cairo(fontSize: 11)),
+            _editableCell(order.contractNumber, 110, order, 'contract_number'),
+            _editableCell(order.description, 200, order, 'description', overflow: TextOverflow.ellipsis, maxLines: 2),
+            _editableCell(order.designOrder, 110, order, 'design_order', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1))),
+            _editableCell('${order.quantity}', 70, order, 'quantity', align: TextAlign.right),
+            _editableCell(order.unitOfMeasure, 50, order, 'unit_of_measure'),
+            _editableCell(_formatNumber(order.value), 110, order, 'value', align: TextAlign.right, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF059669))),
+            _editableCell(order.salesEngineer, 150, order, 'sales_engineer'),
+            _editableCell(order.orderDate ?? '-', 100, order, 'order_date'),
+            _editableCell(order.deliveryDate ?? '-', 100, order, 'delivery_date'),
+            _editableCell(order.factory ?? '-', 70, order, 'factory'),
             _designTeamDropdownCell(order.designTeam, order),
-            _employeeDropdownCell(
-              order.responsibleEngineer,
-              order,
-              'responsible_engineer',
-            ),
+            _employeeDropdownCell(order.responsibleEngineer, order, 'responsible_engineer'),
             _employeeDropdownCell(order.reviewer, order, 'reviewer'),
-            _employeeDropdownCell(
-              order.correspondenceEngineer,
-              order,
-              'correspondence_engineer',
-            ),
+            _employeeDropdownCell(order.correspondenceEngineer, order, 'correspondence_engineer'),
           ],
         ),
       ),
     );
+  }
+
+  Widget _editableCell(
+      String text,
+      double w,
+      SAPMainOrder order,
+      String field, {
+        TextAlign align = TextAlign.left,
+        TextStyle? style,
+        TextOverflow overflow = TextOverflow.ellipsis,
+        int maxLines = 1,
+      }) {
+    final editKey = '${order.id}_$field';
+    final isEditing = _editingField == editKey;
+
+    if (_editMode && (_isDataEntry || _isAdmin)) {
+      if (isEditing) {
+        // Inline editing mode
+        if (!_editControllers.containsKey(editKey)) {
+          _editControllers[editKey] = TextEditingController(text: text == '-' ? '' : text);
+        }
+
+        return SizedBox(
+          width: w,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: TextField(
+              controller: _editControllers[editKey],
+              style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F172A)),
+              textAlign: align == TextAlign.right ? TextAlign.right : TextAlign.left,
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(3),
+                  borderSide: const BorderSide(color: Colors.orange, width: 2),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(3),
+                  borderSide: const BorderSide(color: Colors.orange, width: 2),
+                ),
+                filled: true,
+                fillColor: Colors.white,
+              ),
+              keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
+              onSubmitted: (newValue) {
+                _saveInlineEdit(order, field, newValue, editKey, text);
+              },
+              onTapOutside: (_) {
+                _saveInlineEdit(order, field, _editControllers[editKey]?.text ?? '', editKey, text);
+              },
+            ),
+          ),
+        );
+      }
+
+      // Normal editable cell (click to start editing)
+      return SizedBox(
+        width: w,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: InkWell(
+            onTap: () {
+              setState(() {
+                _editingField = editKey;
+              });
+            },
+            borderRadius: BorderRadius.circular(4),
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+              decoration: BoxDecoration(
+                border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                borderRadius: BorderRadius.circular(4),
+                color: Colors.orange.withOpacity(0.05),
+              ),
+              child: Align(
+                alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+                child: Text(
+                  text,
+                  style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                  overflow: overflow,
+                  maxLines: maxLines,
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    // Normal cell
+    return _cell(text, w, align: align, style: style, overflow: overflow, maxLines: maxLines);
+  }
+
+// Save inline edit
+  Future<void> _saveInlineEdit(SAPMainOrder order, String field, String newValue, String editKey, String oldValue) async {
+    // Clean up controller
+    _editControllers.remove(editKey);
+
+    setState(() {
+      _editingField = null;
+    });
+
+    if (newValue.isEmpty || newValue == oldValue || newValue == (oldValue == '-' ? '' : oldValue)) return;
+
+    // If multiple rows selected, apply to all
+    if (_editMode && _selectedRows.length > 1) {
+      await _applyBulkEditToSelected(field, newValue);
+      return;
+    }
+
+    // Single row update
+    try {
+      final supabase = Supabase.instance.client;
+      dynamic parsedValue = newValue;
+
+      if (field == 'quantity') {
+        parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
+      } else if (field == 'value') {
+        parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+      }
+
+      await supabase
+          .from('sap_main_orders')
+          .update({field: parsedValue})
+          .eq('id', order.id);
+
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: field,
+        oldValue: oldValue == '-' ? '' : oldValue,
+        newValue: newValue,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
+
+      _showSnackBar('${_formatFieldName(field)} updated!');
+      _loadAllDataOnce();
+    } catch (e) {
+      _showSnackBar('Error updating: $e');
+    }
+  }
+
+// Apply bulk edit to all selected rows (inline)
+  Future<void> _applyBulkEditToSelected(String field, String newValue) async {
+    setState(() => _isLoading = true);
+    final supabase = Supabase.instance.client;
+    int updated = 0;
+
+    dynamic parsedValue = newValue;
+    if (field == 'quantity') {
+      parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
+    } else if (field == 'value') {
+      parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+    }
+
+    for (var index in _selectedRows) {
+      if (index < _allOrders.length) {
+        final order = _allOrders[index];
+        try {
+          await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
+
+          await _auditService.logChange(
+            orderId: order.id,
+            designOrder: order.designOrder,
+            fieldName: field,
+            oldValue: _getCurrentFieldValue(order, field),
+            newValue: newValue,
+            changedBy: _currentUserName,
+            changedById: _currentUserId,
+            actionType: 'bulk_update',
+          );
+          updated++;
+        } catch (e) {
+          print('Failed to update ${order.id}: $e');
+        }
+      }
+    }
+
+    setState(() => _isLoading = false);
+    _showSnackBar('✅ $updated rows updated!');
+    _loadAllDataOnce();
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>
