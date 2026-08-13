@@ -61,7 +61,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Selection
   final Set<String> _selectedRowsIds = {};
-  bool _isOrderSelected(SAPMainOrder order) => _selectedRowsIds.contains(order.id);
+
+  bool _isOrderSelected(SAPMainOrder order) =>
+      _selectedRowsIds.contains(order.id);
 
   // Services
   final EmployeeService _employeeService = EmployeeService();
@@ -150,21 +152,30 @@ class _OrdersPageState extends State<OrdersPage> {
   // Add audit service
   final AuditService _auditService = AuditService(Supabase.instance.client);
 
- // Helper to get current user info
+  // Helper to get current user info
   String get _currentUserName => widget.loggedInEmployee?.fullName ?? 'Unknown';
+
   String get _currentUserId => widget.loggedInEmployee?.id ?? '';
 
- // Get old value before update (from the current order object)
+  // Get old value before update (from the current order object)
   String? _getCurrentFieldValue(SAPMainOrder order, String field) {
     switch (field) {
-      case 'status': return order.status;
-      case 'design_team': return order.designTeam;
-      case 'responsible_engineer': return order.responsibleEngineer;
-      case 'reviewer': return order.reviewer;
-      case 'correspondence_engineer': return order.correspondenceEngineer;
-      case 'sales_engineer': return order.salesEngineer;
-      case 'factory': return order.factory;
-      default: return null;
+      case 'status':
+        return order.status;
+      case 'design_team':
+        return order.designTeam;
+      case 'responsible_engineer':
+        return order.responsibleEngineer;
+      case 'reviewer':
+        return order.reviewer;
+      case 'correspondence_engineer':
+        return order.correspondenceEngineer;
+      case 'sales_engineer':
+        return order.salesEngineer;
+      case 'factory':
+        return order.factory;
+      default:
+        return null;
     }
   }
 
@@ -172,6 +183,10 @@ class _OrdersPageState extends State<OrdersPage> {
   bool get _isDataEntry {
     final department = widget.loggedInEmployee?.department?.toLowerCase() ?? '';
     return department == 'data entry';
+  }
+
+  bool _isOrderEditable(SAPMainOrder order) {
+    return order.status.toLowerCase() == 'tasks';
   }
 
   void _applyMyWorkFilter() {
@@ -213,24 +228,45 @@ class _OrdersPageState extends State<OrdersPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Bulk Edit', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('${_selectedRowsIds.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
-          const SizedBox(height: 16),
-          Wrap(spacing: 8, children: [
-            _buildBulkEditOption('Status', 'status'),
-            _buildBulkEditOption('Design Team', 'design_team'),
-            _buildBulkEditOption('Factory', 'factory'),
-            _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
-            _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
-            _buildBulkEditOption('Reviewer', 'reviewer'),
-            _buildBulkEditOption('Alt. Engineer', 'correspondence_engineer'),
-            _buildBulkEditOption('Value', 'value'),
-            _buildBulkEditOption('Delivery Date', 'delivery_date'),
-          ]),
-        ]),
+        title: Text(
+          'Bulk Edit',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${_selectedRowsIds.length} rows selected',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                _buildBulkEditOption('Status', 'status'),
+                _buildBulkEditOption('Design Team', 'design_team'),
+                _buildBulkEditOption('Factory', 'factory'),
+                _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
+                _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
+                _buildBulkEditOption('Reviewer', 'reviewer'),
+                _buildBulkEditOption(
+                  'Alt. Engineer',
+                  'correspondence_engineer',
+                ),
+                _buildBulkEditOption('Value', 'value'),
+                _buildBulkEditOption('Delivery Date', 'delivery_date'),
+              ],
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo()),
+          ),
         ],
       ),
     );
@@ -254,7 +290,10 @@ class _OrdersPageState extends State<OrdersPage> {
   bool get _canImportDelete {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
     final username = widget.loggedInEmployee?.username?.toLowerCase() ?? '';
-    return role == 'admin' || role == 'software head' || role == 'head' ||  _isDataEntry;
+    return role == 'admin' ||
+        role == 'software head' ||
+        role == 'head' ||
+        _isDataEntry;
   }
 
   Future<void> _bulkEditField(String field, String currentValue) async {
@@ -263,27 +302,49 @@ class _OrdersPageState extends State<OrdersPage> {
     final newValue = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Bulk Edit ${_formatFieldName(field)}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('Apply to ${_selectedRowsIds.length} selected rows', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
-          const SizedBox(height: 12),
-          TextField(
-            controller: controller,
-            style: GoogleFonts.cairo(fontSize: 14),
-            decoration: InputDecoration(
-              labelText: _formatFieldName(field),
-              hintText: 'Enter new value for all selected',
-              border: const OutlineInputBorder(),
+        title: Text(
+          'Bulk Edit ${_formatFieldName(field)}',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              'Apply to ${_selectedRowsIds.length} selected rows',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+              ),
             ),
-            keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
-          ),
-        ]),
+            const SizedBox(height: 12),
+            TextField(
+              controller: controller,
+              style: GoogleFonts.cairo(fontSize: 14),
+              decoration: InputDecoration(
+                labelText: _formatFieldName(field),
+                hintText: 'Enter new value for all selected',
+                border: const OutlineInputBorder(),
+              ),
+              keyboardType: field == 'quantity' || field == 'value'
+                  ? TextInputType.number
+                  : TextInputType.text,
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo()),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
-            child: Text('Apply to ${_selectedRowsIds.length} rows', style: GoogleFonts.cairo(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+            ),
+            child: Text(
+              'Apply to ${_selectedRowsIds.length} rows',
+              style: GoogleFonts.cairo(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -298,14 +359,21 @@ class _OrdersPageState extends State<OrdersPage> {
       if (field == 'quantity') {
         parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
       } else if (field == 'value') {
-        parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+        parsedValue =
+            double.tryParse(
+              newValue.replaceAll(',', '').replaceAll('\$', ''),
+            ) ??
+            0;
       }
 
       for (var orderId in _selectedRowsIds) {
         final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (order != null) {
           try {
-            await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
+            await supabase
+                .from('sap_main_orders')
+                .update({field: parsedValue})
+                .eq('id', order.id);
 
             await _auditService.logChange(
               orderId: order.id,
@@ -331,7 +399,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Add this method to show an edit dialog for any field
-  Future<void> _editOrderField(SAPMainOrder order, String field, String currentValue) async {
+  Future<void> _editOrderField(
+    SAPMainOrder order,
+    String field,
+    String currentValue,
+  ) async {
     // If multiple rows are selected in edit mode, apply to ALL selected rows
     if (_editMode && _selectedRowsIds.length > 1) {
       // Just call bulk edit directly
@@ -345,7 +417,10 @@ class _OrdersPageState extends State<OrdersPage> {
     final newValue = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Edit ${_formatFieldName(field)}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        title: Text(
+          'Edit ${_formatFieldName(field)}',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+        ),
         content: TextField(
           controller: controller,
           style: GoogleFonts.cairo(fontSize: 14),
@@ -354,13 +429,20 @@ class _OrdersPageState extends State<OrdersPage> {
             border: const OutlineInputBorder(),
           ),
           maxLines: field == 'description' ? 3 : 1,
-          keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
+          keyboardType: field == 'quantity' || field == 'value'
+              ? TextInputType.number
+              : TextInputType.text,
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo()),
+          ),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+            ),
             child: Text('Save', style: GoogleFonts.cairo(color: Colors.white)),
           ),
         ],
@@ -375,7 +457,11 @@ class _OrdersPageState extends State<OrdersPage> {
         if (field == 'quantity') {
           parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
         } else if (field == 'value') {
-          parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+          parsedValue =
+              double.tryParse(
+                newValue.replaceAll(',', '').replaceAll('\$', ''),
+              ) ??
+              0;
         }
 
         await supabase
@@ -394,37 +480,61 @@ class _OrdersPageState extends State<OrdersPage> {
         );
 
         _showSnackBar('${_formatFieldName(field)} updated!');
-        _updateOrderLocally(order.id, field, parsedValue); // ✅ Local update instead of reload
+        _updateOrderLocally(
+          order.id,
+          field,
+          parsedValue,
+        ); // ✅ Local update instead of reload
       } catch (e) {
         _showSnackBar('Error updating: $e');
       }
     }
   }
 
-// Helper to format field names nicely
+  // Helper to format field names nicely
   String _formatFieldName(String field) {
     switch (field) {
-      case 'customer_name': return 'Customer Name';
-      case 'contract_number': return 'Contract Number';
-      case 'design_order': return 'Design Order';
-      case 'item_number': return 'Item';
-      case 'product_code': return 'Product Code';
-      case 'description': return 'Description';
-      case 'quantity': return 'QTY';
-      case 'unit_of_measure': return 'Unit';
-      case 'value': return 'Value';
-      case 'sales_engineer': return 'Sales Engineer';
-      case 'order_date': return 'O-Date';
-      case 'delivery_date': return 'Delivery Date';
-      case 'factory': return 'Factory';
-      case 'design_team': return 'Design Team';
-      case 'responsible_engineer': return 'Resp. Engineer';
-      case 'reviewer': return 'Reviewer';
-      case 'correspondence_engineer': return 'Alt. Engineer';
-      case 'status': return 'Status';
-      default: return field;
+      case 'customer_name':
+        return 'Customer Name';
+      case 'contract_number':
+        return 'Contract Number';
+      case 'design_order':
+        return 'Design Order';
+      case 'item_number':
+        return 'Item';
+      case 'product_code':
+        return 'Product Code';
+      case 'description':
+        return 'Description';
+      case 'quantity':
+        return 'QTY';
+      case 'unit_of_measure':
+        return 'Unit';
+      case 'value':
+        return 'Value';
+      case 'sales_engineer':
+        return 'Sales Engineer';
+      case 'order_date':
+        return 'O-Date';
+      case 'delivery_date':
+        return 'Delivery Date';
+      case 'factory':
+        return 'Factory';
+      case 'design_team':
+        return 'Design Team';
+      case 'responsible_engineer':
+        return 'Resp. Engineer';
+      case 'reviewer':
+        return 'Reviewer';
+      case 'correspondence_engineer':
+        return 'Alt. Engineer';
+      case 'status':
+        return 'Status';
+      default:
+        return field;
     }
   }
+
   // Update order locally without full reload
   void _updateOrderLocally(String orderId, String field, dynamic newValue) {
     setState(() {
@@ -434,23 +544,53 @@ class _OrdersPageState extends State<OrdersPage> {
         final updatedOrder = SAPMainOrder(
           id: oldOrder.id,
           status: field == 'status' ? newValue.toString() : oldOrder.status,
-          customerName: field == 'customer_name' ? newValue.toString() : oldOrder.customerName,
-          itemNumber: field == 'item_number' ? newValue.toString() : oldOrder.itemNumber,
-          productCode: field == 'product_code' ? newValue.toString() : oldOrder.productCode,
-          contractNumber: field == 'contract_number' ? newValue.toString() : oldOrder.contractNumber,
-          description: field == 'description' ? newValue.toString() : oldOrder.description,
-          designOrder: field == 'design_order' ? newValue.toString() : oldOrder.designOrder,
-          quantity: field == 'quantity' ? (newValue as double) : oldOrder.quantity,
-          unitOfMeasure: field == 'unit_of_measure' ? newValue.toString() : oldOrder.unitOfMeasure,
+          customerName: field == 'customer_name'
+              ? newValue.toString()
+              : oldOrder.customerName,
+          itemNumber: field == 'item_number'
+              ? newValue.toString()
+              : oldOrder.itemNumber,
+          productCode: field == 'product_code'
+              ? newValue.toString()
+              : oldOrder.productCode,
+          contractNumber: field == 'contract_number'
+              ? newValue.toString()
+              : oldOrder.contractNumber,
+          description: field == 'description'
+              ? newValue.toString()
+              : oldOrder.description,
+          designOrder: field == 'design_order'
+              ? newValue.toString()
+              : oldOrder.designOrder,
+          quantity: field == 'quantity'
+              ? (newValue as double)
+              : oldOrder.quantity,
+          unitOfMeasure: field == 'unit_of_measure'
+              ? newValue.toString()
+              : oldOrder.unitOfMeasure,
           value: field == 'value' ? (newValue as double) : oldOrder.value,
-          salesEngineer: field == 'sales_engineer' ? newValue.toString() : oldOrder.salesEngineer,
-          orderDate: field == 'order_date' ? newValue.toString() : oldOrder.orderDate,
-          deliveryDate: field == 'delivery_date' ? newValue.toString() : oldOrder.deliveryDate,
+          salesEngineer: field == 'sales_engineer'
+              ? newValue.toString()
+              : oldOrder.salesEngineer,
+          orderDate: field == 'order_date'
+              ? newValue.toString()
+              : oldOrder.orderDate,
+          deliveryDate: field == 'delivery_date'
+              ? newValue.toString()
+              : oldOrder.deliveryDate,
           factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
-          designTeam: field == 'design_team' ? newValue.toString() : oldOrder.designTeam,
-          responsibleEngineer: field == 'responsible_engineer' ? newValue.toString() : oldOrder.responsibleEngineer,
-          reviewer: field == 'reviewer' ? newValue.toString() : oldOrder.reviewer,
-          correspondenceEngineer: field == 'correspondence_engineer' ? newValue.toString() : oldOrder.correspondenceEngineer,
+          designTeam: field == 'design_team'
+              ? newValue.toString()
+              : oldOrder.designTeam,
+          responsibleEngineer: field == 'responsible_engineer'
+              ? newValue.toString()
+              : oldOrder.responsibleEngineer,
+          reviewer: field == 'reviewer'
+              ? newValue.toString()
+              : oldOrder.reviewer,
+          correspondenceEngineer: field == 'correspondence_engineer'
+              ? newValue.toString()
+              : oldOrder.correspondenceEngineer,
           createdAt: oldOrder.createdAt,
         );
         _allOrders[index] = updatedOrder;
@@ -461,7 +601,10 @@ class _OrdersPageState extends State<OrdersPage> {
     _rebuildGroups();
   }
 
-  Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
+  Future<void> _updateOrderDesignTeam(
+    SAPMainOrder order,
+    String newValue,
+  ) async {
     final oldValue = order.designTeam;
 
     // If multiple rows selected, apply to all
@@ -471,7 +614,9 @@ class _OrdersPageState extends State<OrdersPage> {
       int updated = 0;
 
       for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        final selectedOrder = _allOrders
+            .where((o) => o.id == orderId)
+            .firstOrNull;
         if (selectedOrder != null) {
           try {
             await supabase
@@ -527,7 +672,6 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-
   // ==================== SCROLL SYNC ====================
   bool _onLeftScrollNotification(ScrollNotification notification) {
     if (notification is ScrollUpdateNotification && !_isSyncing) {
@@ -576,23 +720,55 @@ class _OrdersPageState extends State<OrdersPage> {
           final updatedOrder = SAPMainOrder(
             id: oldOrder.id,
             status: field == 'status' ? newValue.toString() : oldOrder.status,
-            customerName: field == 'customer_name' ? newValue.toString() : oldOrder.customerName,
-            itemNumber: field == 'item_number' ? newValue.toString() : oldOrder.itemNumber,
-            productCode: field == 'product_code' ? newValue.toString() : oldOrder.productCode,
-            contractNumber: field == 'contract_number' ? newValue.toString() : oldOrder.contractNumber,
-            description: field == 'description' ? newValue.toString() : oldOrder.description,
-            designOrder: field == 'design_order' ? newValue.toString() : oldOrder.designOrder,
-            quantity: field == 'quantity' ? (newValue as double) : oldOrder.quantity,
-            unitOfMeasure: field == 'unit_of_measure' ? newValue.toString() : oldOrder.unitOfMeasure,
+            customerName: field == 'customer_name'
+                ? newValue.toString()
+                : oldOrder.customerName,
+            itemNumber: field == 'item_number'
+                ? newValue.toString()
+                : oldOrder.itemNumber,
+            productCode: field == 'product_code'
+                ? newValue.toString()
+                : oldOrder.productCode,
+            contractNumber: field == 'contract_number'
+                ? newValue.toString()
+                : oldOrder.contractNumber,
+            description: field == 'description'
+                ? newValue.toString()
+                : oldOrder.description,
+            designOrder: field == 'design_order'
+                ? newValue.toString()
+                : oldOrder.designOrder,
+            quantity: field == 'quantity'
+                ? (newValue as double)
+                : oldOrder.quantity,
+            unitOfMeasure: field == 'unit_of_measure'
+                ? newValue.toString()
+                : oldOrder.unitOfMeasure,
             value: field == 'value' ? (newValue as double) : oldOrder.value,
-            salesEngineer: field == 'sales_engineer' ? newValue.toString() : oldOrder.salesEngineer,
-            orderDate: field == 'order_date' ? newValue.toString() : oldOrder.orderDate,
-            deliveryDate: field == 'delivery_date' ? newValue.toString() : oldOrder.deliveryDate,
-            factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
-            designTeam: field == 'design_team' ? newValue.toString() : oldOrder.designTeam,
-            responsibleEngineer: field == 'responsible_engineer' ? newValue.toString() : oldOrder.responsibleEngineer,
-            reviewer: field == 'reviewer' ? newValue.toString() : oldOrder.reviewer,
-            correspondenceEngineer: field == 'correspondence_engineer' ? newValue.toString() : oldOrder.correspondenceEngineer,
+            salesEngineer: field == 'sales_engineer'
+                ? newValue.toString()
+                : oldOrder.salesEngineer,
+            orderDate: field == 'order_date'
+                ? newValue.toString()
+                : oldOrder.orderDate,
+            deliveryDate: field == 'delivery_date'
+                ? newValue.toString()
+                : oldOrder.deliveryDate,
+            factory: field == 'factory'
+                ? newValue.toString()
+                : oldOrder.factory,
+            designTeam: field == 'design_team'
+                ? newValue.toString()
+                : oldOrder.designTeam,
+            responsibleEngineer: field == 'responsible_engineer'
+                ? newValue.toString()
+                : oldOrder.responsibleEngineer,
+            reviewer: field == 'reviewer'
+                ? newValue.toString()
+                : oldOrder.reviewer,
+            correspondenceEngineer: field == 'correspondence_engineer'
+                ? newValue.toString()
+                : oldOrder.correspondenceEngineer,
             createdAt: oldOrder.createdAt,
           );
           _allOrders[index] = updatedOrder;
@@ -645,7 +821,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Update engineer assignment in database
-  Future<void> _updateOrderEngineer(SAPMainOrder order, String field, String? newValue) async {
+  Future<void> _updateOrderEngineer(
+    SAPMainOrder order,
+    String field,
+    String? newValue,
+  ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
     // If multiple rows selected, apply to all
@@ -655,7 +835,9 @@ class _OrdersPageState extends State<OrdersPage> {
       int updated = 0;
 
       for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        final selectedOrder = _allOrders
+            .where((o) => o.id == orderId)
+            .firstOrNull;
         if (selectedOrder != null) {
           try {
             await supabase
@@ -830,7 +1012,10 @@ class _OrdersPageState extends State<OrdersPage> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Delete Orders', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        title: Text(
+          'Delete Orders',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+        ),
         content: Text(
           'Are you sure you want to delete ${_selectedRowsIds.length} selected orders?\n\nThis action cannot be undone.',
           style: GoogleFonts.cairo(),
@@ -843,7 +1028,10 @@ class _OrdersPageState extends State<OrdersPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: Text('Delete ${_selectedRowsIds.length} orders', style: GoogleFonts.cairo(color: Colors.white)),
+            child: Text(
+              'Delete ${_selectedRowsIds.length} orders',
+              style: GoogleFonts.cairo(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -875,7 +1063,8 @@ class _OrdersPageState extends State<OrdersPage> {
             orderId: order.id,
             designOrder: order.designOrder,
             fieldName: 'order_deleted',
-            oldValue: '${order.designOrder} | ${order.customerName} | ${order.description}',
+            oldValue:
+                '${order.designOrder} | ${order.customerName} | ${order.description}',
             newValue: null,
             changedBy: _currentUserName,
             changedById: _currentUserId,
@@ -933,7 +1122,8 @@ class _OrdersPageState extends State<OrdersPage> {
         changedBy: _currentUserName,
         changedById: _currentUserId,
         actionType: 'delete',
-        notes: 'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
+        notes:
+            'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
       );
     }
   }
@@ -954,7 +1144,9 @@ class _OrdersPageState extends State<OrdersPage> {
       int updated = 0;
 
       for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        final selectedOrder = _allOrders
+            .where((o) => o.id == orderId)
+            .firstOrNull;
         if (selectedOrder != null) {
           try {
             await supabase
@@ -1010,7 +1202,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-// Log import action
+  // Log import action
   Future<void> _logImportAction(int recordCount) async {
     await _auditService.logChange(
       orderId: 'import_batch',
@@ -1024,7 +1216,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-// Log delete action
+  // Log delete action
   Future<void> _logDeleteAction(String orderId, String designOrder) async {
     await _auditService.logChange(
       orderId: orderId,
@@ -1076,14 +1268,40 @@ class _OrdersPageState extends State<OrdersPage> {
     var result = _allOrders;
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase().trim();
-      result = result.where((o) => o.contractNumber.toLowerCase().contains(q) || o.customerName.toLowerCase().contains(q)).toList();
+      result = result
+          .where(
+            (o) =>
+                o.contractNumber.toLowerCase().contains(q) ||
+                o.customerName.toLowerCase().contains(q),
+          )
+          .toList();
     }
-    if (_filterStatus != null) result = result.where((o) => o.status == _filterStatus).toList();
-    if (_filterFactory != null) result = result.where((o) => o.factory == _filterFactory).toList();
-    if (_filterDesignTeam != null) result = result.where((o) => o.designTeam == _filterDesignTeam).toList();
-    if (_filterContractNumber != null) result = result.where((o) => o.contractNumber.toLowerCase().contains(_filterContractNumber!.toLowerCase())).toList();
-    if (_filterDesignOrder != null) result = result.where((o) => o.designOrder.toLowerCase().contains(_filterDesignOrder!.toLowerCase())).toList();
-    if (_filterSalesEngineer != null) result = result.where((o) => o.salesEngineer == _filterSalesEngineer).toList();
+    if (_filterStatus != null)
+      result = result.where((o) => o.status == _filterStatus).toList();
+    if (_filterFactory != null)
+      result = result.where((o) => o.factory == _filterFactory).toList();
+    if (_filterDesignTeam != null)
+      result = result.where((o) => o.designTeam == _filterDesignTeam).toList();
+    if (_filterContractNumber != null)
+      result = result
+          .where(
+            (o) => o.contractNumber.toLowerCase().contains(
+              _filterContractNumber!.toLowerCase(),
+            ),
+          )
+          .toList();
+    if (_filterDesignOrder != null)
+      result = result
+          .where(
+            (o) => o.designOrder.toLowerCase().contains(
+              _filterDesignOrder!.toLowerCase(),
+            ),
+          )
+          .toList();
+    if (_filterSalesEngineer != null)
+      result = result
+          .where((o) => o.salesEngineer == _filterSalesEngineer)
+          .toList();
 
     // My Work filter - check if employee is in ANY of these 3 fields
     if (_filterMyWork) {
@@ -1095,9 +1313,18 @@ class _OrdersPageState extends State<OrdersPage> {
       }).toList();
     } else {
       // Normal individual filters
-      if (_filterResponsibleEngineer != null) result = result.where((o) => o.responsibleEngineer == _filterResponsibleEngineer).toList();
-      if (_filterReviewer != null) result = result.where((o) => o.reviewer == _filterReviewer).toList();
-      if (_filterCorrespondenceEngineer != null) result = result.where((o) => o.correspondenceEngineer == _filterCorrespondenceEngineer).toList();
+      if (_filterResponsibleEngineer != null)
+        result = result
+            .where((o) => o.responsibleEngineer == _filterResponsibleEngineer)
+            .toList();
+      if (_filterReviewer != null)
+        result = result.where((o) => o.reviewer == _filterReviewer).toList();
+      if (_filterCorrespondenceEngineer != null)
+        result = result
+            .where(
+              (o) => o.correspondenceEngineer == _filterCorrespondenceEngineer,
+            )
+            .toList();
     }
 
     _applySorting(result);
@@ -1105,10 +1332,15 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   bool get _hasActiveFilters =>
-      _filterStatus != null || _filterFactory != null || _filterDesignTeam != null ||
-          _filterContractNumber != null || _filterDesignOrder != null ||
-          _filterSalesEngineer != null || _filterResponsibleEngineer != null ||
-          _filterReviewer != null || _filterCorrespondenceEngineer != null;
+      _filterStatus != null ||
+      _filterFactory != null ||
+      _filterDesignTeam != null ||
+      _filterContractNumber != null ||
+      _filterDesignOrder != null ||
+      _filterSalesEngineer != null ||
+      _filterResponsibleEngineer != null ||
+      _filterReviewer != null ||
+      _filterCorrespondenceEngineer != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -1133,7 +1365,9 @@ class _OrdersPageState extends State<OrdersPage> {
     setState(() {
       final sectionOrders = _groupedOrders[status] ?? [];
       if (sectionOrders.isEmpty) return;
-      final allSelected = sectionOrders.every((o) => _selectedRowsIds.contains(o.id));
+      final allSelected = sectionOrders.every(
+        (o) => _selectedRowsIds.contains(o.id),
+      );
       if (allSelected) {
         for (var o in sectionOrders) {
           _selectedRowsIds.remove(o.id);
@@ -1152,7 +1386,6 @@ class _OrdersPageState extends State<OrdersPage> {
       _lastSelectedIndex = null;
     });
   }
-
 
   List<SAPMainOrder> _getSelectedOrders() =>
       _allOrders.where((o) => _selectedRowsIds.contains(o.id)).toList();
@@ -1273,12 +1506,20 @@ class _OrdersPageState extends State<OrdersPage> {
     final correspondenceEngineers = <String>{};
 
     for (var order in _allOrders) {
-      if (order.factory != null && order.factory!.isNotEmpty) factories.add(order.factory!);
-      if (order.designTeam != null && order.designTeam!.isNotEmpty) designTeams.add(order.designTeam!);
-      if (order.salesEngineer.isNotEmpty) salesEngineers.add(order.salesEngineer);
-      if (order.responsibleEngineer != null && order.responsibleEngineer!.isNotEmpty) responsibleEngineers.add(order.responsibleEngineer!);
-      if (order.reviewer != null && order.reviewer!.isNotEmpty) reviewers.add(order.reviewer!);
-      if (order.correspondenceEngineer != null && order.correspondenceEngineer!.isNotEmpty) correspondenceEngineers.add(order.correspondenceEngineer!);
+      if (order.factory != null && order.factory!.isNotEmpty)
+        factories.add(order.factory!);
+      if (order.designTeam != null && order.designTeam!.isNotEmpty)
+        designTeams.add(order.designTeam!);
+      if (order.salesEngineer.isNotEmpty)
+        salesEngineers.add(order.salesEngineer);
+      if (order.responsibleEngineer != null &&
+          order.responsibleEngineer!.isNotEmpty)
+        responsibleEngineers.add(order.responsibleEngineer!);
+      if (order.reviewer != null && order.reviewer!.isNotEmpty)
+        reviewers.add(order.reviewer!);
+      if (order.correspondenceEngineer != null &&
+          order.correspondenceEngineer!.isNotEmpty)
+        correspondenceEngineers.add(order.correspondenceEngineer!);
     }
 
     final contractCtrl = TextEditingController(text: _filterContractNumber);
@@ -1288,156 +1529,296 @@ class _OrdersPageState extends State<OrdersPage> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDlg) => AlertDialog(
-          title: Row(children: [
-            const Icon(Icons.filter_list, color: Color(0xFF0F172A), size: 22),
-            const SizedBox(width: 8),
-            Text('Filter Orders', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 18)),
-            const Spacer(),
-            if (tempStatus != null || tempFactory != null || tempDesignTeam != null ||
-                tempContractNumber != null || tempSalesEngineer != null ||
-                tempResponsibleEngineer != null || tempReviewer != null ||
-                tempCorrespondenceEngineer != null)
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(color: const Color(0xFF6366F1).withOpacity(0.1), borderRadius: BorderRadius.circular(12)),
-                child: Text('Active', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1))),
+          title: Row(
+            children: [
+              const Icon(Icons.filter_list, color: Color(0xFF0F172A), size: 22),
+              const SizedBox(width: 8),
+              Text(
+                'Filter Orders',
+                style: GoogleFonts.cairo(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 18,
+                ),
               ),
-          ]),
+              const Spacer(),
+              if (tempStatus != null ||
+                  tempFactory != null ||
+                  tempDesignTeam != null ||
+                  tempContractNumber != null ||
+                  tempSalesEngineer != null ||
+                  tempResponsibleEngineer != null ||
+                  tempReviewer != null ||
+                  tempCorrespondenceEngineer != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF6366F1).withOpacity(0.1),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    'Active',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: const Color(0xFF6366F1),
+                    ),
+                  ),
+                ),
+            ],
+          ),
           content: SizedBox(
             width: 500,
             child: SingleChildScrollView(
-              child: Column(mainAxisSize: MainAxisSize.min, children: [
-                // ===== ORDER INFO =====
-                _buildFilterSection('📋 Order Information', children: [
-                  Row(children: [
-                    Expanded(
-                      child: TextField(
-                        controller: contractCtrl,
-                        style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: InputDecoration(
-                          labelText: 'Contract Number',
-                          labelStyle: GoogleFonts.cairo(fontSize: 12),
-                          hintText: 'e.g. 9100035288',
-                          hintStyle: GoogleFonts.cairo(fontSize: 11, color: Colors.grey),
-                          prefixIcon: const Icon(Icons.description, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        onChanged: (v) => tempContractNumber = v.isEmpty ? null : v,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // ===== ORDER INFO =====
+                  _buildFilterSection(
+                    '📋 Order Information',
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: TextField(
+                              controller: contractCtrl,
+                              style: GoogleFonts.cairo(fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: 'Contract Number',
+                                labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                hintText: 'e.g. 9100035288',
+                                hintStyle: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                                prefixIcon: const Icon(
+                                  Icons.description,
+                                  size: 18,
+                                ),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onChanged: (v) =>
+                                  tempContractNumber = v.isEmpty ? null : v,
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: TextField(
+                              controller: designOrderCtrl,
+                              style: GoogleFonts.cairo(fontSize: 13),
+                              decoration: InputDecoration(
+                                labelText: 'Design Order',
+                                labelStyle: GoogleFonts.cairo(fontSize: 12),
+                                hintText: 'e.g. 20083982',
+                                hintStyle: GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  color: Colors.grey,
+                                ),
+                                prefixIcon: const Icon(Icons.receipt, size: 18),
+                                border: OutlineInputBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                                contentPadding: const EdgeInsets.symmetric(
+                                  horizontal: 12,
+                                  vertical: 10,
+                                ),
+                              ),
+                              onChanged: (v) =>
+                                  tempDesignOrder = v.isEmpty ? null : v,
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: designOrderCtrl,
-                        style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: InputDecoration(
-                          labelText: 'Design Order',
-                          labelStyle: GoogleFonts.cairo(fontSize: 12),
-                          hintText: 'e.g. 20083982',
-                          hintStyle: GoogleFonts.cairo(fontSize: 11, color: Colors.grey),
-                          prefixIcon: const Icon(Icons.receipt, size: 18),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        ),
-                        onChanged: (v) => tempDesignOrder = v.isEmpty ? null : v,
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+
+                  // ===== STATUS & DEPARTMENT =====
+                  _buildFilterSection(
+                    '📊 Status & Department',
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Status',
+                              tempStatus,
+                              ['All', ..._allStatuses],
+                              (v) => setDlg(() => tempStatus = v),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Factory (${factories.length})',
+                              tempFactory,
+                              ['All', ...factories.toList()..sort()],
+                              (v) => setDlg(() => tempFactory = v),
+                            ),
+                          ),
+                        ],
                       ),
-                    ),
-                  ]),
-                ]),
-                const SizedBox(height: 16),
+                      const SizedBox(height: 10),
+                      _buildFilterDropdown(
+                        'Design Team (${designTeams.length})',
+                        tempDesignTeam,
+                        ['All', ...designTeams.toList()..sort()],
+                        (v) => setDlg(() => tempDesignTeam = v),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
 
-                // ===== STATUS & DEPARTMENT =====
-                _buildFilterSection('📊 Status & Department', children: [
-                  Row(children: [
-                    Expanded(
-                      child: _buildFilterDropdown('Status', tempStatus, ['All', ..._allStatuses], (v) => setDlg(() => tempStatus = v)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildFilterDropdown('Factory (${factories.length})', tempFactory, ['All', ...factories.toList()..sort()], (v) => setDlg(() => tempFactory = v)),
-                    ),
-                  ]),
-                  const SizedBox(height: 10),
-                  _buildFilterDropdown('Design Team (${designTeams.length})', tempDesignTeam, ['All', ...designTeams.toList()..sort()], (v) => setDlg(() => tempDesignTeam = v)),
-                ]),
-                const SizedBox(height: 16),
-
-                // ===== ENGINEERS =====
-                _buildFilterSection('👨‍💼 Employee', children: [
-                  Row(children: [
-                    Expanded(
-                      child: _buildFilterDropdown('Sales Eng. (${salesEngineers.length})', tempSalesEngineer, ['All', ...salesEngineers.toList()..sort()], (v) => setDlg(() => tempSalesEngineer = v)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildFilterDropdown('Resp. Eng. (${responsibleEngineers.length})', tempResponsibleEngineer, ['All', ...responsibleEngineers.toList()..sort()], (v) => setDlg(() => tempResponsibleEngineer = v)),
-                    ),
-                  ]),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(
-                      child: _buildFilterDropdown('Reviewer (${reviewers.length})', tempReviewer, ['All', ...reviewers.toList()..sort()], (v) => setDlg(() => tempReviewer = v)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: _buildFilterDropdown('Alt. Eng. (${correspondenceEngineers.length})', tempCorrespondenceEngineer, ['All', ...correspondenceEngineers.toList()..sort()], (v) => setDlg(() => tempCorrespondenceEngineer = v)),
-                    ),
-                  ]),
-                ]),
-              ]),
+                  // ===== ENGINEERS =====
+                  _buildFilterSection(
+                    '👨‍💼 Employee',
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Sales Eng. (${salesEngineers.length})',
+                              tempSalesEngineer,
+                              ['All', ...salesEngineers.toList()..sort()],
+                              (v) => setDlg(() => tempSalesEngineer = v),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Resp. Eng. (${responsibleEngineers.length})',
+                              tempResponsibleEngineer,
+                              ['All', ...responsibleEngineers.toList()..sort()],
+                              (v) => setDlg(() => tempResponsibleEngineer = v),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 10),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Reviewer (${reviewers.length})',
+                              tempReviewer,
+                              ['All', ...reviewers.toList()..sort()],
+                              (v) => setDlg(() => tempReviewer = v),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: _buildFilterDropdown(
+                              'Alt. Eng. (${correspondenceEngineers.length})',
+                              tempCorrespondenceEngineer,
+                              [
+                                'All',
+                                ...correspondenceEngineers.toList()..sort(),
+                              ],
+                              (v) =>
+                                  setDlg(() => tempCorrespondenceEngineer = v),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
           ),
           actions: [
-            Row(children: [
-              TextButton(
-                onPressed: () {
-                  setDlg(() {
-                    tempStatus = null; tempFactory = null; tempDesignTeam = null;
-                    tempContractNumber = null; tempDesignOrder = null;
-                    tempSalesEngineer = null; tempResponsibleEngineer = null;
-                    tempReviewer = null; tempCorrespondenceEngineer = null;
-                    contractCtrl.clear(); designOrderCtrl.clear();
-                  });
-                },
-                child: Row(children: [const Icon(Icons.clear_all, size: 16, color: Colors.red), const SizedBox(width: 4), Text('Clear All', style: GoogleFonts.cairo(color: Colors.red, fontSize: 13))]),
-              ),
-              const Spacer(),
-              TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo(fontSize: 13))),
-              const SizedBox(width: 8),
-              ElevatedButton.icon(
-                onPressed: () {
-                  setState(() {
-                    _filterStatus = tempStatus;
-                    _filterFactory = tempFactory;
-                    _filterDesignTeam = tempDesignTeam;
-                    _filterContractNumber = tempContractNumber;
-                    _filterDesignOrder = tempDesignOrder;
-                    _filterSalesEngineer = tempSalesEngineer;
-                    _filterResponsibleEngineer = tempResponsibleEngineer;
-                    _filterReviewer = tempReviewer;
-                    _filterCorrespondenceEngineer = tempCorrespondenceEngineer;
-                  });
-                  _rebuildGroups();
-                  Navigator.pop(ctx);
-                },
-                icon: const Icon(Icons.check, size: 18),
-                label: Text('Apply Filters', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 13)),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFF0F172A),
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            Row(
+              children: [
+                TextButton(
+                  onPressed: () {
+                    setDlg(() {
+                      tempStatus = null;
+                      tempFactory = null;
+                      tempDesignTeam = null;
+                      tempContractNumber = null;
+                      tempDesignOrder = null;
+                      tempSalesEngineer = null;
+                      tempResponsibleEngineer = null;
+                      tempReviewer = null;
+                      tempCorrespondenceEngineer = null;
+                      contractCtrl.clear();
+                      designOrderCtrl.clear();
+                    });
+                  },
+                  child: Row(
+                    children: [
+                      const Icon(Icons.clear_all, size: 16, color: Colors.red),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Clear All',
+                        style: GoogleFonts.cairo(
+                          color: Colors.red,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
+                  ),
                 ),
-              ),
-            ]),
+                const Spacer(),
+                TextButton(
+                  onPressed: () => Navigator.pop(ctx),
+                  child: Text('Cancel', style: GoogleFonts.cairo(fontSize: 13)),
+                ),
+                const SizedBox(width: 8),
+                ElevatedButton.icon(
+                  onPressed: () {
+                    setState(() {
+                      _filterStatus = tempStatus;
+                      _filterFactory = tempFactory;
+                      _filterDesignTeam = tempDesignTeam;
+                      _filterContractNumber = tempContractNumber;
+                      _filterDesignOrder = tempDesignOrder;
+                      _filterSalesEngineer = tempSalesEngineer;
+                      _filterResponsibleEngineer = tempResponsibleEngineer;
+                      _filterReviewer = tempReviewer;
+                      _filterCorrespondenceEngineer =
+                          tempCorrespondenceEngineer;
+                    });
+                    _rebuildGroups();
+                    Navigator.pop(ctx);
+                  },
+                  icon: const Icon(Icons.check, size: 18),
+                  label: Text(
+                    'Apply Filters',
+                    style: GoogleFonts.cairo(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 13,
+                    ),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF0F172A),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 10,
+                    ),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                ),
+              ],
+            ),
           ],
         ),
       ),
     );
   }
 
-// Helper widget for filter sections
+  // Helper widget for filter sections
   Widget _buildFilterSection(String title, {required List<Widget> children}) {
     return Container(
       padding: const EdgeInsets.all(14),
@@ -1446,16 +1827,31 @@ class _OrdersPageState extends State<OrdersPage> {
         borderRadius: BorderRadius.circular(10),
         border: Border.all(color: const Color(0xFFE2E8F0)),
       ),
-      child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-        Text(title, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-        const SizedBox(height: 10),
-        ...children,
-      ]),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: GoogleFonts.cairo(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: const Color(0xFF0F172A),
+            ),
+          ),
+          const SizedBox(height: 10),
+          ...children,
+        ],
+      ),
     );
   }
 
-// Helper widget for filter dropdowns
-  Widget _buildFilterDropdown(String label, String? value, List<String> items, Function(String?) onChanged) {
+  // Helper widget for filter dropdowns
+  Widget _buildFilterDropdown(
+    String label,
+    String? value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
@@ -1463,16 +1859,28 @@ class _OrdersPageState extends State<OrdersPage> {
         labelText: label,
         labelStyle: GoogleFonts.cairo(fontSize: 12),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: 10,
+        ),
       ),
       style: GoogleFonts.cairo(fontSize: 13),
-      items: items.map((s) => DropdownMenuItem(
-        value: s == 'All' ? null : s,
-        child: Text(s == 'All' ? 'All' : s, style: GoogleFonts.cairo(fontSize: 12), overflow: TextOverflow.ellipsis),
-      )).toList(),
+      items: items
+          .map(
+            (s) => DropdownMenuItem(
+              value: s == 'All' ? null : s,
+              child: Text(
+                s == 'All' ? 'All' : s,
+                style: GoogleFonts.cairo(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
+          .toList(),
       onChanged: (v) => onChanged(v),
     );
   }
+
   // ==================== BUILD ====================
   @override
   Widget build(BuildContext context) {
@@ -1508,8 +1916,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildTopBar() {
     final isAdmin =
         widget.loggedInEmployee?.role?.toLowerCase() == 'admin' ||
-            widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
-            widget.loggedInEmployee?.role?.toLowerCase() == 'head';
+        widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
+        widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
     return Container(
       height: 64,
@@ -1522,7 +1930,11 @@ class _OrdersPageState extends State<OrdersPage> {
         children: [
           Text(
             'Orders',
-            style: GoogleFonts.cairo(fontSize: 24, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+            style: GoogleFonts.cairo(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF0F172A),
+            ),
           ),
           if (_selectedRowsIds.isNotEmpty) ...[
             const SizedBox(width: 16),
@@ -1534,12 +1946,22 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
               child: Text(
                 '${_selectedRowsIds.length} selected',
-                style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: const Color(0xFF6366F1),
+                ),
               ),
             ),
             TextButton(
               onPressed: _clearSelection,
-              child: Text('Clear', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+              child: Text(
+                'Clear',
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  color: const Color(0xFF64748B),
+                ),
+              ),
             ),
           ],
           const Spacer(),
@@ -1548,25 +1970,35 @@ class _OrdersPageState extends State<OrdersPage> {
           const SizedBox(width: 8),
           // Edit Mode checkbox - beside My Work button
           if (_isDataEntry || _isAdmin) ...[
-            Row(mainAxisSize: MainAxisSize.min, children: [
-              SizedBox(
-                width: 20, height: 20,
-                child: Checkbox(
-                  value: _editMode,
-                  onChanged: (v) => setState(() => _editMode = v ?? false),
-                  activeColor: Colors.orange,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: Checkbox(
+                    value: _editMode,
+                    onChanged: (v) => setState(() => _editMode = v ?? false),
+                    activeColor: Colors.orange,
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
-              ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => setState(() => _editMode = !_editMode),
-                child: Text(
-                  'Edit Mode',
-                  style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _editMode ? Colors.orange : const Color(0xFF64748B)),
+                const SizedBox(width: 4),
+                GestureDetector(
+                  onTap: () => setState(() => _editMode = !_editMode),
+                  child: Text(
+                    'Edit Mode',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _editMode
+                          ? Colors.orange
+                          : const Color(0xFF64748B),
+                    ),
+                  ),
                 ),
-              ),
-            ]),
+              ],
+            ),
             const SizedBox(width: 8),
           ],
           // Only show people icon for admin/head users
@@ -1583,6 +2015,17 @@ class _OrdersPageState extends State<OrdersPage> {
     SAPMainOrder order,
     String field,
   ) {
+    final canEdit = _isOrderEditable(order);
+
+    if (!canEdit) {
+      // Plain text for non-Tasks
+      return _cell(
+        currentValue ?? '-',
+        field == 'responsible_engineer' ? 130 : 120,
+      );
+    }
+
+    // Dropdown for Tasks
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
@@ -1633,7 +2076,6 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           itemBuilder: (context) => [
-            // Clear option
             PopupMenuItem<String>(
               value: '',
               child: Row(
@@ -1648,7 +2090,6 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
             const PopupMenuDivider(),
-            // Employee list
             ..._allEmployees.map((emp) {
               final isSelected = currentValue == emp.fullName;
               return PopupMenuItem<String>(
@@ -1720,47 +2161,62 @@ class _OrdersPageState extends State<OrdersPage> {
         final isWide = constraints.maxWidth > 1100;
 
         if (isWide) {
-          return Row(children: [
-            Expanded(child: _buildHeaderInfo()),
-            _buildSearchField(),
-            const SizedBox(width: 8),
-            _buildSortButton(),
-            const SizedBox(width: 12),
-            _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
-            const SizedBox(width: 8),
-            _buildActionBtn(Icons.download, 'Export', () async {
-              if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
-            }),
-            // Only show Import for admin or abd.elmoen
-            if (_canImportDelete) ...[
-              const SizedBox(width: 8),
-              _buildImportButton(),
-            ],
-            const SizedBox(width: 8),
-            _buildRefreshButton(),
-          ]);
-        } else {
-          return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-            _buildHeaderInfo(),
-            const SizedBox(height: 8),
-            Wrap(spacing: 8, runSpacing: 8, children: [
+          return Row(
+            children: [
+              Expanded(child: _buildHeaderInfo()),
               _buildSearchField(),
+              const SizedBox(width: 8),
               _buildSortButton(),
+              const SizedBox(width: 12),
               _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+              const SizedBox(width: 8),
               _buildActionBtn(Icons.download, 'Export', () async {
-                if (_allOrders.isNotEmpty) await _saveOrders(_allOrders, 'Orders');
+                if (_allOrders.isNotEmpty)
+                  await _saveOrders(_allOrders, 'Orders');
               }),
               // Only show Import for admin or abd.elmoen
-              if (_canImportDelete) _buildImportButton(),
+              if (_canImportDelete) ...[
+                const SizedBox(width: 8),
+                _buildImportButton(),
+              ],
+              const SizedBox(width: 8),
               _buildRefreshButton(),
-            ]),
-          ]);
+            ],
+          );
+        } else {
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildHeaderInfo(),
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  _buildSearchField(),
+                  _buildSortButton(),
+                  _buildActionBtn(
+                    Icons.filter_list,
+                    'Filters',
+                    _showFilterDialog,
+                  ),
+                  _buildActionBtn(Icons.download, 'Export', () async {
+                    if (_allOrders.isNotEmpty)
+                      await _saveOrders(_allOrders, 'Orders');
+                  }),
+                  // Only show Import for admin or abd.elmoen
+                  if (_canImportDelete) _buildImportButton(),
+                  _buildRefreshButton(),
+                ],
+              ),
+            ],
+          );
         }
       },
     );
   }
 
-// Header info (record count + filters)
+  // Header info (record count + filters)
   Widget _buildHeaderInfo() {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1769,23 +2225,34 @@ class _OrdersPageState extends State<OrdersPage> {
           'Total: ${_allOrders.length} records',
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF45464D)),
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            color: const Color(0xFF45464D),
+          ),
         ),
         if (_searchQuery.isNotEmpty)
           Text(
             'Filtered: "$_searchQuery"',
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: GoogleFonts.cairo(fontSize: 10, color: const Color(0xFF6366F1)),
+            style: GoogleFonts.cairo(
+              fontSize: 10,
+              color: const Color(0xFF6366F1),
+            ),
           ),
         if (_hasActiveFilters)
           GestureDetector(
             onTap: () {
               setState(() {
-                _filterStatus = null; _filterFactory = null; _filterDesignTeam = null;
-                _filterContractNumber = null; _filterDesignOrder = null;
-                _filterSalesEngineer = null; _filterResponsibleEngineer = null;
-                _filterReviewer = null; _filterCorrespondenceEngineer = null;
+                _filterStatus = null;
+                _filterFactory = null;
+                _filterDesignTeam = null;
+                _filterContractNumber = null;
+                _filterDesignOrder = null;
+                _filterSalesEngineer = null;
+                _filterResponsibleEngineer = null;
+                _filterReviewer = null;
+                _filterCorrespondenceEngineer = null;
               });
               _rebuildGroups();
             },
@@ -1793,74 +2260,253 @@ class _OrdersPageState extends State<OrdersPage> {
               'Clear filters',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.cairo(fontSize: 11, color: Colors.red, fontWeight: FontWeight.w600),
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
             ),
           ),
       ],
     );
   }
 
-// Search field
+  // Search field
   Widget _buildSearchField() {
     return SizedBox(
       width: 260,
       child: TextField(
         controller: _searchController,
-        onChanged: (v) { _searchQuery = v; _rebuildGroups(); },
+        onChanged: (v) {
+          _searchQuery = v;
+          _rebuildGroups();
+        },
         style: GoogleFonts.cairo(fontSize: 14),
         decoration: InputDecoration(
           hintText: 'Search...',
-          hintStyle: GoogleFonts.cairo(color: Colors.grey.shade400, fontSize: 14),
+          hintStyle: GoogleFonts.cairo(
+            color: Colors.grey.shade400,
+            fontSize: 14,
+          ),
           prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
-              ? IconButton(icon: const Icon(Icons.clear, size: 18), onPressed: () { _searchController.clear(); _searchQuery = ''; _rebuildGroups(); })
+              ? IconButton(
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    _searchQuery = '';
+                    _rebuildGroups();
+                  },
+                )
               : null,
-          filled: true, fillColor: Colors.white,
-          border: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: BorderSide(color: Colors.grey.shade300)),
-          focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(8), borderSide: const BorderSide(color: Color(0xFF6366F1))),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+          filled: true,
+          fillColor: Colors.white,
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: BorderSide(color: Colors.grey.shade300),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+            borderSide: const BorderSide(color: Color(0xFF6366F1)),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 16,
+            vertical: 10,
+          ),
         ),
       ),
     );
   }
 
-// Sort button
+  // Sort button
   Widget _buildSortButton() {
     return PopupMenuButton<String>(
-      onSelected: (value) { setState(() => _sortBy = value); _rebuildGroups(); },
+      onSelected: (value) {
+        setState(() => _sortBy = value);
+        _rebuildGroups();
+      },
       tooltip: 'Sort by',
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
           border: Border.all(color: const Color(0xFFCBD5E1)),
           borderRadius: BorderRadius.circular(6),
-          color: _sortBy != 'default' ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.white,
+          color: _sortBy != 'default'
+              ? const Color(0xFF6366F1).withOpacity(0.05)
+              : Colors.white,
         ),
-        child: Row(mainAxisSize: MainAxisSize.min, children: [
-          Icon(Icons.sort, size: 16, color: _sortBy != 'default' ? const Color(0xFF6366F1) : const Color(0xFF334155)),
-          const SizedBox(width: 4),
-          Text(_getSortLabel(), style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _sortBy != 'default' ? const Color(0xFF6366F1) : const Color(0xFF334155))),
-          const Icon(Icons.arrow_drop_down, size: 16),
-        ]),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.sort,
+              size: 16,
+              color: _sortBy != 'default'
+                  ? const Color(0xFF6366F1)
+                  : const Color(0xFF334155),
+            ),
+            const SizedBox(width: 4),
+            Text(
+              _getSortLabel(),
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: _sortBy != 'default'
+                    ? const Color(0xFF6366F1)
+                    : const Color(0xFF334155),
+              ),
+            ),
+            const Icon(Icons.arrow_drop_down, size: 16),
+          ],
+        ),
       ),
       itemBuilder: (context) => [
-        PopupMenuItem(value: 'default', child: Row(children: [Icon(Icons.sort, size: 16, color: _sortBy == 'default' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Default', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'default' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'default') const Spacer(), if (_sortBy == 'default') const Icon(Icons.check, size: 16, color: Color(0xFF6366F1))])),
+        PopupMenuItem(
+          value: 'default',
+          child: Row(
+            children: [
+              Icon(
+                Icons.sort,
+                size: 16,
+                color: _sortBy == 'default'
+                    ? const Color(0xFF6366F1)
+                    : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Default',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'default'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'default') const Spacer(),
+              if (_sortBy == 'default')
+                const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
+            ],
+          ),
+        ),
         const PopupMenuDivider(),
-        PopupMenuItem(value: 'value_desc', child: Row(children: [Icon(Icons.arrow_downward, size: 14, color: _sortBy == 'value_desc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Value ↓', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'value_desc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'value_desc') const Spacer(), if (_sortBy == 'value_desc') const Icon(Icons.check, size: 16)])),
-        PopupMenuItem(value: 'value_asc', child: Row(children: [Icon(Icons.arrow_upward, size: 14, color: _sortBy == 'value_asc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Value ↑', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'value_asc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'value_asc') const Spacer(), if (_sortBy == 'value_asc') const Icon(Icons.check, size: 16)])),
+        PopupMenuItem(
+          value: 'value_desc',
+          child: Row(
+            children: [
+              Icon(
+                Icons.arrow_downward,
+                size: 14,
+                color: _sortBy == 'value_desc'
+                    ? const Color(0xFF6366F1)
+                    : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Value ↓',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'value_desc'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'value_desc') const Spacer(),
+              if (_sortBy == 'value_desc') const Icon(Icons.check, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'value_asc',
+          child: Row(
+            children: [
+              Icon(
+                Icons.arrow_upward,
+                size: 14,
+                color: _sortBy == 'value_asc'
+                    ? const Color(0xFF6366F1)
+                    : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Value ↑',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'value_asc'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'value_asc') const Spacer(),
+              if (_sortBy == 'value_asc') const Icon(Icons.check, size: 16),
+            ],
+          ),
+        ),
         const PopupMenuDivider(),
-        PopupMenuItem(value: 'date_desc', child: Row(children: [Icon(Icons.calendar_today, size: 14, color: _sortBy == 'date_desc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Date ↓', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'date_desc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'date_desc') const Spacer(), if (_sortBy == 'date_desc') const Icon(Icons.check, size: 16)])),
-        PopupMenuItem(value: 'date_asc', child: Row(children: [Icon(Icons.calendar_today, size: 14, color: _sortBy == 'date_asc' ? const Color(0xFF6366F1) : Colors.grey), const SizedBox(width: 8), Text('Date ↑', style: GoogleFonts.cairo(fontSize: 12, fontWeight: _sortBy == 'date_asc' ? FontWeight.w700 : FontWeight.w400)), if (_sortBy == 'date_asc') const Spacer(), if (_sortBy == 'date_asc') const Icon(Icons.check, size: 16)])),
+        PopupMenuItem(
+          value: 'date_desc',
+          child: Row(
+            children: [
+              Icon(
+                Icons.calendar_today,
+                size: 14,
+                color: _sortBy == 'date_desc'
+                    ? const Color(0xFF6366F1)
+                    : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Date ↓',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'date_desc'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'date_desc') const Spacer(),
+              if (_sortBy == 'date_desc') const Icon(Icons.check, size: 16),
+            ],
+          ),
+        ),
+        PopupMenuItem(
+          value: 'date_asc',
+          child: Row(
+            children: [
+              Icon(
+                Icons.calendar_today,
+                size: 14,
+                color: _sortBy == 'date_asc'
+                    ? const Color(0xFF6366F1)
+                    : Colors.grey,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Date ↑',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'date_asc'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'date_asc') const Spacer(),
+              if (_sortBy == 'date_asc') const Icon(Icons.check, size: 16),
+            ],
+          ),
+        ),
       ],
     );
   }
 
-// Refresh button
+  // Refresh button
   Widget _buildRefreshButton() {
     return ElevatedButton.icon(
       onPressed: _loadAllDataOnce,
       icon: const Icon(Icons.refresh, size: 18),
-      label: Text('Refresh', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
+      label: Text(
+        'Refresh',
+        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
+      ),
       style: ElevatedButton.styleFrom(
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
@@ -1871,6 +2517,14 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _designTeamDropdownCell(String? currentValue, SAPMainOrder order) {
+    final canEdit = _isOrderEditable(order);
+
+    if (!canEdit) {
+      // Plain text for non-Tasks
+      return _cell(currentValue ?? '-', 130);
+    }
+
+    // Dropdown for Tasks
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
@@ -2002,18 +2656,34 @@ class _OrdersPageState extends State<OrdersPage> {
           const SizedBox(width: 8),
           Text(
             '${_selectedRowsIds.length} selected',
-            style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1)),
+            style: GoogleFonts.cairo(
+              fontSize: 13,
+              fontWeight: FontWeight.w600,
+              color: const Color(0xFF6366F1),
+            ),
           ),
           const Spacer(),
           // Bulk edit button (only in edit mode with selections)
           if (_editMode && _selectedRowsIds.isNotEmpty) ...[
-            _buildSmallBtn(Icons.edit, 'Bulk Edit', () => _showBulkEditDialog()),
+            _buildSmallBtn(
+              Icons.edit,
+              'Bulk Edit',
+              () => _showBulkEditDialog(),
+            ),
             const SizedBox(width: 8),
           ],
-          _buildSmallBtn(Icons.download, 'Export Selected', _exportSelectedOrders),
+          _buildSmallBtn(
+            Icons.download,
+            'Export Selected',
+            _exportSelectedOrders,
+          ),
           const SizedBox(width: 8),
           if (_canImportDelete) ...[
-            _buildSmallBtn(Icons.delete_outline, 'Delete', _deleteSelectedOrders),
+            _buildSmallBtn(
+              Icons.delete_outline,
+              'Delete',
+              _deleteSelectedOrders,
+            ),
             const SizedBox(width: 8),
           ],
           _buildSmallBtn(Icons.close, 'Clear', _clearSelection),
@@ -2138,9 +2808,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildSectionHeader(String status, List<SAPMainOrder> orders) {
     final isExpanded = _expandedSections.contains(status);
-    final allSelected = orders.every(
-          (o) => _selectedRowsIds.contains(o.id),
-    );
+    final allSelected = orders.every((o) => _selectedRowsIds.contains(o.id));
     return GestureDetector(
       onTap: () => _toggleSection(status),
       child: Container(
@@ -2242,7 +2910,9 @@ class _OrdersPageState extends State<OrdersPage> {
       ),
       style: OutlinedButton.styleFrom(
         foregroundColor: const Color(0xFF6366F1),
-        side: BorderSide(color: hasMyWork ? const Color(0xFF6366F1) : const Color(0xFF6366F1)),
+        side: BorderSide(
+          color: hasMyWork ? const Color(0xFF6366F1) : const Color(0xFF6366F1),
+        ),
         backgroundColor: hasMyWork ? const Color(0xFF6366F1) : Colors.white,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
@@ -2421,34 +3091,96 @@ class _OrdersPageState extends State<OrdersPage> {
     final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
-      onLongPress: _isAdmin ? () {
-        Navigator.push(context, MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)));
-      } : null,
+      onLongPress: _isAdmin
+          ? () {
+              Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => OrderTrackingPage(order: order),
+                ),
+              );
+            }
+          : null,
       child: Container(
         height: 48,
         decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.white,
+          color: isSelected
+              ? const Color(0xFF6366F1).withOpacity(0.05)
+              : Colors.white,
           border: Border(bottom: BorderSide(color: Colors.grey.shade50)),
         ),
         child: Row(
           children: [
             _statusCell(order.status, order),
             _editableCell(order.itemNumber, 60, order, 'item_number'),
-            _editableCell(order.productCode, 120, order, 'product_code', style: GoogleFonts.cairo(fontSize: 11)),
+            _editableCell(
+              order.productCode,
+              120,
+              order,
+              'product_code',
+              style: GoogleFonts.cairo(fontSize: 11),
+            ),
             _editableCell(order.contractNumber, 110, order, 'contract_number'),
-            _editableCell(order.description, 200, order, 'description', overflow: TextOverflow.ellipsis, maxLines: 2),
-            _editableCell(order.designOrder, 110, order, 'design_order', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1))),
-            _editableCell('${order.quantity}', 70, order, 'quantity', align: TextAlign.right),
+            _editableCell(
+              order.description,
+              200,
+              order,
+              'description',
+              overflow: TextOverflow.ellipsis,
+              maxLines: 2,
+            ),
+            _editableCell(
+              order.designOrder,
+              110,
+              order,
+              'design_order',
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF6366F1),
+              ),
+            ),
+            _editableCell(
+              '${order.quantity}',
+              70,
+              order,
+              'quantity',
+              align: TextAlign.right,
+            ),
             _editableCell(order.unitOfMeasure, 50, order, 'unit_of_measure'),
-            _editableCell(_formatNumber(order.value), 110, order, 'value', align: TextAlign.right, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: const Color(0xFF059669))),
+            _editableCell(
+              _formatNumber(order.value),
+              110,
+              order,
+              'value',
+              align: TextAlign.right,
+              style: GoogleFonts.cairo(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: const Color(0xFF059669),
+              ),
+            ),
             _editableCell(order.salesEngineer, 150, order, 'sales_engineer'),
             _editableCell(order.orderDate ?? '-', 100, order, 'order_date'),
-            _editableCell(order.deliveryDate ?? '-', 100, order, 'delivery_date'),
+            _editableCell(
+              order.deliveryDate ?? '-',
+              100,
+              order,
+              'delivery_date',
+            ),
             _editableCell(order.factory ?? '-', 70, order, 'factory'),
             _designTeamDropdownCell(order.designTeam, order),
-            _employeeDropdownCell(order.responsibleEngineer, order, 'responsible_engineer'),
+            _employeeDropdownCell(
+              order.responsibleEngineer,
+              order,
+              'responsible_engineer',
+            ),
             _employeeDropdownCell(order.reviewer, order, 'reviewer'),
-            _employeeDropdownCell(order.correspondenceEngineer, order, 'correspondence_engineer'),
+            _employeeDropdownCell(
+              order.correspondenceEngineer,
+              order,
+              'correspondence_engineer',
+            ),
           ],
         ),
       ),
@@ -2467,8 +3199,9 @@ class _OrdersPageState extends State<OrdersPage> {
       }) {
     final editKey = '${order.id}_$field';
     final isEditing = _editingField == editKey;
+    final canEdit = _editMode && (_isDataEntry || _isAdmin) && _isOrderEditable(order);
 
-    if (_editMode && (_isDataEntry || _isAdmin)) {
+    if (canEdit) {
       if (isEditing) {
         // Inline editing mode
         if (!_editControllers.containsKey(editKey)) {
@@ -2547,8 +3280,14 @@ class _OrdersPageState extends State<OrdersPage> {
     return _cell(text, w, align: align, style: style, overflow: overflow, maxLines: maxLines);
   }
 
-// Save inline edit
-  Future<void> _saveInlineEdit(SAPMainOrder order, String field, String newValue, String editKey, String oldValue) async {
+  // Save inline edit
+  Future<void> _saveInlineEdit(
+    SAPMainOrder order,
+    String field,
+    String newValue,
+    String editKey,
+    String oldValue,
+  ) async {
     // Clean up controller
     _editControllers.remove(editKey);
 
@@ -2556,7 +3295,10 @@ class _OrdersPageState extends State<OrdersPage> {
       _editingField = null;
     });
 
-    if (newValue.isEmpty || newValue == oldValue || newValue == (oldValue == '-' ? '' : oldValue)) return;
+    if (newValue.isEmpty ||
+        newValue == oldValue ||
+        newValue == (oldValue == '-' ? '' : oldValue))
+      return;
 
     // If multiple rows selected, apply to all
     if (_editMode && _selectedRowsIds.length > 1) {
@@ -2572,7 +3314,11 @@ class _OrdersPageState extends State<OrdersPage> {
       if (field == 'quantity') {
         parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
       } else if (field == 'value') {
-        parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+        parsedValue =
+            double.tryParse(
+              newValue.replaceAll(',', '').replaceAll('\$', ''),
+            ) ??
+            0;
       }
 
       await supabase
@@ -2597,7 +3343,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-// Apply bulk edit to all selected rows (inline)
+  // Apply bulk edit to all selected rows (inline)
   Future<void> _applyBulkEditToSelected(String field, String newValue) async {
     setState(() => _isLoading = true);
     final supabase = Supabase.instance.client;
@@ -2607,14 +3353,19 @@ class _OrdersPageState extends State<OrdersPage> {
     if (field == 'quantity') {
       parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
     } else if (field == 'value') {
-      parsedValue = double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ?? 0;
+      parsedValue =
+          double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ??
+          0;
     }
 
     for (var orderId in _selectedRowsIds) {
       final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
       if (order != null) {
         try {
-          await supabase.from('sap_main_orders').update({field: parsedValue}).eq('id', order.id);
+          await supabase
+              .from('sap_main_orders')
+              .update({field: parsedValue})
+              .eq('id', order.id);
 
           await _auditService.logChange(
             orderId: order.id,
@@ -2635,7 +3386,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
     setState(() => _isLoading = false);
     _showSnackBar('✅ $updated rows updated!');
-    _updateMultipleOrdersLocally(field, parsedValue); // ✅ Use local update, not full reload
+    _updateMultipleOrdersLocally(
+      field,
+      parsedValue,
+    ); // ✅ Use local update, not full reload
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>
@@ -2659,79 +3413,124 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       );
 
-  Widget _statusCell(String status, SAPMainOrder order) => SizedBox(
-    width: 140, // Increased width for dropdown
-    child: Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 2),
-      child: PopupMenuButton<String>(
-        onSelected: (newStatus) => _updateOrderStatus(order, newStatus),
-        offset: const Offset(0, 40),
-        position: PopupMenuPosition.under,
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: _getStatusColor(status).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: _getStatusColor(status).withOpacity(0.3)),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  _getStatusLabel(status),
-                  style: GoogleFonts.cairo(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: _getStatusColor(status),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+  Widget _statusCell(String status, SAPMainOrder order) {
+    final canEdit = _isOrderEditable(order);
+
+    if (!canEdit) {
+      // Plain text for non-Tasks orders
+      return SizedBox(
+        width: 140,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 4),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: _getStatusColor(status).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: _getStatusColor(status).withOpacity(0.3),
               ),
-              const SizedBox(width: 2),
-              Icon(
-                Icons.arrow_drop_down,
-                size: 14,
-                color: _getStatusColor(status),
-              ),
-            ],
-          ),
-        ),
-        itemBuilder: (context) => _allStatuses.map((s) {
-          return PopupMenuItem<String>(
-            value: s,
+            ),
             child: Row(
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Container(
-                  width: 10,
-                  height: 10,
-                  decoration: BoxDecoration(
-                    color: _getStatusColor(s),
-                    shape: BoxShape.circle,
+                Flexible(
+                  child: Text(
+                    _getStatusLabel(status),
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _getStatusColor(status),
+                    ),
+                    overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                const SizedBox(width: 8),
-                Text(
-                  s,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: s == status
-                        ? _getStatusColor(s)
-                        : const Color(0xFF334155),
-                    fontWeight: s == status ? FontWeight.w700 : FontWeight.w400,
-                  ),
-                ),
-                if (s == status) ...[
-                  const Spacer(),
-                  Icon(Icons.check, size: 16, color: _getStatusColor(s)),
-                ],
               ],
             ),
-          );
-        }).toList(),
+          ),
+        ),
+      );
+    }
+
+    // Dropdown only for Tasks orders
+    return SizedBox(
+      width: 140,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 2),
+        child: PopupMenuButton<String>(
+          onSelected: (newStatus) => _updateOrderStatus(order, newStatus),
+          offset: const Offset(0, 40),
+          position: PopupMenuPosition.under,
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+            decoration: BoxDecoration(
+              color: _getStatusColor(status).withOpacity(0.1),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: _getStatusColor(status).withOpacity(0.3),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    _getStatusLabel(status),
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: _getStatusColor(status),
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                const SizedBox(width: 2),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 14,
+                  color: _getStatusColor(status),
+                ),
+              ],
+            ),
+          ),
+          itemBuilder: (context) => _allStatuses.map((s) {
+            return PopupMenuItem<String>(
+              value: s,
+              child: Row(
+                children: [
+                  Container(
+                    width: 10,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: _getStatusColor(s),
+                      shape: BoxShape.circle,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Text(
+                    s,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      color: s == status
+                          ? _getStatusColor(s)
+                          : const Color(0xFF334155),
+                      fontWeight: s == status
+                          ? FontWeight.w700
+                          : FontWeight.w400,
+                    ),
+                  ),
+                  if (s == status) ...[
+                    const Spacer(),
+                    Icon(Icons.check, size: 16, color: _getStatusColor(s)),
+                  ],
+                ],
+              ),
+            );
+          }).toList(),
+        ),
       ),
-    ),
-  );
+    );
+  }
 
   Widget _cell(
     String text,
