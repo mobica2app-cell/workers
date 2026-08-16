@@ -1,5 +1,6 @@
 // lib/pages/orders_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mobitem/pages/employee_managment_page.dart';
@@ -15,7 +16,6 @@ import '../services/employee_service.dart';
 import '../services/sap_service.dart';
 import 'excel_dialog.dart';
 import 'order_detail_page.dart';
-import 'package:flutter/services.dart';
 
 extension FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -134,6 +134,12 @@ class _OrdersPageState extends State<OrdersPage> {
     'Unknown',
   ];
 
+  // Add this method to check if user is admin
+  bool get _isAdmin {
+    final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
+    return role == 'admin' || role == 'software head' || role == 'head';
+  }
+
   String _getSortLabel() {
     switch (_sortBy) {
       case 'value_asc':
@@ -185,7 +191,12 @@ class _OrdersPageState extends State<OrdersPage> {
     return department == 'data entry';
   }
 
+  // Update the _isOrderEditable method
   bool _isOrderEditable(SAPMainOrder order) {
+    // Data Entry users can edit any row
+    if (_isDataEntry) return true;
+
+    // Regular users can only edit "Tasks" orders
     return order.status.toLowerCase() == 'tasks';
   }
 
@@ -207,6 +218,114 @@ class _OrdersPageState extends State<OrdersPage> {
       }
       _rebuildGroups();
     });
+  }
+
+  // ==================== COPY FUNCTIONALITY ====================
+
+  // Copy a specific field value to clipboard
+  void _copyFieldToClipboard(String label, String value) {
+    if (value.isEmpty || value == '-') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '⚠️ No data to copy',
+            style: GoogleFonts.cairo(),
+          ),
+          backgroundColor: Colors.orange,
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 1),
+        ),
+      );
+      return;
+    }
+
+    Clipboard.setData(ClipboardData(text: value));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '📋 Copied: $label → "$value"',
+          style: GoogleFonts.cairo(),
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Copy order data to clipboard (full row)
+  void _copyOrderData(SAPMainOrder order) {
+    final StringBuffer buffer = StringBuffer();
+    buffer.writeln('📋 Order Details:');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    buffer.writeln('Customer: ${order.customerName}');
+    buffer.writeln('Design Order: ${order.designOrder}');
+    buffer.writeln('Contract Number: ${order.contractNumber}');
+    buffer.writeln('Item: ${order.itemNumber}');
+    buffer.writeln('Product Code: ${order.productCode}');
+    buffer.writeln('Description: ${order.description}');
+    buffer.writeln('QTY: ${order.quantity}');
+    buffer.writeln('Unit: ${order.unitOfMeasure}');
+    buffer.writeln('Value: \$${_formatNumber(order.value)}');
+    buffer.writeln('Status: ${order.status}');
+    buffer.writeln('Sales Engineer: ${order.salesEngineer}');
+    buffer.writeln('Order Date: ${order.orderDate ?? '-'}');
+    buffer.writeln('Delivery Date: ${order.deliveryDate ?? '-'}');
+    buffer.writeln('Factory: ${order.factory ?? '-'}');
+    buffer.writeln('Design Team: ${order.designTeam ?? '-'}');
+    buffer.writeln('Resp. Engineer: ${order.responsibleEngineer ?? '-'}');
+    buffer.writeln('Reviewer: ${order.reviewer ?? '-'}');
+    buffer.writeln('Alt. Engineer: ${order.correspondenceEngineer ?? '-'}');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '📋 Full order data copied to clipboard',
+          style: GoogleFonts.cairo(),
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // Copy selected orders summary
+  void _copySelectedOrdersData() {
+    if (_selectedRowsIds.isEmpty) {
+      _showSnackBar('No orders selected');
+      return;
+    }
+
+    final selectedOrders = _allOrders.where((o) => _selectedRowsIds.contains(o.id)).toList();
+    final StringBuffer buffer = StringBuffer();
+    buffer.writeln('📋 Selected Orders (${selectedOrders.length}):');
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+
+    for (var order in selectedOrders) {
+      buffer.writeln('• ${order.designOrder} | ${order.customerName} | ${order.status} | \$${_formatNumber(order.value)}');
+    }
+    buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
+    buffer.writeln('Total Orders: ${selectedOrders.length}');
+    buffer.writeln('Total Value: \$${_formatNumber(selectedOrders.fold(0.0, (sum, o) => sum + o.value))}');
+
+    Clipboard.setData(ClipboardData(text: buffer.toString()));
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          '📋 ${selectedOrders.length} orders copied to clipboard',
+          style: GoogleFonts.cairo(),
+        ),
+        backgroundColor: Colors.green,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   @override
@@ -260,6 +379,23 @@ class _OrdersPageState extends State<OrdersPage> {
                 _buildBulkEditOption('Delivery Date', 'delivery_date'),
               ],
             ),
+            const SizedBox(height: 16),
+            // Add Copy selected button in bulk edit
+            ElevatedButton.icon(
+              onPressed: () {
+                Navigator.pop(ctx);
+                _copySelectedOrdersData();
+              },
+              icon: const Icon(Icons.copy, size: 16),
+              label: Text(
+                'Copy Selected to Clipboard',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+              ),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF0F172A),
+                foregroundColor: Colors.white,
+              ),
+            ),
           ],
         ),
         actions: [
@@ -289,7 +425,6 @@ class _OrdersPageState extends State<OrdersPage> {
   // Check if user can import/delete (admin role or specific username)
   bool get _canImportDelete {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
-    final username = widget.loggedInEmployee?.username?.toLowerCase() ?? '';
     return role == 'admin' ||
         role == 'software head' ||
         role == 'head' ||
@@ -513,7 +648,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-            0;
+                0;
       }
 
       for (var orderId in _selectedRowsIds) {
@@ -550,10 +685,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method to show an edit dialog for any field
   Future<void> _editOrderField(
-    SAPMainOrder order,
-    String field,
-    String currentValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String currentValue,
+      ) async {
     // If multiple rows are selected in edit mode, apply to ALL selected rows
     if (_editMode && _selectedRowsIds.length > 1) {
       // Just call bulk edit directly
@@ -611,7 +746,7 @@ class _OrdersPageState extends State<OrdersPage> {
               double.tryParse(
                 newValue.replaceAll(',', '').replaceAll('\$', ''),
               ) ??
-              0;
+                  0;
         }
 
         await supabase
@@ -752,9 +887,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> _updateOrderDesignTeam(
-    SAPMainOrder order,
-    String newValue,
-  ) async {
+      SAPMainOrder order,
+      String newValue,
+      ) async {
     final oldValue = order.designTeam;
 
     // If multiple rows selected, apply to all
@@ -972,10 +1107,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update engineer assignment in database
   Future<void> _updateOrderEngineer(
-    SAPMainOrder order,
-    String field,
-    String? newValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String? newValue,
+      ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
     // If multiple rows selected, apply to all
@@ -1214,7 +1349,7 @@ class _OrdersPageState extends State<OrdersPage> {
             designOrder: order.designOrder,
             fieldName: 'order_deleted',
             oldValue:
-                '${order.designOrder} | ${order.customerName} | ${order.description}',
+            '${order.designOrder} | ${order.customerName} | ${order.description}',
             newValue: null,
             changedBy: _currentUserName,
             changedById: _currentUserId,
@@ -1273,14 +1408,9 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
         actionType: 'delete',
         notes:
-            'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
+        'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
       );
     }
-  }
-
-  bool get _isAdmin {
-    final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
-    return role == 'admin' || role == 'software head' || role == 'head';
   }
 
   // Update order status with audit
@@ -1421,9 +1551,9 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) =>
-                o.contractNumber.toLowerCase().contains(q) ||
-                o.customerName.toLowerCase().contains(q),
-          )
+        o.contractNumber.toLowerCase().contains(q) ||
+            o.customerName.toLowerCase().contains(q),
+      )
           .toList();
     }
     if (_filterStatus != null)
@@ -1436,17 +1566,17 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) => o.contractNumber.toLowerCase().contains(
-              _filterContractNumber!.toLowerCase(),
-            ),
-          )
+          _filterContractNumber!.toLowerCase(),
+        ),
+      )
           .toList();
     if (_filterDesignOrder != null)
       result = result
           .where(
             (o) => o.designOrder.toLowerCase().contains(
-              _filterDesignOrder!.toLowerCase(),
-            ),
-          )
+          _filterDesignOrder!.toLowerCase(),
+        ),
+      )
           .toList();
     if (_filterSalesEngineer != null)
       result = result
@@ -1473,7 +1603,7 @@ class _OrdersPageState extends State<OrdersPage> {
         result = result
             .where(
               (o) => o.correspondenceEngineer == _filterCorrespondenceEngineer,
-            )
+        )
             .toList();
     }
 
@@ -1483,14 +1613,14 @@ class _OrdersPageState extends State<OrdersPage> {
 
   bool get _hasActiveFilters =>
       _filterStatus != null ||
-      _filterFactory != null ||
-      _filterDesignTeam != null ||
-      _filterContractNumber != null ||
-      _filterDesignOrder != null ||
-      _filterSalesEngineer != null ||
-      _filterResponsibleEngineer != null ||
-      _filterReviewer != null ||
-      _filterCorrespondenceEngineer != null;
+          _filterFactory != null ||
+          _filterDesignTeam != null ||
+          _filterContractNumber != null ||
+          _filterDesignOrder != null ||
+          _filterSalesEngineer != null ||
+          _filterResponsibleEngineer != null ||
+          _filterReviewer != null ||
+          _filterCorrespondenceEngineer != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -1516,7 +1646,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final sectionOrders = _groupedOrders[status] ?? [];
       if (sectionOrders.isEmpty) return;
       final allSelected = sectionOrders.every(
-        (o) => _selectedRowsIds.contains(o.id),
+            (o) => _selectedRowsIds.contains(o.id),
       );
       if (allSelected) {
         for (var o in sectionOrders) {
@@ -1573,7 +1703,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     'Save',
                     'Save to device',
                     const Color(0xFF059669),
-                    () async {
+                        () async {
                       Navigator.pop(ctx);
                       await _saveOrders(selected, 'Selected');
                     },
@@ -1631,6 +1761,18 @@ class _OrdersPageState extends State<OrdersPage> {
             OrderDetailPage(order: order, sapService: widget.sapService),
       ),
     );
+  }
+
+  // Navigate to OrderTrackingPage (admin only)
+  void _navigateToOrderTracking(SAPMainOrder order) {
+    if (_isAdmin) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => OrderTrackingPage(order: order),
+        ),
+      );
+    }
   }
 
   void _showFilterDialog() {
@@ -1753,7 +1895,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                                  tempContractNumber = v.isEmpty ? null : v,
+                              tempContractNumber = v.isEmpty ? null : v,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1779,7 +1921,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                                  tempDesignOrder = v.isEmpty ? null : v,
+                              tempDesignOrder = v.isEmpty ? null : v,
                             ),
                           ),
                         ],
@@ -1799,7 +1941,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Status',
                               tempStatus,
                               ['All', ..._allStatuses],
-                              (v) => setDlg(() => tempStatus = v),
+                                  (v) => setDlg(() => tempStatus = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1808,7 +1950,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Factory (${factories.length})',
                               tempFactory,
                               ['All', ...factories.toList()..sort()],
-                              (v) => setDlg(() => tempFactory = v),
+                                  (v) => setDlg(() => tempFactory = v),
                             ),
                           ),
                         ],
@@ -1818,7 +1960,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         'Design Team (${designTeams.length})',
                         tempDesignTeam,
                         ['All', ...designTeams.toList()..sort()],
-                        (v) => setDlg(() => tempDesignTeam = v),
+                            (v) => setDlg(() => tempDesignTeam = v),
                       ),
                     ],
                   ),
@@ -1835,7 +1977,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Sales Eng. (${salesEngineers.length})',
                               tempSalesEngineer,
                               ['All', ...salesEngineers.toList()..sort()],
-                              (v) => setDlg(() => tempSalesEngineer = v),
+                                  (v) => setDlg(() => tempSalesEngineer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1844,7 +1986,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Resp. Eng. (${responsibleEngineers.length})',
                               tempResponsibleEngineer,
                               ['All', ...responsibleEngineers.toList()..sort()],
-                              (v) => setDlg(() => tempResponsibleEngineer = v),
+                                  (v) => setDlg(() => tempResponsibleEngineer = v),
                             ),
                           ),
                         ],
@@ -1857,7 +1999,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Reviewer (${reviewers.length})',
                               tempReviewer,
                               ['All', ...reviewers.toList()..sort()],
-                              (v) => setDlg(() => tempReviewer = v),
+                                  (v) => setDlg(() => tempReviewer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -1869,7 +2011,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 'All',
                                 ...correspondenceEngineers.toList()..sort(),
                               ],
-                              (v) =>
+                                  (v) =>
                                   setDlg(() => tempCorrespondenceEngineer = v),
                             ),
                           ),
@@ -1994,11 +2136,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Helper widget for filter dropdowns
   Widget _buildFilterDropdown(
-    String label,
-    String? value,
-    List<String> items,
-    Function(String?) onChanged,
-  ) {
+      String label,
+      String? value,
+      List<String> items,
+      Function(String?) onChanged,
+      ) {
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
@@ -2015,14 +2157,14 @@ class _OrdersPageState extends State<OrdersPage> {
       items: items
           .map(
             (s) => DropdownMenuItem(
-              value: s == 'All' ? null : s,
-              child: Text(
-                s == 'All' ? 'All' : s,
-                style: GoogleFonts.cairo(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
+          value: s == 'All' ? null : s,
+          child: Text(
+            s == 'All' ? 'All' : s,
+            style: GoogleFonts.cairo(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      )
           .toList(),
       onChanged: (v) => onChanged(v),
     );
@@ -2063,8 +2205,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildTopBar() {
     final isAdmin =
         widget.loggedInEmployee?.role?.toLowerCase() == 'admin' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'head';
+            widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
+            widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
     return Container(
       height: 64,
@@ -2435,13 +2577,13 @@ class _OrdersPageState extends State<OrdersPage> {
           prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    _searchQuery = '';
-                    _rebuildGroups();
-                  },
-                )
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: () {
+              _searchController.clear();
+              _searchQuery = '';
+              _rebuildGroups();
+            },
+          )
               : null,
           filled: true,
           fillColor: Colors.white,
@@ -2800,12 +2942,19 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           const Spacer(),
+          // Copy selected button
+          _buildSmallBtn(
+            Icons.copy,
+            'Copy',
+            _copySelectedOrdersData,
+          ),
+          const SizedBox(width: 8),
           // Bulk edit button (only in edit mode with selections)
           if (_editMode && _selectedRowsIds.isNotEmpty) ...[
             _buildSmallBtn(
               Icons.edit,
               'Bulk Edit',
-              () => _showBulkEditDialog(),
+                  () => _showBulkEditDialog(),
             ),
             const SizedBox(width: 8),
           ],
@@ -2869,7 +3018,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
                       itemExtentBuilder: (index, details) =>
-                          _flatList[index] is String ? 44.0 : 48.0,
+                      _flatList[index] is String ? 44.0 : 48.0,
                       itemBuilder: (_, i) {
                         final item = _flatList[i];
                         if (item is String)
@@ -2892,7 +3041,7 @@ class _OrdersPageState extends State<OrdersPage> {
           Expanded(
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) =>
-                  n.metrics.axis == Axis.vertical ? true : false,
+              n.metrics.axis == Axis.vertical ? true : false,
               child: Scrollbar(
                 controller: _horizontalScrollController,
                 thumbVisibility: true,
@@ -2914,7 +3063,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               addAutomaticKeepAlives: false,
                               addRepaintBoundaries: true,
                               itemExtentBuilder: (index, details) =>
-                                  _flatList[index] is String ? 44.0 : 48.0,
+                              _flatList[index] is String ? 44.0 : 48.0,
                               itemBuilder: (_, i) {
                                 final item = _flatList[i];
                                 if (item is String)
@@ -3058,9 +3207,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildSectionHeaderPlaceholder(
-    String status,
-    List<SAPMainOrder> orders,
-  ) {
+      String status,
+      List<SAPMainOrder> orders,
+      ) {
     final isExpanded = _expandedSections.contains(status);
     return GestureDetector(
       onTap: () => _toggleSection(status),
@@ -3105,6 +3254,16 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
         ),
+        // Add tracking icon in header
+        if (_isAdmin)
+          SizedBox(
+            width: 36,
+            child: Icon(
+              Icons.track_changes,
+              size: 16,
+              color: Colors.grey.shade500,
+            ),
+          ),
       ],
     ),
   );
@@ -3113,12 +3272,16 @@ class _OrdersPageState extends State<OrdersPage> {
     final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
       onTap: () => _toggleRowSelection(order),
+      onLongPress: () {
+        // Copy only the customer name
+        _copyFieldToClipboard('Customer Name', order.customerName);
+      },
       child: Container(
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF6366F1).withOpacity(0.05)
+              ? const Color(0xFF001761).withOpacity(0.15)
               : Colors.white,
           border: Border(
             bottom: BorderSide(color: Colors.grey.shade50),
@@ -3151,6 +3314,23 @@ class _OrdersPageState extends State<OrdersPage> {
                 maxLines: 2,
               ),
             ),
+            // Add tracking icon for admin users
+            if (_isAdmin)
+              SizedBox(
+                width: 36,
+                child: IconButton(
+                  icon: const Icon(
+                    Icons.track_changes,
+                    size: 16,
+                    color: Color(0xFF6366F1),
+                  ),
+                  onPressed: () => _navigateToOrderTracking(order),
+                  tooltip: 'Track Order',
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  splashRadius: 16,
+                ),
+              ),
           ],
         ),
       ),
@@ -3165,7 +3345,7 @@ class _OrdersPageState extends State<OrdersPage> {
     ),
     child: Row(
       children: [
-        _hdr('Status', 140), // Changed from 90 to 140
+        _hdr('Status', 140),
         _hdr('Item', 60),
         _hdr('Product Code', 120),
         _hdr('Contract Num', 110),
@@ -3190,41 +3370,33 @@ class _OrdersPageState extends State<OrdersPage> {
     final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
       onTap: () => _showOrderDetails(order),
-      onLongPress: _isAdmin
-          ? () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => OrderTrackingPage(order: order),
-                ),
-              );
-            }
-          : null,
       child: Container(
         height: 48,
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF6366F1).withOpacity(0.05)
+              ? const Color(0xFF001761).withOpacity(0.15)
               : Colors.white,
           border: Border(bottom: BorderSide(color: Colors.grey.shade50)),
         ),
         child: Row(
           children: [
             _statusCell(order.status, order),
-            _editableCell(order.itemNumber, 60, order, 'item_number'),
+            _editableCell(order.itemNumber, 60, order, 'item_number', 'Item'),
             _editableCell(
               order.productCode,
               120,
               order,
               'product_code',
+              'Product Code',
               style: GoogleFonts.cairo(fontSize: 11),
             ),
-            _editableCell(order.contractNumber, 110, order, 'contract_number'),
+            _editableCell(order.contractNumber, 110, order, 'contract_number', 'Contract Number'),
             _editableCell(
               order.description,
               200,
               order,
               'description',
+              'Description',
               overflow: TextOverflow.ellipsis,
               maxLines: 2,
             ),
@@ -3233,6 +3405,7 @@ class _OrdersPageState extends State<OrdersPage> {
               110,
               order,
               'design_order',
+              'Design Order',
               style: GoogleFonts.cairo(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -3244,14 +3417,16 @@ class _OrdersPageState extends State<OrdersPage> {
               70,
               order,
               'quantity',
+              'QTY',
               align: TextAlign.right,
             ),
-            _editableCell(order.unitOfMeasure, 50, order, 'unit_of_measure'),
+            _editableCell(order.unitOfMeasure, 50, order, 'unit_of_measure', 'Unit'),
             _editableCell(
               _formatNumber(order.value),
               110,
               order,
               'value',
+              'Value',
               align: TextAlign.right,
               style: GoogleFonts.cairo(
                 fontSize: 12,
@@ -3259,15 +3434,16 @@ class _OrdersPageState extends State<OrdersPage> {
                 color: const Color(0xFF059669),
               ),
             ),
-            _editableCell(order.salesEngineer, 150, order, 'sales_engineer'),
-            _editableCell(order.orderDate ?? '-', 100, order, 'order_date'),
+            _editableCell(order.salesEngineer, 150, order, 'sales_engineer', 'Sales Engineer'),
+            _editableCell(order.orderDate ?? '-', 100, order, 'order_date', 'Order Date'),
             _editableCell(
               order.deliveryDate ?? '-',
               100,
               order,
               'delivery_date',
+              'Delivery Date',
             ),
-            _editableCell(order.factory ?? '-', 70, order, 'factory'),
+            _editableCell(order.factory ?? '-', 70, order, 'factory', 'Factory'),
             _designTeamDropdownCell(order.designTeam, order),
             _employeeDropdownCell(
               order.responsibleEngineer,
@@ -3290,7 +3466,8 @@ class _OrdersPageState extends State<OrdersPage> {
       String text,
       double w,
       SAPMainOrder order,
-      String field, {
+      String field,
+      String fieldLabel, {
         TextAlign align = TextAlign.left,
         TextStyle? style,
         TextOverflow overflow = TextOverflow.ellipsis,
@@ -3298,51 +3475,52 @@ class _OrdersPageState extends State<OrdersPage> {
       }) {
     final editKey = '${order.id}_$field';
     final isEditing = _editingField == editKey;
-    final canEdit = _editMode  && _isOrderEditable(order);
+    final canEdit = _editMode && _isOrderEditable(order);
 
-    if (canEdit) {
-      if (isEditing) {
-        // Inline editing mode
-        if (!_editControllers.containsKey(editKey)) {
-          _editControllers[editKey] = TextEditingController(text: text == '-' ? '' : text);
-        }
+    // Wrapped cell with long press copy functionality for the specific field
+    Widget cellContent;
 
-        return SizedBox(
-          width: w,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: TextField(
-              controller: _editControllers[editKey],
-              style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F172A)),
-              textAlign: align == TextAlign.right ? TextAlign.right : TextAlign.left,
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(3),
-                  borderSide: const BorderSide(color: Colors.orange, width: 2),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(3),
-                  borderSide: const BorderSide(color: Colors.orange, width: 2),
-                ),
-                filled: true,
-                fillColor: Colors.white,
-              ),
-              keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
-              onSubmitted: (newValue) {
-                _saveInlineEdit(order, field, newValue, editKey, text);
-              },
-              onTapOutside: (_) {
-                _saveInlineEdit(order, field, _editControllers[editKey]?.text ?? '', editKey, text);
-              },
-            ),
-          ),
-        );
+    if (canEdit && isEditing) {
+      // Inline editing mode
+      if (!_editControllers.containsKey(editKey)) {
+        _editControllers[editKey] = TextEditingController(text: text == '-' ? '' : text);
       }
 
-      // Normal editable cell (click to start editing)
-      return SizedBox(
+      cellContent = SizedBox(
+        width: w,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: TextField(
+            controller: _editControllers[editKey],
+            style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F172A)),
+            textAlign: align == TextAlign.right ? TextAlign.right : TextAlign.left,
+            decoration: InputDecoration(
+              isDense: true,
+              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(3),
+                borderSide: const BorderSide(color: Colors.orange, width: 2),
+              ),
+              focusedBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(3),
+                borderSide: const BorderSide(color: Colors.orange, width: 2),
+              ),
+              filled: true,
+              fillColor: Colors.white,
+            ),
+            keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
+            onSubmitted: (newValue) {
+              _saveInlineEdit(order, field, newValue, editKey, text);
+            },
+            onTapOutside: (_) {
+              _saveInlineEdit(order, field, _editControllers[editKey]?.text ?? '', editKey, text);
+            },
+          ),
+        ),
+      );
+    } else if (canEdit) {
+      // Normal editable cell (click to start editing) - with long press copy
+      cellContent = SizedBox(
         width: w,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
@@ -3351,6 +3529,11 @@ class _OrdersPageState extends State<OrdersPage> {
               setState(() {
                 _editingField = editKey;
               });
+            },
+            onLongPress: () {
+              // Copy this specific field's value
+              final copyValue = text == '-' ? '' : text;
+              _copyFieldToClipboard(fieldLabel, copyValue);
             },
             borderRadius: BorderRadius.circular(4),
             child: Container(
@@ -3373,20 +3556,28 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       );
+    } else {
+      // Normal cell with long press copy
+      cellContent = GestureDetector(
+        onLongPress: () {
+          final copyValue = text == '-' ? '' : text;
+          _copyFieldToClipboard(fieldLabel, copyValue);
+        },
+        child: _cell(text, w, align: align, style: style, overflow: overflow, maxLines: maxLines),
+      );
     }
 
-    // Normal cell
-    return _cell(text, w, align: align, style: style, overflow: overflow, maxLines: maxLines);
+    return cellContent;
   }
 
   // Save inline edit
   Future<void> _saveInlineEdit(
-    SAPMainOrder order,
-    String field,
-    String newValue,
-    String editKey,
-    String oldValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String newValue,
+      String editKey,
+      String oldValue,
+      ) async {
     // Clean up controller
     _editControllers.remove(editKey);
 
@@ -3417,7 +3608,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-            0;
+                0;
       }
 
       await supabase
@@ -3454,7 +3645,7 @@ class _OrdersPageState extends State<OrdersPage> {
     } else if (field == 'value') {
       parsedValue =
           double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ??
-          0;
+              0;
     }
 
     for (var orderId in _selectedRowsIds) {
@@ -3488,7 +3679,7 @@ class _OrdersPageState extends State<OrdersPage> {
     _updateMultipleOrdersLocally(
       field,
       parsedValue,
-    ); // ✅ Use local update, not full reload
+    );
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>
@@ -3513,40 +3704,6 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _statusCell(String status, SAPMainOrder order) {
-
-    SizedBox(
-      width: 140,
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 4),
-        child: Container(
-          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
-          decoration: BoxDecoration(
-            color: _getStatusColor(status).withOpacity(0.1),
-            borderRadius: BorderRadius.circular(4),
-            border: Border.all(
-              color: _getStatusColor(status).withOpacity(0.3),
-            ),
-          ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Flexible(
-                child: Text(
-                  _getStatusLabel(status),
-                  style: GoogleFonts.cairo(
-                    fontSize: 10,
-                    fontWeight: FontWeight.w600,
-                    color: _getStatusColor(status),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-
     // Dropdown only for Tasks orders
     return SizedBox(
       width: 140,
@@ -3628,13 +3785,13 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _cell(
-    String text,
-    double w, {
-    TextAlign align = TextAlign.left,
-    TextStyle? style,
-    TextOverflow overflow = TextOverflow.ellipsis,
-    int maxLines = 1,
-  }) => SizedBox(
+      String text,
+      double w, {
+        TextAlign align = TextAlign.left,
+        TextStyle? style,
+        TextOverflow overflow = TextOverflow.ellipsis,
+        int maxLines = 1,
+      }) => SizedBox(
     width: w,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3645,7 +3802,7 @@ class _OrdersPageState extends State<OrdersPage> {
         child: Text(
           text,
           style:
-              style ??
+          style ??
               GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
           overflow: overflow,
           maxLines: maxLines,
@@ -3701,12 +3858,12 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _buildExportOption(
-    IconData icon,
-    String label,
-    String subtitle,
-    Color color,
-    VoidCallback onTap,
-  ) => GestureDetector(
+      IconData icon,
+      String label,
+      String subtitle,
+      Color color,
+      VoidCallback onTap,
+      ) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.all(16),
