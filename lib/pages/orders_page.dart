@@ -95,6 +95,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
   static const List<String> _allStatuses = [
+    'imported',
+    'ادارة تصميم المنتجات',
     'Drawing Submittal',
     'Approval',
     'modifications submitted',
@@ -932,11 +934,33 @@ class _OrdersPageState extends State<OrdersPage> {
     _rebuildGroups();
   }
 
-  Future<void> _updateOrderDesignTeam(
-      SAPMainOrder order,
-      String newValue,
-      ) async {
+  Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
     final oldValue = order.designTeam;
+
+    // Auto-map status based on design team
+    String getAutoStatus(String team) {
+      switch (team) {
+        case 'partition division':
+        case 'product division':
+        case 'Chair & Sofa Division':
+        case 'cladding division':
+          return 'Drawing Submittal';
+        case 'Master Data division':
+          return 'Master Data';
+        case 'الادارة الهندسة':
+          return 'الادارة الهندسه';
+        case 'تصميم المنتجات':
+          return 'ادارة تصميم المنتجات';
+        case 'design studio':
+          return 'design studio';
+        case 'planning':
+          return 'planning';
+        default:
+          return order.status; // Keep current status for unknown teams
+      }
+    }
+
+    final autoStatus = getAutoStatus(newValue);
 
     // If multiple rows selected, apply to all
     if (_selectedRowsIds.length > 1) {
@@ -945,14 +969,17 @@ class _OrdersPageState extends State<OrdersPage> {
       int updated = 0;
 
       for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders
-            .where((o) => o.id == orderId)
-            .firstOrNull;
+        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (selectedOrder != null) {
           try {
+            final selectedAutoStatus = getAutoStatus(newValue);
+
             await supabase
                 .from('sap_main_orders')
-                .update({'design_team': newValue})
+                .update({
+              'design_team': newValue,
+              'status': selectedAutoStatus,
+            })
                 .eq('id', selectedOrder.id);
 
             await _auditService.logChange(
@@ -965,6 +992,18 @@ class _OrdersPageState extends State<OrdersPage> {
               changedById: _currentUserId,
               actionType: 'bulk_update',
             );
+
+            await _auditService.logChange(
+              orderId: selectedOrder.id,
+              designOrder: selectedOrder.designOrder,
+              fieldName: 'status',
+              oldValue: selectedOrder.status,
+              newValue: selectedAutoStatus,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+
             updated++;
           } catch (e) {
             print('Failed: $e');
@@ -973,8 +1012,9 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       setState(() => _isLoading = false);
-      _showSnackBar('✅ Design Team updated for $updated rows!');
+      _showSnackBar('✅ Design Team & Status updated for $updated rows!');
       _updateMultipleOrdersLocally('design_team', newValue);
+      _updateMultipleOrdersLocally('status', autoStatus);
       return;
     }
 
@@ -983,7 +1023,10 @@ class _OrdersPageState extends State<OrdersPage> {
       final supabase = Supabase.instance.client;
       await supabase
           .from('sap_main_orders')
-          .update({'design_team': newValue})
+          .update({
+        'design_team': newValue,
+        'status': autoStatus,
+      })
           .eq('id', order.id);
 
       await _auditService.logChange(
@@ -996,8 +1039,19 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
       );
 
-      _showSnackBar('Design team updated!');
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: 'status',
+        oldValue: order.status,
+        newValue: autoStatus,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
+
+      _showSnackBar('Design Team → $newValue, Status → $autoStatus');
       _updateOrderLocally(order.id, 'design_team', newValue);
+      _updateOrderLocally(order.id, 'status', autoStatus);
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
@@ -2353,15 +2407,13 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _employeeDropdownCell(
-      String? currentValue,
-      SAPMainOrder order,
-      String field,
-      ) {
-    // Remove the canEdit check - always show dropdown
+  Widget _employeeDropdownCell(String? currentValue, SAPMainOrder order, String field) {
+    final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
+
+    // Editable dropdown
     return SizedBox(
       width: field == 'responsible_engineer' ? 130 : 120,
       child: Padding(
@@ -2376,109 +2428,42 @@ class _OrdersPageState extends State<OrdersPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
-              color: hasValue
-                  ? const Color(0xFF6366F1).withOpacity(0.05)
-                  : Colors.grey.withOpacity(0.05),
+              color: hasValue ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
-                color: hasValue
-                    ? const Color(0xFF6366F1).withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
+                color: hasValue ? const Color(0xFF6366F1).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
               ),
             ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Flexible(
-                  child: Text(
-                    hasValue ? displayName : '-',
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
+            child: Row(mainAxisSize: MainAxisSize.min, children: [
+              Flexible(
+                child: Text(
+                  hasValue ? displayName : '-',
+                  style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w500, color: hasValue ? const Color(0xFF0F172A) : Colors.grey),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  size: 12,
-                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
-                ),
-              ],
-            ),
+              ),
+              Icon(Icons.arrow_drop_down, size: 12, color: hasValue ? const Color(0xFF6366F1) : Colors.grey),
+            ]),
           ),
           itemBuilder: (context) => [
             PopupMenuItem<String>(
               value: '',
-              child: Row(
-                children: [
-                  const Icon(Icons.clear, size: 14, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Clear',
-                    style: GoogleFonts.cairo(fontSize: 12, color: Colors.red),
-                  ),
-                ],
-              ),
+              child: Row(children: [const Icon(Icons.clear, size: 14, color: Colors.red), const SizedBox(width: 8), Text('Clear', style: GoogleFonts.cairo(fontSize: 12, color: Colors.red))]),
             ),
             const PopupMenuDivider(),
             ..._allEmployees.map((emp) {
               final isSelected = currentValue == emp.fullName;
               return PopupMenuItem<String>(
                 value: emp.fullName,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Colors.blue.withOpacity(0.2),
-                      child: Text(
-                        emp.initials,
-                        style: GoogleFonts.cairo(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            emp.fullName,
-                            style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                              color: isSelected
-                                  ? const Color(0xFF6366F1)
-                                  : const Color(0xFF334155),
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (emp.role != null)
-                            Text(
-                              emp.role!,
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                color: Colors.grey,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (isSelected)
-                      const Icon(
-                        Icons.check,
-                        size: 16,
-                        color: Color(0xFF6366F1),
-                      ),
-                  ],
-                ),
+                child: Row(children: [
+                  CircleAvatar(radius: 12, backgroundColor: Colors.blue.withOpacity(0.2), child: Text(emp.initials, style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.blue))),
+                  const SizedBox(width: 8),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                    Text(emp.fullName, style: GoogleFonts.cairo(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400, color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155)), overflow: TextOverflow.ellipsis),
+                    if (emp.role != null) Text(emp.role!, style: GoogleFonts.cairo(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
+                  ])),
+                  if (isSelected) const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
+                ]),
               );
             }),
           ],
@@ -2850,10 +2835,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _designTeamDropdownCell(String? currentValue, SAPMainOrder order) {
-    // Remove the canEdit check - always show dropdown
+    final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
 
+    // Editable dropdown
     return SizedBox(
       width: 130,
       child: Padding(
@@ -2867,14 +2853,10 @@ class _OrdersPageState extends State<OrdersPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
-              color: hasValue
-                  ? const Color(0xFF6366F1).withOpacity(0.05)
-                  : Colors.grey.withOpacity(0.05),
+              color: hasValue ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
-                color: hasValue
-                    ? const Color(0xFF6366F1).withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
+                color: hasValue ? const Color(0xFF6366F1).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
               ),
             ),
             child: Row(
@@ -2883,66 +2865,29 @@ class _OrdersPageState extends State<OrdersPage> {
                 Flexible(
                   child: Text(
                     hasValue ? displayName : '-',
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
-                    ),
+                    style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w500, color: hasValue ? const Color(0xFF0F172A) : Colors.grey),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Icon(
-                  Icons.arrow_drop_down,
-                  size: 12,
-                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
-                ),
+                Icon(Icons.arrow_drop_down, size: 12, color: hasValue ? const Color(0xFF6366F1) : Colors.grey),
               ],
             ),
           ),
           itemBuilder: (context) => [
             PopupMenuItem<String>(
               value: '',
-              child: Row(
-                children: [
-                  const Icon(Icons.clear, size: 14, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Clear',
-                    style: GoogleFonts.cairo(fontSize: 12, color: Colors.red),
-                  ),
-                ],
-              ),
+              child: Row(children: [const Icon(Icons.clear, size: 14, color: Colors.red), const SizedBox(width: 8), Text('Clear', style: GoogleFonts.cairo(fontSize: 12, color: Colors.red))]),
             ),
             const PopupMenuDivider(),
             ..._allTeamStatuses.map((s) {
               final isSelected = currentValue == s;
               return PopupMenuItem<String>(
                 value: s,
-                child: Row(
-                  children: [
-                    if (isSelected)
-                      const Icon(
-                        Icons.check,
-                        size: 16,
-                        color: Color(0xFF6366F1),
-                      )
-                    else
-                      const SizedBox(width: 16),
-                    const SizedBox(width: 8),
-                    Text(
-                      s,
-                      style: GoogleFonts.cairo(
-                        fontSize: 12,
-                        fontWeight: isSelected
-                            ? FontWeight.w700
-                            : FontWeight.w400,
-                        color: isSelected
-                            ? const Color(0xFF6366F1)
-                            : const Color(0xFF334155),
-                      ),
-                    ),
-                  ],
-                ),
+                child: Row(children: [
+                  if (isSelected) const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)) else const SizedBox(width: 16),
+                  const SizedBox(width: 8),
+                  Text(s, style: GoogleFonts.cairo(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400, color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155))),
+                ]),
               );
             }),
           ],
@@ -3403,6 +3348,7 @@ class _OrdersPageState extends State<OrdersPage> {
         _hdr('Value', 110, TextAlign.right),
         _hdr('Sales Engineer', 150),
         _hdr('O-Date', 100),
+        _hdr('E-Date', 100),
         _hdr('Del. Date', 100),
         _hdr('Factory', 70),
         _hdr('Design Team', 130),
@@ -3521,67 +3467,109 @@ class _OrdersPageState extends State<OrdersPage> {
         TextOverflow overflow = TextOverflow.ellipsis,
         int maxLines = 1,
       }) {
-    final editKey = '${order.id}_$field';
-    final isEditing = _editingField == editKey;
-    final canEdit = _editMode && _isOrderEditable(order);
+    final canEdit = _isOrderEditable(order);
     final isDateField = field == 'order_date' || field == 'delivery_date' || field == 'end_date';
 
-    Widget cellContent;
-
-    // For date fields, use date picker instead of text editing
-    if (canEdit && isDateField) {
-      return SizedBox(
-        width: w,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: InkWell(
-            onTap: () => _pickDateForEdit(order, field, text),
-            onLongPress: () {
-              final copyValue = text == '-' ? '' : text;
-              _copyFieldToClipboard(fieldLabel, copyValue);
-            },
-            borderRadius: BorderRadius.circular(4),
-            child: Container(
-              padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-              decoration: BoxDecoration(
-                border: Border.all(color: Colors.orange.withOpacity(0.5)),
-                borderRadius: BorderRadius.circular(4),
-                color: Colors.orange.withOpacity(0.05),
-              ),
-              child: Align(
-                alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(Icons.calendar_today, size: 10, color: Colors.orange),
-                    const SizedBox(width: 2),
-                    Flexible(
-                      child: Text(
-                        text,
-                        style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
-                        overflow: overflow,
-                        maxLines: maxLines,
+    // Only make editable when Edit Mode is ON AND user can edit this order
+    if (_editMode && canEdit) {
+      if (isDateField) {
+        return SizedBox(
+          width: w,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: InkWell(
+              onTap: () => _pickDateForEdit(order, field, text),
+              onLongPress: () {
+                final copyValue = text == '-' ? '' : text;
+                _copyFieldToClipboard(fieldLabel, copyValue);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.orange.withOpacity(0.05),
+                ),
+                child: Align(
+                  alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.calendar_today, size: 10, color: Colors.orange),
+                      const SizedBox(width: 2),
+                      Flexible(
+                        child: Text(
+                          text,
+                          style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                          overflow: overflow,
+                          maxLines: maxLines,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
           ),
-        ),
-      );
-    } else {
-      // Normal cell with long press copy
-      cellContent = GestureDetector(
-        onLongPress: () {
-          final copyValue = text == '-' ? '' : text;
-          _copyFieldToClipboard(fieldLabel, copyValue);
-        },
-        child: _cell(text, w, align: align, style: style, overflow: overflow, maxLines: maxLines),
-      );
+        );
+      } else {
+        return SizedBox(
+          width: w,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: InkWell(
+              onTap: () => _editOrderField(order, field, text == '-' ? '' : text),
+              onLongPress: () {
+                final copyValue = text == '-' ? '' : text;
+                _copyFieldToClipboard(fieldLabel, copyValue);
+              },
+              borderRadius: BorderRadius.circular(4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                decoration: BoxDecoration(
+                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  borderRadius: BorderRadius.circular(4),
+                  color: Colors.orange.withOpacity(0.05),
+                ),
+                child: Align(
+                  alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+                  child: Text(
+                    text,
+                    style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                    overflow: overflow,
+                    maxLines: maxLines,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        );
+      }
     }
 
-    return cellContent;
+    // Normal cell with long press to copy
+    return SizedBox(
+      width: w,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: GestureDetector(
+          onLongPress: () {
+            final copyValue = text == '-' ? '' : text;
+            _copyFieldToClipboard(fieldLabel, copyValue);
+          },
+          child: Align(
+            alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+            child: Text(
+              text,
+              style: style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
+              overflow: overflow,
+              maxLines: maxLines,
+            ),
+          ),
+        ),
+      ),
+    );
   }
 
   // Save inline edit

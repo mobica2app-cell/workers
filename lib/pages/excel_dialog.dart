@@ -189,7 +189,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         columnMap['value'] = i;
       } else if (h.contains('contract')) {
         columnMap['contract_number'] = i;
-      } else if (h.contains('item') || h.contains('بند')) {
+      } else if (h == 'item' || h.contains('بند')) {
         columnMap['item_number'] = i;
       } else if (h.contains('product') || h.contains('منتج')) {
         columnMap['product_code'] = i;
@@ -288,57 +288,22 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final supabase = Supabase.instance.client;
     int imported = 0, failed = 0;
 
-    final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
-
     final enrichedRecords = _newRecords.map((record) {
-      final index = _allExcelData.indexOf(record);
-
-      String? parseDateStr(String? raw) {
-        if (raw == null || raw.trim().isEmpty) return null;
-        final rawStr = raw.trim();
-        final parts = rawStr.split('.');
-        if (parts.length == 3) {
-          final day = parts[0].padLeft(2, '0');
-          final month = parts[1].padLeft(2, '0');
-          final year = parts[2].length == 2 ? '20${parts[2]}' : parts[2];
-          return '$year-$month-$day';
-        }
-        return rawStr;
-      }
-
       return {
-        'status': _rowStatuses[index] ?? _defaultStatus,
+        'status': 'imported', // Always "imported" - cannot be changed
         'customer_name': record['customer_name'] ?? '',
         'item_number': record['item_number'] ?? '',
         'product_code': record['product_code'] ?? '',
         'contract_number': record['contract_number'] ?? '',
         'description': record['description'] ?? '',
         'design_order': record['design_order'] ?? '',
-        'quantity':
-            double.tryParse(
-              record['quantity']?.toString().replaceAll(',', '') ?? '0',
-            ) ??
-            0,
+        'quantity': double.tryParse(record['quantity']?.toString().replaceAll(',', '') ?? '0') ?? 0,
         'unit_of_measure': record['unit_of_measure'] ?? 'EA',
-        'value':
-            double.tryParse(
-              record['value']
-                      ?.toString()
-                      .replaceAll(',', '')
-                      .replaceAll('\$', '') ??
-                  '0',
-            ) ??
-            0,
+        'value': double.tryParse(record['value']?.toString().replaceAll(',', '').replaceAll('\$', '') ?? '0') ?? 0,
         'sales_engineer': record['sales_engineer'] ?? '',
-        'order_date': _rowOrderDates[index] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowOrderDates[index]!)
-            : (parseDateStr(record['order_date']) ?? today),
-        'end_date': _rowEndDates[index] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowEndDates[index]!)
-            : parseDateStr(record['end_date']),
-        'delivery_date': _rowDeliveryDates[index] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowDeliveryDates[index]!)
-            : parseDateStr(record['delivery_date']),
+        'order_date': null,
+        'end_date': null,
+        'delivery_date': null,
         'factory': record['factory'] ?? null,
         'design_team': null,
         'responsible_engineer': null,
@@ -373,27 +338,18 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: Text(
-            'Import Complete',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-          ),
+          title: Text('Import Complete', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               _buildResultRow('Imported:', '$imported', greenColor),
               const SizedBox(height: 4),
-              _buildResultRow(
-                'Failed:',
-                '$failed',
-                failed > 0 ? redColor : Colors.grey,
-              ),
+              _buildResultRow('Failed:', '$failed', failed > 0 ? redColor : Colors.grey),
               const SizedBox(height: 4),
-              _buildResultRow(
-                'Duplicates skipped:',
-                '$_duplicateRows',
-                orangeColor,
-              ),
+              _buildResultRow('Duplicates skipped:', '$_duplicateRows', orangeColor),
+              const SizedBox(height: 4),
+              _buildResultRow('Status:', 'imported', blueColor),
             ],
           ),
           actions: [
@@ -404,10 +360,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 widget.onImportComplete();
               },
               style: ElevatedButton.styleFrom(backgroundColor: primaryColor),
-              child: Text(
-                'Done',
-                style: GoogleFonts.cairo(color: Colors.white),
-              ),
+              child: Text('Done', style: GoogleFonts.cairo(color: Colors.white)),
             ),
           ],
         ),
@@ -460,7 +413,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         child: Column(
           children: [
             _buildHeader(),
-            if (_fileLoaded) _buildBulkDateBar(),
             Expanded(child: _buildContent()),
             _buildFooter(),
           ],
@@ -490,59 +442,38 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               children: [
                 Text(
                   'Import Excel Data',
-                  style: GoogleFonts.cairo(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: primaryColor,
-                  ),
+                  style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w700, color: primaryColor),
                 ),
                 if (_fileLoaded)
                   Text(
-                    '$_fileName • $_totalRows rows',
-                    style: GoogleFonts.cairo(
-                      fontSize: 13,
-                      color: const Color(0xFF64748B),
-                    ),
+                    '$_fileName • $_totalRows rows • Status: imported',
+                    style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B)),
                   ),
               ],
             ),
           ),
-          // Status selector
+          // Status badge showing "imported"
           if (_fileLoaded) ...[
-            SizedBox(
-              width: 180,
-              child: DropdownButtonFormField<String>(
-                value: _defaultStatus,
-                decoration: InputDecoration(
-                  labelText: 'Default Status',
-                  labelStyle: GoogleFonts.cairo(fontSize: 11),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+              decoration: BoxDecoration(
+                color: Colors.grey.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Icon(Icons.lock, size: 12, color: Colors.grey),
+                  const SizedBox(width: 4),
+                  Text(
+                    'imported',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
                   ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  isDense: true,
-                  filled: true,
-                  fillColor: Colors.white,
-                ),
-                items: _sections.map(
-                  (s) => DropdownMenuItem(
-                    value: s,
-                    child: Text(s, style: GoogleFonts.cairo(fontSize: 11)),
-                  ),
-                ).toList(),
-                onChanged: (v) {
-                  if (v != null) {
-                    setState(() {
-                      _defaultStatus = v;
-                      for (var i = 0; i < _allExcelData.length; i++) {
-                        _rowStatuses[i] = v;
-                      }
-                    });
-                  }
-                },
+                ],
               ),
             ),
             const SizedBox(width: 8),
@@ -552,105 +483,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             icon: const Icon(Icons.close, color: Color(0xFF64748B)),
           ),
         ],
-      ),
-    );
-  }
-
-  Widget _buildBulkDateBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-      decoration: const BoxDecoration(
-        color: Color(0xFFFEFCE8),
-        border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.event, color: orangeColor, size: 16),
-          const SizedBox(width: 8),
-          Text(
-            'Bulk Dates:',
-            style: GoogleFonts.cairo(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: primaryColor,
-            ),
-          ),
-          const SizedBox(width: 10),
-          _buildBulkDatePicker('Order Date', _bulkOrderDate, (d) {
-            setState(() {
-              _bulkOrderDate = d;
-              for (var i = 0; i < _newRecords.length; i++) {
-                final idx = _allExcelData.indexOf(_newRecords[i]);
-                _rowOrderDates[idx] = d;
-              }
-            });
-          }),
-          const SizedBox(width: 8),
-          _buildBulkDatePicker('End Date', _bulkEndDate, (d) {
-            setState(() {
-              _bulkEndDate = d;
-              for (var i = 0; i < _newRecords.length; i++) {
-                final idx = _allExcelData.indexOf(_newRecords[i]);
-                _rowEndDates[idx] = d;
-              }
-            });
-          }),
-          const SizedBox(width: 8),
-          _buildBulkDatePicker('Delivery Date', _bulkDeliveryDate, (d) {
-            setState(() {
-              _bulkDeliveryDate = d;
-              for (var i = 0; i < _newRecords.length; i++) {
-                final idx = _allExcelData.indexOf(_newRecords[i]);
-                _rowDeliveryDates[idx] = d;
-              }
-            });
-          }),
-          const Spacer(),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildBulkDatePicker(
-    String label,
-    DateTime? value,
-    Function(DateTime) onPicked,
-  ) {
-    return InkWell(
-      onTap: () async {
-        final date = await showDatePicker(
-          context: context,
-          initialDate: value ?? DateTime.now(),
-          firstDate: DateTime(2020),
-          lastDate: DateTime(2030),
-        );
-        if (date != null) onPicked(date);
-      },
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-        decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFE2E8F0)),
-          borderRadius: BorderRadius.circular(6),
-          color: value != null ? orangeColor.withOpacity(0.1) : Colors.white,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(
-              Icons.calendar_today,
-              size: 12,
-              color: value != null ? orangeColor : Colors.grey,
-            ),
-            const SizedBox(width: 4),
-            Text(
-              value != null ? DateFormat('yyyy-MM-dd').format(value!) : label,
-              style: GoogleFonts.cairo(
-                fontSize: 11,
-                fontWeight: value != null ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
-        ),
       ),
     );
   }
@@ -896,30 +728,25 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                         // Status dropdown
                         SizedBox(
                           width: 110,
-                          child: DropdownButtonFormField<String>(
-                            value: status,
-                            isExpanded: true,
-                            decoration: const InputDecoration(
-                              isDense: true,
-                              contentPadding: EdgeInsets.symmetric(
-                                horizontal: 4,
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 4),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.withOpacity(0.1),
+                                borderRadius: BorderRadius.circular(4),
+                              ),
+                              child: Row(
+                                children: [
+                                  const Icon(Icons.lock, size: 10, color: Colors.grey),
+                                  const SizedBox(width: 4),
+                                  Text(
+                                    'imported',
+                                    style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                  ),
+                                ],
                               ),
                             ),
-                            style: GoogleFonts.cairo(fontSize: 10),
-                            items: _sections
-                                .map(
-                                  (s) => DropdownMenuItem(
-                                    value: s,
-                                    child: Text(
-                                      s,
-                                      style: GoogleFonts.cairo(fontSize: 9),
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ),
-                                )
-                                .toList(),
-                            onChanged: (v) =>
-                                setState(() => _rowStatuses[globalIndex] = v!),
                           ),
                         ),
                         _previewDataCell(
