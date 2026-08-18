@@ -271,6 +271,7 @@ class _OrdersPageState extends State<OrdersPage> {
     buffer.writeln('Status: ${order.status}');
     buffer.writeln('Sales Engineer: ${order.salesEngineer}');
     buffer.writeln('Order Date: ${order.orderDate ?? '-'}');
+    buffer.writeln('End Date: ${order.endDate ?? '-'}'); // ✅ ADD THIS
     buffer.writeln('Delivery Date: ${order.deliveryDate ?? '-'}');
     buffer.writeln('Factory: ${order.factory ?? '-'}');
     buffer.writeln('Design Team: ${order.designTeam ?? '-'}');
@@ -347,65 +348,61 @@ class _OrdersPageState extends State<OrdersPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(
-          'Bulk Edit',
-          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              '${_selectedRowsIds.length} rows selected',
-              style: GoogleFonts.cairo(
-                fontSize: 13,
-                color: const Color(0xFF64748B),
-              ),
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              children: [
-                _buildBulkEditOption('Status', 'status'),
-                _buildBulkEditOption('Design Team', 'design_team'),
-                _buildBulkEditOption('Factory', 'factory'),
-                _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
-                _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
-                _buildBulkEditOption('Reviewer', 'reviewer'),
-                _buildBulkEditOption(
-                  'Alt. Engineer',
-                  'correspondence_engineer',
-                ),
-                _buildBulkEditOption('Value', 'value'),
-                _buildBulkEditOption('Delivery Date', 'delivery_date'),
-              ],
-            ),
-            const SizedBox(height: 16),
-            // Add Copy selected button in bulk edit
-            ElevatedButton.icon(
-              onPressed: () {
-                Navigator.pop(ctx);
-                _copySelectedOrdersData();
-              },
-              icon: const Icon(Icons.copy, size: 16),
-              label: Text(
-                'Copy Selected to Clipboard',
-                style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-              ),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF0F172A),
-                foregroundColor: Colors.white,
-              ),
-            ),
-          ],
-        ),
+        title: Text('Bulk Edit', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        content: Column(mainAxisSize: MainAxisSize.min, children: [
+          Text('${_selectedRowsIds.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
+          const SizedBox(height: 16),
+          Wrap(spacing: 8, children: [
+            _buildBulkEditOption('Status', 'status'),
+            _buildBulkEditOption('Design Team', 'design_team'),
+            _buildBulkEditOption('Factory', 'factory'),
+            _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
+            _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
+            _buildBulkEditOption('Reviewer', 'reviewer'),
+            _buildBulkEditOption('Alt. Engineer', 'correspondence_engineer'),
+            _buildBulkEditOption('Value', 'value'),
+            // Add date picker options for bulk edit
+            _buildBulkDateOption('O-Date', 'order_date'),
+            _buildBulkDateOption('Delivery Date', 'delivery_date'),
+          ]),
+        ]),
         actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.cairo()),
-          ),
+          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
         ],
       ),
     );
+  }
+
+  Widget _buildBulkDateOption(String label, String field) {
+    return OutlinedButton(
+      onPressed: () {
+        Navigator.pop(context);
+        _pickDateForBulkEdit(field);
+      },
+      style: OutlinedButton.styleFrom(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        const Icon(Icons.calendar_today, size: 12),
+        const SizedBox(width: 4),
+        Text(label, style: GoogleFonts.cairo(fontSize: 11)),
+      ]),
+    );
+  }
+
+  Future<void> _pickDateForBulkEdit(String field) async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: DateTime.now(),
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+
+    if (pickedDate != null) {
+      final formattedDate = DateFormat('yyyy-MM-dd').format(pickedDate);
+      await _applyBulkEditToSelected(field, formattedDate);
+    }
   }
 
   Widget _buildBulkEditOption(String label, String field) {
@@ -683,6 +680,52 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // Add this method for date picking
+  Future<void> _pickDateForEdit(SAPMainOrder order, String field, String currentValue) async {
+    final currentDate = DateTime.tryParse(currentValue) ?? DateTime.now();
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: currentDate,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2030),
+    );
+
+    if (pickedDate != null) {
+      final formattedDate = DateFormat('yyyy-MM-dd').format(pickedDate);
+
+      // If multiple rows selected, apply to all
+      if (_editMode && _selectedRowsIds.length > 1) {
+        await _applyBulkEditToSelected(field, formattedDate);
+        return;
+      }
+
+      // Single row update
+      try {
+        final supabase = Supabase.instance.client;
+        await supabase
+            .from('sap_main_orders')
+            .update({field: formattedDate})
+            .eq('id', order.id);
+
+        await _auditService.logChange(
+          orderId: order.id,
+          designOrder: order.designOrder,
+          fieldName: field,
+          oldValue: currentValue == '-' ? '' : currentValue,
+          newValue: formattedDate,
+          changedBy: _currentUserName,
+          changedById: _currentUserId,
+        );
+
+        _showSnackBar('${_formatFieldName(field)} updated!');
+        _updateOrderLocally(order.id, field, formattedDate);
+      } catch (e) {
+        _showSnackBar('Error updating: $e');
+      }
+    }
+  }
+
   // Add this method to show an edit dialog for any field
   Future<void> _editOrderField(
       SAPMainOrder order,
@@ -801,6 +844,8 @@ class _OrdersPageState extends State<OrdersPage> {
         return 'Sales Engineer';
       case 'order_date':
         return 'O-Date';
+      case 'end_date':
+        return 'End Date';
       case 'delivery_date':
         return 'Delivery Date';
       case 'factory':
@@ -863,6 +908,7 @@ class _OrdersPageState extends State<OrdersPage> {
           deliveryDate: field == 'delivery_date'
               ? newValue.toString()
               : oldOrder.deliveryDate,
+          endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate, // ✅ ADD THIS
           factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
           designTeam: field == 'design_team'
               ? newValue.toString()
@@ -1036,6 +1082,7 @@ class _OrdersPageState extends State<OrdersPage> {
             orderDate: field == 'order_date'
                 ? newValue.toString()
                 : oldOrder.orderDate,
+            endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate, // ✅ ADD THIS
             deliveryDate: field == 'delivery_date'
                 ? newValue.toString()
                 : oldOrder.deliveryDate,
@@ -3436,6 +3483,7 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
             _editableCell(order.salesEngineer, 150, order, 'sales_engineer', 'Sales Engineer'),
             _editableCell(order.orderDate ?? '-', 100, order, 'order_date', 'Order Date'),
+            _editableCell(order.orderDate ?? '-', 100, order, 'end_date', 'End Date'),
             _editableCell(
               order.deliveryDate ?? '-',
               100,
@@ -3476,62 +3524,19 @@ class _OrdersPageState extends State<OrdersPage> {
     final editKey = '${order.id}_$field';
     final isEditing = _editingField == editKey;
     final canEdit = _editMode && _isOrderEditable(order);
+    final isDateField = field == 'order_date' || field == 'delivery_date' || field == 'end_date';
 
-    // Wrapped cell with long press copy functionality for the specific field
     Widget cellContent;
 
-    if (canEdit && isEditing) {
-      // Inline editing mode
-      if (!_editControllers.containsKey(editKey)) {
-        _editControllers[editKey] = TextEditingController(text: text == '-' ? '' : text);
-      }
-
-      cellContent = SizedBox(
-        width: w,
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: TextField(
-            controller: _editControllers[editKey],
-            style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF0F172A)),
-            textAlign: align == TextAlign.right ? TextAlign.right : TextAlign.left,
-            decoration: InputDecoration(
-              isDense: true,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(3),
-                borderSide: const BorderSide(color: Colors.orange, width: 2),
-              ),
-              focusedBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(3),
-                borderSide: const BorderSide(color: Colors.orange, width: 2),
-              ),
-              filled: true,
-              fillColor: Colors.white,
-            ),
-            keyboardType: field == 'quantity' || field == 'value' ? TextInputType.number : TextInputType.text,
-            onSubmitted: (newValue) {
-              _saveInlineEdit(order, field, newValue, editKey, text);
-            },
-            onTapOutside: (_) {
-              _saveInlineEdit(order, field, _editControllers[editKey]?.text ?? '', editKey, text);
-            },
-          ),
-        ),
-      );
-    } else if (canEdit) {
-      // Normal editable cell (click to start editing) - with long press copy
-      cellContent = SizedBox(
+    // For date fields, use date picker instead of text editing
+    if (canEdit && isDateField) {
+      return SizedBox(
         width: w,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 2),
           child: InkWell(
-            onTap: () {
-              setState(() {
-                _editingField = editKey;
-              });
-            },
+            onTap: () => _pickDateForEdit(order, field, text),
             onLongPress: () {
-              // Copy this specific field's value
               final copyValue = text == '-' ? '' : text;
               _copyFieldToClipboard(fieldLabel, copyValue);
             },
@@ -3545,11 +3550,20 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
               child: Align(
                 alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
-                child: Text(
-                  text,
-                  style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
-                  overflow: overflow,
-                  maxLines: maxLines,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(Icons.calendar_today, size: 10, color: Colors.orange),
+                    const SizedBox(width: 2),
+                    Flexible(
+                      child: Text(
+                        text,
+                        style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                        overflow: overflow,
+                        maxLines: maxLines,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),

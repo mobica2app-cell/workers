@@ -5,7 +5,6 @@ import 'package:mobitem/pages/main_shell.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
 import '../main.dart';
-import '../repositories/sap_repository.dart';
 import '../services/sap_service.dart';
 
 class LoginPage extends StatefulWidget {

@@ -1,4 +1,3 @@
-// lib/pages/import_excel_dialog.dart
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -21,11 +20,19 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   List<Map<String, dynamic>> _newRecords = [];
   List<Map<String, dynamic>> _duplicateRecords = [];
 
-  // Per-row Section & Pickup Date
-  final Map<int, String> _rowSections = {};
-  final Map<int, DateTime?> _rowPickupDates = {};
-  String? _bulkSection;
-  DateTime? _bulkDate;
+  // Per-row dates (3 dates)
+  final Map<int, DateTime?> _rowOrderDates = {};
+  final Map<int, DateTime?> _rowEndDates = {};
+  final Map<int, DateTime?> _rowDeliveryDates = {};
+
+  // Bulk dates
+  DateTime? _bulkOrderDate;
+  DateTime? _bulkEndDate;
+  DateTime? _bulkDeliveryDate;
+
+  // Status
+  String _defaultStatus = 'Tasks';
+  final Map<int, String> _rowStatuses = {};
 
   bool _isLoading = false;
   bool _fileLoaded = false;
@@ -36,20 +43,20 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   int _selectedTab = 0;
 
   static const List<String> _sections = [
+    'Drawing Submittal',
+    'Approval',
+    'modifications submitted',
+    'Manufacturing Drawing',
+    'Done',
     'مطلوب اكوادها الاسترشاديه',
     'تحت المراجعة',
-    'Drawing Submittal',
-    'modifications submitted',
-    'Approval',
-    'Manufacturing Drawing',
     'Review',
     'Master Data',
     'Sales',
     'As Built',
     'Tasks',
     'planning',
-    'partation master data',
-    'Done',
+    'partation  master data',
     'الادارة الهندسه',
     'design studio',
     'Unknown',
@@ -114,8 +121,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final columnMap = _buildColumnMap(headers);
 
     _allExcelData = [];
-    _rowSections.clear();
-    _rowPickupDates.clear();
+    _rowStatuses.clear();
+    _rowOrderDates.clear();
+    _rowEndDates.clear();
+    _rowDeliveryDates.clear();
 
     for (var i = 1; i < lines.length; i++) {
       if (lines[i].trim().isEmpty) continue;
@@ -126,6 +135,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       });
       if (record['design_order']?.isNotEmpty ?? false) {
         _allExcelData.add(record);
+        _rowStatuses[_allExcelData.length - 1] = _defaultStatus;
       }
     }
     _totalRows = _allExcelData.length;
@@ -144,8 +154,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final columnMap = _buildColumnMap(headers);
 
     _allExcelData = [];
-    _rowSections.clear();
-    _rowPickupDates.clear();
+    _rowStatuses.clear();
+    _rowOrderDates.clear();
+    _rowEndDates.clear();
+    _rowDeliveryDates.clear();
 
     for (var i = 1; i < table.rows.length; i++) {
       final record = <String, dynamic>{};
@@ -158,6 +170,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       });
       if (record['design_order']?.isNotEmpty ?? false) {
         _allExcelData.add(record);
+        _rowStatuses[_allExcelData.length - 1] = _defaultStatus;
       }
     }
     _totalRows = _allExcelData.length;
@@ -168,7 +181,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     for (var i = 0; i < headers.length; i++) {
       final h = headers[i].trim().toLowerCase();
 
-      if (h == 'name' || h.contains('customer') || (h.contains('name') && !h.contains('group'))) {
+      if (h == 'name' || h.contains('customer')) {
         columnMap['customer_name'] = i;
       } else if (h.contains('design') || h.contains('order')) {
         columnMap['design_order'] = i;
@@ -192,6 +205,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         columnMap['factory'] = i;
       } else if (h.contains('delivery') || h.contains('تسليم')) {
         columnMap['delivery_date'] = i;
+      } else if (h.contains('end')) {
+        columnMap['end_date'] = i;
+      } else if (h.contains('o-date') || h.contains('order date')) {
+        columnMap['order_date'] = i;
       }
     }
     return columnMap;
@@ -241,36 +258,24 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     _duplicateRows = _duplicateRecords.length;
   }
 
-  void _applyBulkSection() {
-    if (_bulkSection != null) {
-      setState(() {
-        for (var record in _newRecords) {
-          final index = _allExcelData.indexOf(record);
-          _rowSections[index] = _bulkSection!;
-        }
-      });
-    }
-  }
-
-  void _applyBulkDate() {
-    if (_bulkDate != null) {
-      setState(() {
-        for (var record in _newRecords) {
-          final index = _allExcelData.indexOf(record);
-          _rowPickupDates[index] = _bulkDate;
-        }
-      });
-    }
-  }
-
-  Future<void> _pickDateForRow(int index) async {
+  Future<void> _pickDateForRow(int index, String field) async {
     final date = await showDatePicker(
       context: context,
       initialDate: DateTime.now(),
       firstDate: DateTime(2020),
       lastDate: DateTime(2030),
     );
-    if (date != null) setState(() => _rowPickupDates[index] = date);
+    if (date != null) {
+      setState(() {
+        if (field == 'order_date') {
+          _rowOrderDates[index] = date;
+        } else if (field == 'end_date') {
+          _rowEndDates[index] = date;
+        } else if (field == 'delivery_date') {
+          _rowDeliveryDates[index] = date;
+        }
+      });
+    }
   }
 
   Future<void> _importNewRecords() async {
@@ -283,52 +288,59 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final supabase = Supabase.instance.client;
     int imported = 0, failed = 0;
 
-    // Today's date for O-Date (order date)
     final today = DateFormat('yyyy-MM-dd').format(DateTime.now());
 
     final enrichedRecords = _newRecords.map((record) {
       final index = _allExcelData.indexOf(record);
 
-      // Parse value - remove commas
-      double? parsedValue;
-      final rawValue = record['value']?.toString().replaceAll(',', '') ?? '0';
-      parsedValue = double.tryParse(rawValue) ?? 0;
-
-      // Parse delivery date - handle DD.MM.YYYY format
-      String? deliveryDate;
-      final rawDeliveryDate = record['delivery_date']?.toString().trim();
-      if (rawDeliveryDate != null && rawDeliveryDate.isNotEmpty) {
-        try {
-          final parts = rawDeliveryDate.split('.');
-          if (parts.length == 3) {
-            final day = parts[0].padLeft(2, '0');
-            final month = parts[1].padLeft(2, '0');
-            final year = parts[2].length == 2 ? '20${parts[2]}' : parts[2];
-            deliveryDate = '$year-$month-$day';
-          } else {
-            deliveryDate = rawDeliveryDate;
-          }
-        } catch (e) {
-          deliveryDate = rawDeliveryDate;
+      String? parseDateStr(String? raw) {
+        if (raw == null || raw.trim().isEmpty) return null;
+        final rawStr = raw.trim();
+        final parts = rawStr.split('.');
+        if (parts.length == 3) {
+          final day = parts[0].padLeft(2, '0');
+          final month = parts[1].padLeft(2, '0');
+          final year = parts[2].length == 2 ? '20${parts[2]}' : parts[2];
+          return '$year-$month-$day';
         }
+        return rawStr;
       }
 
       return {
-        'status': _rowSections[index] ?? 'Unknown',
+        'status': _rowStatuses[index] ?? _defaultStatus,
         'customer_name': record['customer_name'] ?? '',
         'item_number': record['item_number'] ?? '',
         'product_code': record['product_code'] ?? '',
         'contract_number': record['contract_number'] ?? '',
         'description': record['description'] ?? '',
         'design_order': record['design_order'] ?? '',
-        'quantity': double.tryParse(record['quantity']?.toString() ?? '0') ?? 0,
+        'quantity':
+            double.tryParse(
+              record['quantity']?.toString().replaceAll(',', '') ?? '0',
+            ) ??
+            0,
         'unit_of_measure': record['unit_of_measure'] ?? 'EA',
-        'value': parsedValue,
+        'value':
+            double.tryParse(
+              record['value']
+                      ?.toString()
+                      .replaceAll(',', '')
+                      .replaceAll('\$', '') ??
+                  '0',
+            ) ??
+            0,
         'sales_engineer': record['sales_engineer'] ?? '',
-        'order_date': today, // O-Date = today (import date)
-        'delivery_date': deliveryDate,
+        'order_date': _rowOrderDates[index] != null
+            ? DateFormat('yyyy-MM-dd').format(_rowOrderDates[index]!)
+            : (parseDateStr(record['order_date']) ?? today),
+        'end_date': _rowEndDates[index] != null
+            ? DateFormat('yyyy-MM-dd').format(_rowEndDates[index]!)
+            : parseDateStr(record['end_date']),
+        'delivery_date': _rowDeliveryDates[index] != null
+            ? DateFormat('yyyy-MM-dd').format(_rowDeliveryDates[index]!)
+            : parseDateStr(record['delivery_date']),
         'factory': record['factory'] ?? null,
-        'design_team': record['design_team'] ?? null,
+        'design_team': null,
         'responsible_engineer': null,
         'reviewer': null,
         'correspondence_engineer': null,
@@ -343,16 +355,13 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       try {
         await supabase.from('sap_main_orders').insert(batch);
         imported += batch.length;
-        print('✅ Batch ${i ~/ 500 + 1}: ${batch.length} records');
       } catch (e) {
-        print('❌ Batch failed: $e');
         for (var record in batch) {
           try {
             await supabase.from('sap_main_orders').insert(record);
             imported++;
-          } catch (innerE) {
+          } catch (_) {
             failed++;
-            print('  Failed: ${record['design_order']} - $innerE');
           }
         }
       }
@@ -451,7 +460,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         child: Column(
           children: [
             _buildHeader(),
-            if (_fileLoaded) _buildBulkAssignBar(),
+            if (_fileLoaded) _buildBulkDateBar(),
             Expanded(child: _buildContent()),
             _buildFooter(),
           ],
@@ -498,6 +507,46 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               ],
             ),
           ),
+          // Status selector
+          if (_fileLoaded) ...[
+            SizedBox(
+              width: 180,
+              child: DropdownButtonFormField<String>(
+                value: _defaultStatus,
+                decoration: InputDecoration(
+                  labelText: 'Default Status',
+                  labelStyle: GoogleFonts.cairo(fontSize: 11),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  isDense: true,
+                  filled: true,
+                  fillColor: Colors.white,
+                ),
+                items: _sections.map(
+                  (s) => DropdownMenuItem(
+                    value: s,
+                    child: Text(s, style: GoogleFonts.cairo(fontSize: 11)),
+                  ),
+                ).toList(),
+                onChanged: (v) {
+                  if (v != null) {
+                    setState(() {
+                      _defaultStatus = v;
+                      for (var i = 0; i < _allExcelData.length; i++) {
+                        _rowStatuses[i] = v;
+                      }
+                    });
+                  }
+                },
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           IconButton(
             onPressed: () => Navigator.pop(context),
             icon: const Icon(Icons.close, color: Color(0xFF64748B)),
@@ -507,151 +556,116 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     );
   }
 
-  Widget _buildBulkAssignBar() {
+  Widget _buildBulkDateBar() {
     return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
       decoration: const BoxDecoration(
         color: Color(0xFFFEFCE8),
         border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       ),
       child: Row(
         children: [
-          const Icon(Icons.auto_fix_high, color: orangeColor, size: 16),
+          const Icon(Icons.event, color: orangeColor, size: 16),
           const SizedBox(width: 8),
           Text(
-            'Bulk assign:',
+            'Bulk Dates:',
             style: GoogleFonts.cairo(
               fontSize: 12,
               fontWeight: FontWeight.w600,
               color: primaryColor,
             ),
           ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 200,
-            child: DropdownButtonFormField<String>(
-              value: _bulkSection,
-              isExpanded: true,
-              decoration: InputDecoration(
-                labelText: 'Section (all)',
-                labelStyle: GoogleFonts.cairo(fontSize: 11),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                filled: true,
-                fillColor: Colors.white,
-                isDense: true,
-              ),
-              items: _sections
-                  .map(
-                    (s) => DropdownMenuItem(
-                      value: s,
-                      child: Text(
-                        s,
-                        style: GoogleFonts.cairo(fontSize: 11),
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  )
-                  .toList(),
-              onChanged: (v) {
-                setState(() => _bulkSection = v);
-                _applyBulkSection();
-              },
-            ),
-          ),
-          const SizedBox(width: 12),
-          SizedBox(
-            width: 160,
-            child: InkWell(
-              onTap: () async {
-                final date = await showDatePicker(
-                  context: context,
-                  initialDate: DateTime.now(),
-                  firstDate: DateTime(2020),
-                  lastDate: DateTime(2030),
-                );
-                if (date != null) {
-                  setState(() => _bulkDate = date);
-                  _applyBulkDate();
-                }
-              },
-              child: InputDecorator(
-                decoration: InputDecoration(
-                  labelText: 'Date (all)',
-                  labelStyle: GoogleFonts.cairo(fontSize: 11),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  contentPadding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  filled: true,
-                  fillColor: Colors.white,
-                  isDense: true,
-                ),
-                child: Text(
-                  _bulkDate != null
-                      ? DateFormat('yyyy-MM-dd').format(_bulkDate!)
-                      : 'Select',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                ),
-              ),
-            ),
-          ),
-          const SizedBox(width: 12),
-          if (_bulkSection != null || _bulkDate != null)
-            TextButton(
-              onPressed: () {
-                setState(() {
-                  _bulkSection = null;
-                  _bulkDate = null;
-                });
-              },
-              child: Text(
-                'Clear',
-                style: GoogleFonts.cairo(fontSize: 11, color: Colors.red),
-              ),
-            ),
+          const SizedBox(width: 10),
+          _buildBulkDatePicker('Order Date', _bulkOrderDate, (d) {
+            setState(() {
+              _bulkOrderDate = d;
+              for (var i = 0; i < _newRecords.length; i++) {
+                final idx = _allExcelData.indexOf(_newRecords[i]);
+                _rowOrderDates[idx] = d;
+              }
+            });
+          }),
+          const SizedBox(width: 8),
+          _buildBulkDatePicker('End Date', _bulkEndDate, (d) {
+            setState(() {
+              _bulkEndDate = d;
+              for (var i = 0; i < _newRecords.length; i++) {
+                final idx = _allExcelData.indexOf(_newRecords[i]);
+                _rowEndDates[idx] = d;
+              }
+            });
+          }),
+          const SizedBox(width: 8),
+          _buildBulkDatePicker('Delivery Date', _bulkDeliveryDate, (d) {
+            setState(() {
+              _bulkDeliveryDate = d;
+              for (var i = 0; i < _newRecords.length; i++) {
+                final idx = _allExcelData.indexOf(_newRecords[i]);
+                _rowDeliveryDates[idx] = d;
+              }
+            });
+          }),
+          const Spacer(),
         ],
       ),
     );
   }
 
-  Widget _buildContent() {
-    if (_isLoading)
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+  Widget _buildBulkDatePicker(
+    String label,
+    DateTime? value,
+    Function(DateTime) onPicked,
+  ) {
+    return InkWell(
+      onTap: () async {
+        final date = await showDatePicker(
+          context: context,
+          initialDate: value ?? DateTime.now(),
+          firstDate: DateTime(2020),
+          lastDate: DateTime(2030),
+        );
+        if (date != null) onPicked(date);
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+        decoration: BoxDecoration(
+          border: Border.all(color: const Color(0xFFE2E8F0)),
+          borderRadius: BorderRadius.circular(6),
+          color: value != null ? orangeColor.withOpacity(0.1) : Colors.white,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
           children: [
-            CircularProgressIndicator(color: primaryColor),
-            SizedBox(height: 16),
-            Text('Processing file...'),
+            Icon(
+              Icons.calendar_today,
+              size: 12,
+              color: value != null ? orangeColor : Colors.grey,
+            ),
+            const SizedBox(width: 4),
+            Text(
+              value != null ? DateFormat('yyyy-MM-dd').format(value!) : label,
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: value != null ? FontWeight.w600 : FontWeight.w400,
+              ),
+            ),
           ],
         ),
-      );
+      ),
+    );
+  }
+
+  Widget _buildContent() {
+    if (_isLoading) return const Center(child: CircularProgressIndicator());
     if (!_fileLoaded) {
       return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Container(
-              padding: const EdgeInsets.all(40),
-              decoration: BoxDecoration(
-                color: const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(16),
-                border: Border.all(color: const Color(0xFFE2E8F0), width: 2),
-              ),
-              child: const Icon(
-                Icons.cloud_upload_outlined,
-                size: 80,
-                color: Color(0xFF94A3B8),
-              ),
+            const Icon(
+              Icons.cloud_upload_outlined,
+              size: 80,
+              color: Color(0xFF94A3B8),
             ),
             const SizedBox(height: 24),
             Text(
@@ -660,14 +674,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 fontSize: 18,
                 fontWeight: FontWeight.w600,
                 color: primaryColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Text(
-              'Supported: .xlsx, .xls, .csv',
-              style: GoogleFonts.cairo(
-                fontSize: 14,
-                color: const Color(0xFF64748B),
               ),
             ),
             const SizedBox(height: 24),
@@ -694,10 +700,11 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         ),
       );
     }
+
     return Column(
       children: [
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(12),
           child: Row(
             children: [
               _buildSummaryCard(
@@ -706,14 +713,14 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 greenColor,
                 Icons.add_circle_outline,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               _buildSummaryCard(
                 'Duplicates',
                 '$_duplicateRows',
                 orangeColor,
                 Icons.content_copy,
               ),
-              const SizedBox(width: 12),
+              const SizedBox(width: 10),
               _buildSummaryCard(
                 'Total Rows',
                 '$_totalRows',
@@ -724,7 +731,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           ),
         ),
         Container(
-          margin: const EdgeInsets.symmetric(horizontal: 16),
+          margin: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
             color: const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(8),
@@ -751,30 +758,30 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   ) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: color.withOpacity(0.05),
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(10),
           border: Border.all(color: color.withOpacity(0.2)),
         ),
         child: Row(
           children: [
-            Icon(icon, color: color, size: 24),
-            const SizedBox(width: 12),
+            Icon(icon, color: color, size: 20),
+            const SizedBox(width: 8),
             Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   title,
                   style: GoogleFonts.cairo(
-                    fontSize: 12,
+                    fontSize: 11,
                     color: const Color(0xFF64748B),
                   ),
                 ),
                 Text(
                   count,
                   style: GoogleFonts.cairo(
-                    fontSize: 20,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                     color: color,
                   ),
@@ -793,24 +800,16 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       child: GestureDetector(
         onTap: () => setState(() => _selectedTab = index),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 10),
+          padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
             color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
-            boxShadow: isSelected
-                ? [
-                    BoxShadow(
-                      color: Colors.black.withOpacity(0.05),
-                      blurRadius: 2,
-                    ),
-                  ]
-                : null,
           ),
           child: Text(
             label,
             textAlign: TextAlign.center,
             style: GoogleFonts.cairo(
-              fontSize: 13,
+              fontSize: 12,
               fontWeight: FontWeight.w600,
               color: isSelected ? primaryColor : const Color(0xFF64748B),
             ),
@@ -830,203 +829,241 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       displayData = _allExcelData;
     }
 
-    if (displayData.isEmpty)
+    if (displayData.isEmpty) {
       return Center(
         child: Text(
-          'No data to display',
+          'No data',
           style: GoogleFonts.cairo(color: const Color(0xFF64748B)),
         ),
       );
+    }
 
-    return ListView.builder(
-      itemCount: displayData.length > 100 ? 100 : displayData.length,
-      itemBuilder: (context, rowIndex) {
-        final record = displayData[rowIndex];
-        final globalIndex = _allExcelData.indexOf(record);
-        final section = _rowSections[globalIndex];
-        final date = _rowPickupDates[globalIndex];
+    return SingleChildScrollView(
+      scrollDirection: Axis.horizontal,
+      child: SizedBox(
+        width: 1600,
+        child: Column(
+          children: [
+            // Header row
+            Container(
+              height: 36,
+              decoration: const BoxDecoration(
+                color: Color(0xFFF1F5F9),
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+              ),
+              child: Row(
+                children: [
+                  _previewHeaderCell('Status', 110),
+                  _previewHeaderCell('Name', 140),
+                  _previewHeaderCell('Design Order', 100),
+                  _previewHeaderCell('Contract', 100),
+                  _previewHeaderCell('Item', 60),
+                  _previewHeaderCell('Product Code', 120),
+                  _previewHeaderCell('Description', 200),
+                  _previewHeaderCell('QTY', 50),
+                  _previewHeaderCell('Unit', 40),
+                  _previewHeaderCell('Value', 90),
+                  _previewHeaderCell('Sales Eng.', 130),
+                  _previewHeaderCell('Factory', 60),
+                  _previewHeaderCell('Order Date', 110),
+                  _previewHeaderCell('End Date', 110),
+                  _previewHeaderCell('Delivery Date', 110),
+                ],
+              ),
+            ),
+            // Data rows
+            Expanded(
+              child: ListView.builder(
+                itemCount: displayData.length > 100 ? 100 : displayData.length,
+                itemBuilder: (context, rowIndex) {
+                  final record = displayData[rowIndex];
+                  final globalIndex = _allExcelData.indexOf(record);
+                  final status = _rowStatuses[globalIndex] ?? _defaultStatus;
+                  final orderDate = _rowOrderDates[globalIndex];
+                  final endDate = _rowEndDates[globalIndex];
+                  final deliveryDate = _rowDeliveryDates[globalIndex];
 
-        return Container(
-          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-          decoration: BoxDecoration(
-            border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
-            color: _selectedTab == 1 ? Colors.orange.shade50 : null,
-          ),
-          child: Row(
-            children: [
-              SizedBox(
-                width: 30,
-                child: Text(
-                  '${rowIndex + 1}',
-                  style: GoogleFonts.cairo(fontSize: 10, color: Colors.grey),
-                ),
-              ),
-              // Customer Name
-              SizedBox(
-                width: 130,
-                child: Text(
-                  record['customer_name']?.toString() ?? '',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Design Order
-              SizedBox(
-                width: 80,
-                child: Text(
-                  record['design_order']?.toString() ?? '',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    color: blueColor,
-                    fontWeight: FontWeight.w600,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Value
-              SizedBox(
-                width: 80,
-                child: Text(
-                  record['value']?.toString() ?? '',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w500,
-                    color: greenColor,
-                  ),
-                  textAlign: TextAlign.right,
-                ),
-              ),
-              // Contract Num
-              SizedBox(
-                width: 90,
-                child: Text(
-                  record['contract_number']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Item
-              SizedBox(
-                width: 50,
-                child: Text(
-                  record['item_number']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                ),
-              ),
-              // Product Code
-              SizedBox(
-                width: 120,
-                child: Text(
-                  record['product_code']?.toString() ?? '',
-                  style: GoogleFonts.cairo(
-                    fontSize: 10,
-                    color: const Color(0xFF475569),
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Description
-              Expanded(
-                child: Text(
-                  record['description']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                  overflow: TextOverflow.ellipsis,
-                  maxLines: 2,
-                ),
-              ),
-              // QTY
-              SizedBox(
-                width: 40,
-                child: Text(
-                  record['quantity']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              // Unit
-              SizedBox(
-                width: 35,
-                child: Text(
-                  record['unit_of_measure']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              // Sales Engineer
-              SizedBox(
-                width: 100,
-                child: Text(
-                  record['sales_engineer']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 10),
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ),
-              // Factory
-              SizedBox(
-                width: 50,
-                child: Text(
-                  record['factory']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 11),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              // Delivery Date
-              SizedBox(
-                width: 80,
-                child: Text(
-                  record['delivery_date']?.toString() ?? '',
-                  style: GoogleFonts.cairo(fontSize: 10),
-                  textAlign: TextAlign.center,
-                ),
-              ),
-              const SizedBox(width: 8),
-              // Section Dropdown
-              SizedBox(
-                width: 140,
-                child: DropdownButtonFormField<String>(
-                  value: section,
-                  isExpanded: true,
-                  decoration: InputDecoration(
-                    hintText: 'Status',
-                    hintStyle: GoogleFonts.cairo(
-                      fontSize: 9,
-                      color: Colors.grey,
+                  return Container(
+                    height: 40,
+                    decoration: BoxDecoration(
+                      border: const Border(
+                        bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                      ),
+                      color: _selectedTab == 1 ? Colors.orange.shade50 : null,
                     ),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 6,
-                      vertical: 2,
-                    ),
-                    isDense: true,
-                    filled: true,
-                    fillColor: Colors.white,
-                  ),
-                  style: GoogleFonts.cairo(fontSize: 10),
-                  items: _sections
-                      .map(
-                        (s) => DropdownMenuItem(
-                          value: s,
-                          child: Text(
-                            s,
-                            style: GoogleFonts.cairo(fontSize: 9),
-                            overflow: TextOverflow.ellipsis,
+                    child: Row(
+                      children: [
+                        // Status dropdown
+                        SizedBox(
+                          width: 110,
+                          child: DropdownButtonFormField<String>(
+                            value: status,
+                            isExpanded: true,
+                            decoration: const InputDecoration(
+                              isDense: true,
+                              contentPadding: EdgeInsets.symmetric(
+                                horizontal: 4,
+                              ),
+                            ),
+                            style: GoogleFonts.cairo(fontSize: 10),
+                            items: _sections
+                                .map(
+                                  (s) => DropdownMenuItem(
+                                    value: s,
+                                    child: Text(
+                                      s,
+                                      style: GoogleFonts.cairo(fontSize: 9),
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                )
+                                .toList(),
+                            onChanged: (v) =>
+                                setState(() => _rowStatuses[globalIndex] = v!),
                           ),
                         ),
-                      )
-                      .toList(),
-                  onChanged: (v) =>
-                      setState(() => _rowSections[globalIndex] = v!),
-                ),
+                        _previewDataCell(
+                          record['customer_name']?.toString() ?? '',
+                          140,
+                        ),
+                        _previewDataCell(
+                          record['design_order']?.toString() ?? '',
+                          100,
+                        ),
+                        _previewDataCell(
+                          record['contract_number']?.toString() ?? '',
+                          100,
+                        ),
+                        _previewDataCell(
+                          record['item_number']?.toString() ?? '',
+                          60,
+                        ),
+                        _previewDataCell(
+                          record['product_code']?.toString() ?? '',
+                          120,
+                        ),
+                        _previewDataCell(
+                          record['description']?.toString() ?? '',
+                          200,
+                        ),
+                        _previewDataCell(
+                          record['quantity']?.toString() ?? '',
+                          50,
+                        ),
+                        _previewDataCell(
+                          record['unit_of_measure']?.toString() ?? '',
+                          40,
+                        ),
+                        _previewDataCell(record['value']?.toString() ?? '', 90),
+                        _previewDataCell(
+                          record['sales_engineer']?.toString() ?? '',
+                          130,
+                        ),
+                        _previewDataCell(
+                          record['factory']?.toString() ?? '',
+                          60,
+                        ),
+                        // Date pickers
+                        SizedBox(
+                          width: 110,
+                          child: _buildDateCell(
+                            'Order',
+                            orderDate,
+                            () => _pickDateForRow(globalIndex, 'order_date'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 110,
+                          child: _buildDateCell(
+                            'End',
+                            endDate,
+                            () => _pickDateForRow(globalIndex, 'end_date'),
+                          ),
+                        ),
+                        SizedBox(
+                          width: 110,
+                          child: _buildDateCell(
+                            'Delivery',
+                            deliveryDate,
+                            () => _pickDateForRow(globalIndex, 'delivery_date'),
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
               ),
-            ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _previewHeaderCell(String text, double w) {
+    return SizedBox(
+      width: w,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          text,
+          style: GoogleFonts.cairo(
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: const Color(0xFF0F172A),
           ),
-        );
-      },
+          overflow: TextOverflow.ellipsis,
+        ),
+      ),
+    );
+  }
+
+  Widget _previewDataCell(String text, double w) {
+    return SizedBox(
+      width: w,
+      child: Padding(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        child: Text(
+          text,
+          style: GoogleFonts.cairo(fontSize: 10),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 1,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDateCell(String label, DateTime? date, VoidCallback onTap) {
+    return InkWell(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 4),
+        height: 30,
+        decoration: BoxDecoration(
+          border: Border.all(
+            color: date != null ? orangeColor : Colors.grey.shade300,
+          ),
+          borderRadius: BorderRadius.circular(4),
+          color: date != null ? orangeColor.withOpacity(0.05) : Colors.white,
+        ),
+        child: Row(
+          children: [
+            Icon(
+              Icons.calendar_today,
+              size: 10,
+              color: date != null ? orangeColor : Colors.grey,
+            ),
+            const SizedBox(width: 2),
+            Flexible(
+              child: Text(
+                date != null ? DateFormat('MM/dd').format(date!) : label,
+                style: GoogleFonts.cairo(fontSize: 9),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          ],
+        ),
+      ),
     );
   }
 

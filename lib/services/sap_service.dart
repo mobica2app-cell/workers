@@ -165,6 +165,7 @@ class SAPMainOrder {
   final double value;
   final String salesEngineer;
   final String? orderDate;
+  final String? endDate;
   final String? deliveryDate;
   final String? factory;
   final String? designTeam;
@@ -187,6 +188,7 @@ class SAPMainOrder {
     required this.value,
     required this.salesEngineer,
     this.orderDate,
+    this.endDate,
     this.deliveryDate,
     this.factory,
     this.designTeam,
@@ -211,6 +213,7 @@ class SAPMainOrder {
       value: double.tryParse(json['value']?.toString() ?? '0') ?? 0,
       salesEngineer: json['sales_engineer']?.toString() ?? '',
       orderDate: json['order_date']?.toString(),
+      endDate: json['end_date']?.toString(),
       deliveryDate: json['delivery_date']?.toString(),
       factory: json['factory']?.toString(),
       designTeam: json['design_team']?.toString(),
@@ -236,6 +239,7 @@ class SAPMainOrder {
       'value': value,
       'sales_engineer': salesEngineer,
       'order_date': orderDate,
+      'end_date': endDate,
       'delivery_date': deliveryDate,
       'factory': factory,
       'design_team': designTeam,

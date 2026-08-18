@@ -6,6 +6,7 @@ import 'package:mobitem/pages/profile_page.dart';
 import 'package:universal_html/html.dart' as html;
 import '../dashboard_page.dart';
 import '../services/sap_service.dart';
+import 'department_tracking_page.dart';
 import 'login_page.dart';
 import 'orders_page.dart';
 
@@ -38,6 +39,7 @@ class _MainShellState extends State<MainShell> {
     _NavItem(icon: Icons.dashboard_outlined, label: 'Dashboard'),
     _NavItem(icon: Icons.analytics_outlined, label: 'Analytics'),
     _NavItem(icon: Icons.person, label: 'Profile'),
+    _NavItem(icon: Icons.business, label: 'Departments'),
   ];
 
   // Limited nav items for non-head users (Orders + Profile only)
@@ -217,6 +219,7 @@ class _MainShellState extends State<MainShell> {
         case 1: return DashboardPage(sapService: widget.sapService);
         case 2: return AnalyticsPage(sapService: widget.sapService);
         case 3: return ProfilePage(employee: widget.loggedInEmployee);
+        case 4:return const DepartmentTrackingPage();
         default: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
       }
     } else {
