@@ -95,7 +95,6 @@ class _OrdersPageState extends State<OrdersPage> {
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
   static const List<String> _allStatuses = [
-    'ادارة تصميم المنتجات',
     'Drawing Submittal',
     'Approval',
     'modifications submitted',
@@ -113,6 +112,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'الادارة الهندسه',
     'design studio',
     'imported',
+    'ادارة تصميم المنتجات',
     'Unknown',
     'completed',
     'on_hold',

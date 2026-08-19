@@ -1,9 +1,11 @@
 // lib/pages/department_tracking_page.dart
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
+import '../services/audit_service.dart';
 import '../services/sap_service.dart';
 
 class DepartmentTrackingPage extends StatefulWidget {
@@ -16,12 +18,20 @@ class DepartmentTrackingPage extends StatefulWidget {
 class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   final EmployeeAuthService _authService = EmployeeAuthService(Supabase.instance.client);
   final SAPMainService _sapService = SAPMainService(Supabase.instance.client);
+  final AuditService _auditService = AuditService(Supabase.instance.client);
 
   List<EmployeeAuth> _allEmployees = [];
   List<SAPMainOrder> _allOrders = [];
+  List<Map<String, dynamic>> _auditLogs = [];
   Map<String, List<EmployeeAuth>> _departmentsMap = {};
   bool _isLoading = true;
   String _searchQuery = '';
+
+  // Date filter
+  String _dateFilter = 'all'; // 'all', 'today', 'week', 'month'
+
+  // Filtered audit logs based on date filter
+  List<Map<String, dynamic>> _filteredAuditLogs = [];
 
   @override
   void initState() {
@@ -34,8 +44,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     try {
       final employees = await _authService.getAllEmployees();
       final orders = await _sapService.getAllOrders();
+      final auditLogs = await _auditService.getRecentChanges(limit: 5000);
 
-      // Group employees by department
       final deptMap = <String, List<EmployeeAuth>>{};
       for (var emp in employees) {
         final dept = emp.department ?? 'No Department';
@@ -45,43 +55,104 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       setState(() {
         _allEmployees = employees;
         _allOrders = orders;
+        _auditLogs = auditLogs;
         _departmentsMap = deptMap;
         _isLoading = false;
       });
+
+      _applyFilters();
     } catch (e) {
       print('Error loading departments: $e');
       setState(() => _isLoading = false);
     }
   }
 
-  // Get workload for an employee
+  // Apply date and search filters
+  void _applyFilters() {
+    setState(() {
+      _filteredAuditLogs = _auditLogs.where((log) {
+        // Date filter
+        if (_dateFilter != 'all') {
+          final changedAt = DateTime.tryParse(log['changed_at'] ?? '');
+          if (changedAt == null) return false;
+
+          final now = DateTime.now();
+          final today = DateTime(now.year, now.month, now.day);
+          final tomorrow = today.add(const Duration(days: 1));
+          final weekStart = today.subtract(Duration(days: today.weekday - 1));
+          final monthStart = DateTime(now.year, now.month, 1);
+
+          switch (_dateFilter) {
+            case 'today':
+              return changedAt.isAfter(today) && changedAt.isBefore(tomorrow);
+            case 'week':
+              return changedAt.isAfter(weekStart) && changedAt.isBefore(tomorrow);
+            case 'month':
+              return changedAt.isAfter(monthStart) && changedAt.isBefore(tomorrow);
+          }
+        }
+        return true;
+      }).where((log) {
+        // Search by Design Order ID
+        if (_searchQuery.isNotEmpty) {
+          final designOrder = log['design_order']?.toString() ?? '';
+          return designOrder.toLowerCase().contains(_searchQuery.toLowerCase());
+        }
+        return true;
+      }).toList();
+    });
+  }
+
+  // Get workload for an employee (from filtered audit logs where status changed to Done)
   int _getEmployeeWorkload(EmployeeAuth employee) {
     int count = 0;
     for (var order in _allOrders) {
-      if (order.responsibleEngineer == employee.fullName ||
-          order.reviewer == employee.fullName ||
-          order.correspondenceEngineer == employee.fullName) {
+      // Priority: correspondenceEngineer > responsibleEngineer
+      // If correspondenceEngineer is set, only count that (ignore responsibleEngineer)
+      // Reviewer is removed entirely
+      if (order.correspondenceEngineer == employee.fullName) {
+        // Employee is the correspondence engineer
+        count++;
+      } else if (order.responsibleEngineer == employee.fullName) {
+        // Employee is the responsible engineer
         count++;
       }
     }
     return count;
   }
 
-  // Get completed work for an employee
+  // Get completed work in filtered period
   int _getEmployeeCompleted(EmployeeAuth employee) {
+    final completedOrderIds = <String>{};
+
+    for (var log in _filteredAuditLogs) {
+      final fieldName = log['field_name']?.toString() ?? '';
+      final newValue = log['new_value']?.toString() ?? '';
+
+      if (fieldName == 'status' && (newValue == 'Done' || newValue == 'completed')) {
+        final designOrder = log['design_order']?.toString() ?? '';
+        if (designOrder.isNotEmpty) {
+          completedOrderIds.add(designOrder);
+        }
+      }
+    }
+
     int count = 0;
     for (var order in _allOrders) {
-      if ((order.responsibleEngineer == employee.fullName ||
-          order.reviewer == employee.fullName ||
-          order.correspondenceEngineer == employee.fullName) &&
-          (order.status == 'Done' || order.status == 'completed')) {
-        count++;
+      // Same priority logic: correspondenceEngineer > responsibleEngineer
+      if (order.correspondenceEngineer == employee.fullName) {
+        if (completedOrderIds.contains(order.designOrder)) {
+          count++;
+        }
+      } else if (order.responsibleEngineer == employee.fullName) {
+        if (completedOrderIds.contains(order.designOrder)) {
+          count++;
+        }
       }
     }
     return count;
   }
 
-  // Get department color
   Color _getDepartmentColor(String department) {
     switch (department) {
       case 'Technical Office': return Colors.blue;
@@ -125,23 +196,56 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
           ? const Center(child: CircularProgressIndicator())
           : Column(
         children: [
-          // Search
+          // Search and Date Filters
           Padding(
             padding: const EdgeInsets.all(16),
-            child: TextField(
-              onChanged: (value) => setState(() => _searchQuery = value),
-              style: GoogleFonts.cairo(fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'Search departments...',
-                hintStyle: GoogleFonts.cairo(color: Colors.grey),
-                prefixIcon: const Icon(Icons.search),
-                filled: true,
-                fillColor: Colors.white,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+            child: Column(
+              children: [
+                // Search
+                TextField(
+                  onChanged: (value) {
+                    setState(() => _searchQuery = value);
+                    _applyFilters();
+                  },
+                  style: GoogleFonts.cairo(fontSize: 14),
+                  decoration: InputDecoration(
+                    hintText: 'Search by Design Order ID...',
+                    hintStyle: GoogleFonts.cairo(color: Colors.grey),
+                    prefixIcon: const Icon(Icons.search),
+                    filled: true,
+                    fillColor: Colors.white,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(10),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
                 ),
-              ),
+                const SizedBox(height: 12),
+                // Date filter chips
+                Row(
+                  children: [
+                    _buildDateFilterChip('All', 'all'),
+                    const SizedBox(width: 8),
+                    _buildDateFilterChip('Today', 'today'),
+                    const SizedBox(width: 8),
+                    _buildDateFilterChip('This Week', 'week'),
+                    const SizedBox(width: 8),
+                    _buildDateFilterChip('This Month', 'month'),
+                  ],
+                ),
+                // Show filtered count
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: Text(
+                    '${_filteredAuditLogs.length} changes in selected period',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: const Color(0xFF64748B),
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
           // Department list
@@ -163,6 +267,31 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildDateFilterChip(String label, String value) {
+    final isSelected = _dateFilter == value;
+    return FilterChip(
+      selected: isSelected,
+      label: Text(
+        label,
+        style: GoogleFonts.cairo(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: isSelected ? Colors.white : const Color(0xFF334155),
+        ),
+      ),
+      onSelected: (selected) {
+        setState(() => _dateFilter = value);
+        _applyFilters();
+      },
+      selectedColor: const Color(0xFF6366F1),
+      checkmarkColor: Colors.white,
+      backgroundColor: Colors.white,
+      side: BorderSide(
+        color: isSelected ? const Color(0xFF6366F1) : Colors.grey.shade300,
       ),
     );
   }
@@ -210,7 +339,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         children: [
           const Divider(),
           const SizedBox(height: 8),
-          // Employees in this department
           ...employees.map((emp) => _buildEmployeeTile(emp, color)),
         ],
       ),
@@ -266,7 +394,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   ],
                 ),
                 const SizedBox(height: 6),
-                // Progress bar
                 ClipRRect(
                   borderRadius: BorderRadius.circular(4),
                   child: LinearProgressIndicator(
