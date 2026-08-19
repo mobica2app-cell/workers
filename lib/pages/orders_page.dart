@@ -227,10 +227,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (value.isEmpty || value == '-') {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(
-            '⚠️ No data to copy',
-            style: GoogleFonts.cairo(),
-          ),
+          content: Text('⚠️ No data to copy', style: GoogleFonts.cairo()),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
           duration: const Duration(seconds: 1),
@@ -302,17 +299,23 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    final selectedOrders = _allOrders.where((o) => _selectedRowsIds.contains(o.id)).toList();
+    final selectedOrders = _allOrders
+        .where((o) => _selectedRowsIds.contains(o.id))
+        .toList();
     final StringBuffer buffer = StringBuffer();
     buffer.writeln('📋 Selected Orders (${selectedOrders.length}):');
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
 
     for (var order in selectedOrders) {
-      buffer.writeln('• ${order.designOrder} | ${order.customerName} | ${order.status} | \$${_formatNumber(order.value)}');
+      buffer.writeln(
+        '• ${order.designOrder} | ${order.customerName} | ${order.status} | \$${_formatNumber(order.value)}',
+      );
     }
     buffer.writeln('━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     buffer.writeln('Total Orders: ${selectedOrders.length}');
-    buffer.writeln('Total Value: \$${_formatNumber(selectedOrders.fold(0.0, (sum, o) => sum + o.value))}');
+    buffer.writeln(
+      'Total Value: \$${_formatNumber(selectedOrders.fold(0.0, (sum, o) => sum + o.value))}',
+    );
 
     Clipboard.setData(ClipboardData(text: buffer.toString()));
 
@@ -348,26 +351,47 @@ class _OrdersPageState extends State<OrdersPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Bulk Edit', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-        content: Column(mainAxisSize: MainAxisSize.min, children: [
-          Text('${_selectedRowsIds.length} rows selected', style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B))),
-          const SizedBox(height: 16),
-          Wrap(spacing: 8, children: [
-            _buildBulkEditOption('Status', 'status'),
-            _buildBulkEditOption('Design Team', 'design_team'),
-            _buildBulkEditOption('Factory', 'factory'),
-            _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
-            _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
-            _buildBulkEditOption('Reviewer', 'reviewer'),
-            _buildBulkEditOption('Alt. Engineer', 'correspondence_engineer'),
-            _buildBulkEditOption('Value', 'value'),
-            // Add date picker options for bulk edit
-            _buildBulkDateOption('O-Date', 'order_date'),
-            _buildBulkDateOption('Delivery Date', 'delivery_date'),
-          ]),
-        ]),
+        title: Text(
+          'Bulk Edit',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '${_selectedRowsIds.length} rows selected',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                color: const Color(0xFF64748B),
+              ),
+            ),
+            const SizedBox(height: 16),
+            Wrap(
+              spacing: 8,
+              children: [
+                _buildBulkEditOption('Status', 'status'),
+                _buildBulkEditOption('Design Team', 'design_team'),
+                _buildBulkEditOption('Factory', 'factory'),
+                _buildBulkEditOption('Sales Engineer', 'sales_engineer'),
+                _buildBulkEditOption('Resp. Engineer', 'responsible_engineer'),
+                _buildBulkEditOption('Reviewer', 'reviewer'),
+                _buildBulkEditOption(
+                  'Alt. Engineer',
+                  'correspondence_engineer',
+                ),
+                _buildBulkEditOption('Value', 'value'),
+                // Add date picker options for bulk edit
+                _buildBulkDateOption('O-Date', 'order_date'),
+                _buildBulkDateOption('Delivery Date', 'delivery_date'),
+              ],
+            ),
+          ],
+        ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo()),
+          ),
         ],
       ),
     );
@@ -383,11 +407,14 @@ class _OrdersPageState extends State<OrdersPage> {
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
-      child: Row(mainAxisSize: MainAxisSize.min, children: [
-        const Icon(Icons.calendar_today, size: 12),
-        const SizedBox(width: 4),
-        Text(label, style: GoogleFonts.cairo(fontSize: 11)),
-      ]),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.calendar_today, size: 12),
+          const SizedBox(width: 4),
+          Text(label, style: GoogleFonts.cairo(fontSize: 11)),
+        ],
+      ),
     );
   }
 
@@ -445,50 +472,141 @@ class _OrdersPageState extends State<OrdersPage> {
     final newOrder = await showDialog<SAPMainOrder>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Add New Task', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 18)),
+        title: Text(
+          'Add New Task',
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600, fontSize: 18),
+        ),
         content: SizedBox(
           width: 500,
           child: SingleChildScrollView(
-            child: Column(mainAxisSize: MainAxisSize.min, children: [
-              TextField(controller: nameController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Customer Name')),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: TextField(controller: contractController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Contract Number'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: designOrderController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Design Order'))),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: TextField(controller: itemController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Item'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: productCodeController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Product Code'))),
-              ]),
-              const SizedBox(height: 10),
-              TextField(controller: descriptionController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Description'), maxLines: 2),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: TextField(controller: qtyController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('QTY'), keyboardType: TextInputType.number)),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: unitController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Unit'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: valueController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Value'), keyboardType: TextInputType.number)),
-              ]),
-              const SizedBox(height: 10),
-              Row(children: [
-                Expanded(child: TextField(controller: factoryController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Factory'))),
-                const SizedBox(width: 10),
-                Expanded(child: TextField(controller: deliveryDateController, style: GoogleFonts.cairo(fontSize: 13), decoration: _buildInputDecoration('Delivery Date (YYYY-MM-DD)'))),
-              ]),
-            ]),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: nameController,
+                  style: GoogleFonts.cairo(fontSize: 13),
+                  decoration: _buildInputDecoration('Customer Name'),
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: contractController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Contract Number'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: designOrderController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Design Order'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: itemController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Item'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: productCodeController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Product Code'),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: descriptionController,
+                  style: GoogleFonts.cairo(fontSize: 13),
+                  decoration: _buildInputDecoration('Description'),
+                  maxLines: 2,
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: qtyController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('QTY'),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: unitController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Unit'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: valueController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Value'),
+                        keyboardType: TextInputType.number,
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: factoryController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration('Factory'),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: TextField(
+                        controller: deliveryDateController,
+                        style: GoogleFonts.cairo(fontSize: 13),
+                        decoration: _buildInputDecoration(
+                          'Delivery Date (YYYY-MM-DD)',
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
           ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo()),
+          ),
           ElevatedButton(
             onPressed: () {
-              if (nameController.text.isEmpty || designOrderController.text.isEmpty) {
+              if (nameController.text.isEmpty ||
+                  designOrderController.text.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Customer Name and Design Order are required', style: GoogleFonts.cairo()), backgroundColor: Colors.red),
+                  SnackBar(
+                    content: Text(
+                      'Customer Name and Design Order are required',
+                      style: GoogleFonts.cairo(),
+                    ),
+                    backgroundColor: Colors.red,
+                  ),
                 );
                 return;
               }
@@ -497,18 +615,34 @@ class _OrdersPageState extends State<OrdersPage> {
                 id: '',
                 status: 'Tasks',
                 customerName: nameController.text.trim(),
-                itemNumber: itemController.text.trim().isEmpty ? '1' : itemController.text.trim(),
+                itemNumber: itemController.text.trim().isEmpty
+                    ? '1'
+                    : itemController.text.trim(),
                 productCode: productCodeController.text.trim(),
                 contractNumber: contractController.text.trim(),
                 description: descriptionController.text.trim(),
                 designOrder: designOrderController.text.trim(),
-                quantity: double.tryParse(qtyController.text.replaceAll(',', '')) ?? 0,
-                unitOfMeasure: unitController.text.trim().isEmpty ? 'EA' : unitController.text.trim(),
-                value: double.tryParse(valueController.text.replaceAll(',', '').replaceAll('\$', '')) ?? 0,
+                quantity:
+                    double.tryParse(qtyController.text.replaceAll(',', '')) ??
+                    0,
+                unitOfMeasure: unitController.text.trim().isEmpty
+                    ? 'EA'
+                    : unitController.text.trim(),
+                value:
+                    double.tryParse(
+                      valueController.text
+                          .replaceAll(',', '')
+                          .replaceAll('\$', ''),
+                    ) ??
+                    0,
                 salesEngineer: _currentUserName,
                 orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                deliveryDate: deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
-                factory: factoryController.text.trim().isEmpty ? null : factoryController.text.trim(),
+                deliveryDate: deliveryDateController.text.trim().isEmpty
+                    ? null
+                    : deliveryDateController.text.trim(),
+                factory: factoryController.text.trim().isEmpty
+                    ? null
+                    : factoryController.text.trim(),
                 designTeam: widget.loggedInEmployee?.department,
                 responsibleEngineer: null,
                 reviewer: null,
@@ -518,8 +652,13 @@ class _OrdersPageState extends State<OrdersPage> {
 
               Navigator.pop(ctx, order);
             },
-            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF0F172A)),
-            child: Text('Add Task', style: GoogleFonts.cairo(color: Colors.white)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF0F172A),
+            ),
+            child: Text(
+              'Add Task',
+              style: GoogleFonts.cairo(color: Colors.white),
+            ),
           ),
         ],
       ),
@@ -529,26 +668,30 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = true);
       try {
         final supabase = Supabase.instance.client;
-        final response = await supabase.from('sap_main_orders').insert({
-          'status': 'Tasks',
-          'customer_name': newOrder.customerName,
-          'item_number': newOrder.itemNumber,
-          'product_code': newOrder.productCode,
-          'contract_number': newOrder.contractNumber,
-          'description': newOrder.description,
-          'design_order': newOrder.designOrder,
-          'quantity': newOrder.quantity,
-          'unit_of_measure': newOrder.unitOfMeasure,
-          'value': newOrder.value,
-          'sales_engineer': newOrder.salesEngineer,
-          'order_date': newOrder.orderDate,
-          'delivery_date': newOrder.deliveryDate,
-          'factory': newOrder.factory,
-          'design_team': newOrder.designTeam,
-          'responsible_engineer': newOrder.responsibleEngineer,
-          'reviewer': newOrder.reviewer,
-          'correspondence_engineer': newOrder.correspondenceEngineer,
-        }).select().single();
+        final response = await supabase
+            .from('sap_main_orders')
+            .insert({
+              'status': 'Tasks',
+              'customer_name': newOrder.customerName,
+              'item_number': newOrder.itemNumber,
+              'product_code': newOrder.productCode,
+              'contract_number': newOrder.contractNumber,
+              'description': newOrder.description,
+              'design_order': newOrder.designOrder,
+              'quantity': newOrder.quantity,
+              'unit_of_measure': newOrder.unitOfMeasure,
+              'value': newOrder.value,
+              'sales_engineer': newOrder.salesEngineer,
+              'order_date': newOrder.orderDate,
+              'delivery_date': newOrder.deliveryDate,
+              'factory': newOrder.factory,
+              'design_team': newOrder.designTeam,
+              'responsible_engineer': newOrder.responsibleEngineer,
+              'reviewer': newOrder.reviewer,
+              'correspondence_engineer': newOrder.correspondenceEngineer,
+            })
+            .select()
+            .single();
 
         final createdOrder = SAPMainOrder.fromJson(response);
 
@@ -568,7 +711,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-// Helper for input decoration
+  // Helper for input decoration
   InputDecoration _buildInputDecoration(String label) {
     return InputDecoration(
       labelText: label,
@@ -645,7 +788,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-                0;
+            0;
       }
 
       for (var orderId in _selectedRowsIds) {
@@ -681,7 +824,11 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Add this method for date picking
-  Future<void> _pickDateForEdit(SAPMainOrder order, String field, String currentValue) async {
+  Future<void> _pickDateForEdit(
+    SAPMainOrder order,
+    String field,
+    String currentValue,
+  ) async {
     final currentDate = DateTime.tryParse(currentValue) ?? DateTime.now();
 
     final pickedDate = await showDatePicker(
@@ -728,10 +875,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method to show an edit dialog for any field
   Future<void> _editOrderField(
-      SAPMainOrder order,
-      String field,
-      String currentValue,
-      ) async {
+    SAPMainOrder order,
+    String field,
+    String currentValue,
+  ) async {
     // If multiple rows are selected in edit mode, apply to ALL selected rows
     if (_editMode && _selectedRowsIds.length > 1) {
       // Just call bulk edit directly
@@ -789,7 +936,7 @@ class _OrdersPageState extends State<OrdersPage> {
               double.tryParse(
                 newValue.replaceAll(',', '').replaceAll('\$', ''),
               ) ??
-                  0;
+              0;
         }
 
         await supabase
@@ -908,7 +1055,8 @@ class _OrdersPageState extends State<OrdersPage> {
           deliveryDate: field == 'delivery_date'
               ? newValue.toString()
               : oldOrder.deliveryDate,
-          endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate, // ✅ ADD THIS
+          endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate,
+          // ✅ ADD THIS
           factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
           designTeam: field == 'design_team'
               ? newValue.toString()
@@ -932,7 +1080,10 @@ class _OrdersPageState extends State<OrdersPage> {
     _rebuildGroups();
   }
 
-  Future<void> _updateOrderDesignTeam(SAPMainOrder order, String newValue) async {
+  Future<void> _updateOrderDesignTeam(
+    SAPMainOrder order,
+    String newValue,
+  ) async {
     final oldValue = order.designTeam;
 
     // Auto-map status based on design team
@@ -967,17 +1118,16 @@ class _OrdersPageState extends State<OrdersPage> {
       int updated = 0;
 
       for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders.where((o) => o.id == orderId).firstOrNull;
+        final selectedOrder = _allOrders
+            .where((o) => o.id == orderId)
+            .firstOrNull;
         if (selectedOrder != null) {
           try {
             final selectedAutoStatus = getAutoStatus(newValue);
 
             await supabase
                 .from('sap_main_orders')
-                .update({
-              'design_team': newValue,
-              'status': selectedAutoStatus,
-            })
+                .update({'design_team': newValue, 'status': selectedAutoStatus})
                 .eq('id', selectedOrder.id);
 
             await _auditService.logChange(
@@ -1021,10 +1171,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final supabase = Supabase.instance.client;
       await supabase
           .from('sap_main_orders')
-          .update({
-        'design_team': newValue,
-        'status': autoStatus,
-      })
+          .update({'design_team': newValue, 'status': autoStatus})
           .eq('id', order.id);
 
       await _auditService.logChange(
@@ -1134,7 +1281,10 @@ class _OrdersPageState extends State<OrdersPage> {
             orderDate: field == 'order_date'
                 ? newValue.toString()
                 : oldOrder.orderDate,
-            endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate, // ✅ ADD THIS
+            endDate: field == 'end_date'
+                ? newValue.toString()
+                : oldOrder.endDate,
+            // ✅ ADD THIS
             deliveryDate: field == 'delivery_date'
                 ? newValue.toString()
                 : oldOrder.deliveryDate,
@@ -1206,10 +1356,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update engineer assignment in database
   Future<void> _updateOrderEngineer(
-      SAPMainOrder order,
-      String field,
-      String? newValue,
-      ) async {
+    SAPMainOrder order,
+    String field,
+    String? newValue,
+  ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
     // If multiple rows selected, apply to all
@@ -1448,7 +1598,7 @@ class _OrdersPageState extends State<OrdersPage> {
             designOrder: order.designOrder,
             fieldName: 'order_deleted',
             oldValue:
-            '${order.designOrder} | ${order.customerName} | ${order.description}',
+                '${order.designOrder} | ${order.customerName} | ${order.description}',
             newValue: null,
             changedBy: _currentUserName,
             changedById: _currentUserId,
@@ -1507,7 +1657,7 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
         actionType: 'delete',
         notes:
-        'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
+            'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
       );
     }
   }
@@ -1650,9 +1800,9 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) =>
-        o.contractNumber.toLowerCase().contains(q) ||
-            o.customerName.toLowerCase().contains(q),
-      )
+                o.contractNumber.toLowerCase().contains(q) ||
+                o.customerName.toLowerCase().contains(q),
+          )
           .toList();
     }
     if (_filterStatus != null)
@@ -1665,17 +1815,17 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) => o.contractNumber.toLowerCase().contains(
-          _filterContractNumber!.toLowerCase(),
-        ),
-      )
+              _filterContractNumber!.toLowerCase(),
+            ),
+          )
           .toList();
     if (_filterDesignOrder != null)
       result = result
           .where(
             (o) => o.designOrder.toLowerCase().contains(
-          _filterDesignOrder!.toLowerCase(),
-        ),
-      )
+              _filterDesignOrder!.toLowerCase(),
+            ),
+          )
           .toList();
     if (_filterSalesEngineer != null)
       result = result
@@ -1702,7 +1852,7 @@ class _OrdersPageState extends State<OrdersPage> {
         result = result
             .where(
               (o) => o.correspondenceEngineer == _filterCorrespondenceEngineer,
-        )
+            )
             .toList();
     }
 
@@ -1712,14 +1862,14 @@ class _OrdersPageState extends State<OrdersPage> {
 
   bool get _hasActiveFilters =>
       _filterStatus != null ||
-          _filterFactory != null ||
-          _filterDesignTeam != null ||
-          _filterContractNumber != null ||
-          _filterDesignOrder != null ||
-          _filterSalesEngineer != null ||
-          _filterResponsibleEngineer != null ||
-          _filterReviewer != null ||
-          _filterCorrespondenceEngineer != null;
+      _filterFactory != null ||
+      _filterDesignTeam != null ||
+      _filterContractNumber != null ||
+      _filterDesignOrder != null ||
+      _filterSalesEngineer != null ||
+      _filterResponsibleEngineer != null ||
+      _filterReviewer != null ||
+      _filterCorrespondenceEngineer != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -1745,7 +1895,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final sectionOrders = _groupedOrders[status] ?? [];
       if (sectionOrders.isEmpty) return;
       final allSelected = sectionOrders.every(
-            (o) => _selectedRowsIds.contains(o.id),
+        (o) => _selectedRowsIds.contains(o.id),
       );
       if (allSelected) {
         for (var o in sectionOrders) {
@@ -1802,7 +1952,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     'Save',
                     'Save to device',
                     const Color(0xFF059669),
-                        () async {
+                    () async {
                       Navigator.pop(ctx);
                       await _saveOrders(selected, 'Selected');
                     },
@@ -1867,9 +2017,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (_isAdmin) {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (_) => OrderTrackingPage(order: order),
-        ),
+        MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
       );
     }
   }
@@ -1994,7 +2142,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                              tempContractNumber = v.isEmpty ? null : v,
+                                  tempContractNumber = v.isEmpty ? null : v,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2020,7 +2168,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                              tempDesignOrder = v.isEmpty ? null : v,
+                                  tempDesignOrder = v.isEmpty ? null : v,
                             ),
                           ),
                         ],
@@ -2040,7 +2188,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Status',
                               tempStatus,
                               ['All', ..._allStatuses],
-                                  (v) => setDlg(() => tempStatus = v),
+                              (v) => setDlg(() => tempStatus = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2049,7 +2197,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Factory (${factories.length})',
                               tempFactory,
                               ['All', ...factories.toList()..sort()],
-                                  (v) => setDlg(() => tempFactory = v),
+                              (v) => setDlg(() => tempFactory = v),
                             ),
                           ),
                         ],
@@ -2059,7 +2207,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         'Design Team (${designTeams.length})',
                         tempDesignTeam,
                         ['All', ...designTeams.toList()..sort()],
-                            (v) => setDlg(() => tempDesignTeam = v),
+                        (v) => setDlg(() => tempDesignTeam = v),
                       ),
                     ],
                   ),
@@ -2076,7 +2224,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Sales Eng. (${salesEngineers.length})',
                               tempSalesEngineer,
                               ['All', ...salesEngineers.toList()..sort()],
-                                  (v) => setDlg(() => tempSalesEngineer = v),
+                              (v) => setDlg(() => tempSalesEngineer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2085,7 +2233,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Resp. Eng. (${responsibleEngineers.length})',
                               tempResponsibleEngineer,
                               ['All', ...responsibleEngineers.toList()..sort()],
-                                  (v) => setDlg(() => tempResponsibleEngineer = v),
+                              (v) => setDlg(() => tempResponsibleEngineer = v),
                             ),
                           ),
                         ],
@@ -2098,7 +2246,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Reviewer (${reviewers.length})',
                               tempReviewer,
                               ['All', ...reviewers.toList()..sort()],
-                                  (v) => setDlg(() => tempReviewer = v),
+                              (v) => setDlg(() => tempReviewer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2110,7 +2258,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 'All',
                                 ...correspondenceEngineers.toList()..sort(),
                               ],
-                                  (v) =>
+                              (v) =>
                                   setDlg(() => tempCorrespondenceEngineer = v),
                             ),
                           ),
@@ -2235,11 +2383,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Helper widget for filter dropdowns
   Widget _buildFilterDropdown(
-      String label,
-      String? value,
-      List<String> items,
-      Function(String?) onChanged,
-      ) {
+    String label,
+    String? value,
+    List<String> items,
+    Function(String?) onChanged,
+  ) {
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
@@ -2256,14 +2404,14 @@ class _OrdersPageState extends State<OrdersPage> {
       items: items
           .map(
             (s) => DropdownMenuItem(
-          value: s == 'All' ? null : s,
-          child: Text(
-            s == 'All' ? 'All' : s,
-            style: GoogleFonts.cairo(fontSize: 12),
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-      )
+              value: s == 'All' ? null : s,
+              child: Text(
+                s == 'All' ? 'All' : s,
+                style: GoogleFonts.cairo(fontSize: 12),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+          )
           .toList(),
       onChanged: (v) => onChanged(v),
     );
@@ -2304,8 +2452,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildTopBar() {
     final isAdmin =
         widget.loggedInEmployee?.role?.toLowerCase() == 'admin' ||
-            widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
-            widget.loggedInEmployee?.role?.toLowerCase() == 'head';
+        widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
+        widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
     return Container(
       height: 64,
@@ -2357,25 +2505,33 @@ class _OrdersPageState extends State<OrdersPage> {
           _buildMyWorkButton(),
           const SizedBox(width: 8),
           // Edit Mode checkbox - beside My Work button
-          Row(mainAxisSize: MainAxisSize.min, children: [
-            SizedBox(
-              width: 20, height: 20,
-              child: Checkbox(
-                value: _editMode,
-                onChanged: (v) => setState(() => _editMode = v ?? false),
-                activeColor: Colors.orange,
-                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 20,
+                height: 20,
+                child: Checkbox(
+                  value: _editMode,
+                  onChanged: (v) => setState(() => _editMode = v ?? false),
+                  activeColor: Colors.orange,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
               ),
-            ),
-            const SizedBox(width: 4),
-            GestureDetector(
-              onTap: () => setState(() => _editMode = !_editMode),
-              child: Text(
-                'Edit Mode',
-                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _editMode ? Colors.orange : const Color(0xFF64748B)),
+              const SizedBox(width: 4),
+              GestureDetector(
+                onTap: () => setState(() => _editMode = !_editMode),
+                child: Text(
+                  'Edit Mode',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: _editMode ? Colors.orange : const Color(0xFF64748B),
+                  ),
+                ),
               ),
-            ),
-          ]),
+            ],
+          ),
 
           const SizedBox(width: 8),
 
@@ -2384,13 +2540,18 @@ class _OrdersPageState extends State<OrdersPage> {
             icon: const Icon(Icons.add_task, size: 16),
             label: Text(
               'Add Task',
-              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+              ),
             ),
             style: OutlinedButton.styleFrom(
               foregroundColor: const Color(0xFF059669),
               side: const BorderSide(color: Color(0xFF059669)),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(6),
+              ),
               backgroundColor: Colors.white,
             ),
           ),
@@ -2405,11 +2566,14 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _employeeDropdownCell(String? currentValue, SAPMainOrder order, String field) {
+  Widget _employeeDropdownCell(
+    String? currentValue,
+    SAPMainOrder order,
+    String field,
+  ) {
     final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
-
 
     // Editable dropdown
     return SizedBox(
@@ -2426,42 +2590,109 @@ class _OrdersPageState extends State<OrdersPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
-              color: hasValue ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.grey.withOpacity(0.05),
+              color: hasValue
+                  ? const Color(0xFF6366F1).withOpacity(0.05)
+                  : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
-                color: hasValue ? const Color(0xFF6366F1).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+                color: hasValue
+                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                    : Colors.grey.withOpacity(0.2),
               ),
             ),
-            child: Row(mainAxisSize: MainAxisSize.min, children: [
-              Flexible(
-                child: Text(
-                  hasValue ? displayName : '-',
-                  style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w500, color: hasValue ? const Color(0xFF0F172A) : Colors.grey),
-                  overflow: TextOverflow.ellipsis,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Flexible(
+                  child: Text(
+                    hasValue ? displayName : '-',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
                 ),
-              ),
-              Icon(Icons.arrow_drop_down, size: 12, color: hasValue ? const Color(0xFF6366F1) : Colors.grey),
-            ]),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 12,
+                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
+                ),
+              ],
+            ),
           ),
           itemBuilder: (context) => [
             PopupMenuItem<String>(
               value: '',
-              child: Row(children: [const Icon(Icons.clear, size: 14, color: Colors.red), const SizedBox(width: 8), Text('Clear', style: GoogleFonts.cairo(fontSize: 12, color: Colors.red))]),
+              child: Row(
+                children: [
+                  const Icon(Icons.clear, size: 14, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Clear',
+                    style: GoogleFonts.cairo(fontSize: 12, color: Colors.red),
+                  ),
+                ],
+              ),
             ),
             const PopupMenuDivider(),
             ..._allEmployees.map((emp) {
               final isSelected = currentValue == emp.fullName;
               return PopupMenuItem<String>(
                 value: emp.fullName,
-                child: Row(children: [
-                  CircleAvatar(radius: 12, backgroundColor: Colors.blue.withOpacity(0.2), child: Text(emp.initials, style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.blue))),
-                  const SizedBox(width: 8),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                    Text(emp.fullName, style: GoogleFonts.cairo(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400, color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155)), overflow: TextOverflow.ellipsis),
-                    if (emp.role != null) Text(emp.role!, style: GoogleFonts.cairo(fontSize: 10, color: Colors.grey), overflow: TextOverflow.ellipsis),
-                  ])),
-                  if (isSelected) const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)),
-                ]),
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 12,
+                      backgroundColor: Colors.blue.withOpacity(0.2),
+                      child: Text(
+                        emp.initials,
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            emp.fullName,
+                            style: GoogleFonts.cairo(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                              color: isSelected
+                                  ? const Color(0xFF6366F1)
+                                  : const Color(0xFF334155),
+                            ),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          if (emp.role != null)
+                            Text(
+                              emp.role!,
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                color: Colors.grey,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                        ],
+                      ),
+                    ),
+                    if (isSelected)
+                      const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF6366F1),
+                      ),
+                  ],
+                ),
               );
             }),
           ],
@@ -2607,13 +2838,13 @@ class _OrdersPageState extends State<OrdersPage> {
           prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-            icon: const Icon(Icons.clear, size: 18),
-            onPressed: () {
-              _searchController.clear();
-              _searchQuery = '';
-              _rebuildGroups();
-            },
-          )
+                  icon: const Icon(Icons.clear, size: 18),
+                  onPressed: () {
+                    _searchController.clear();
+                    _searchQuery = '';
+                    _rebuildGroups();
+                  },
+                )
               : null,
           filled: true,
           fillColor: Colors.white,
@@ -2851,10 +3082,14 @@ class _OrdersPageState extends State<OrdersPage> {
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
-              color: hasValue ? const Color(0xFF6366F1).withOpacity(0.05) : Colors.grey.withOpacity(0.05),
+              color: hasValue
+                  ? const Color(0xFF6366F1).withOpacity(0.05)
+                  : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
-                color: hasValue ? const Color(0xFF6366F1).withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+                color: hasValue
+                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                    : Colors.grey.withOpacity(0.2),
               ),
             ),
             child: Row(
@@ -2863,29 +3098,66 @@ class _OrdersPageState extends State<OrdersPage> {
                 Flexible(
                   child: Text(
                     hasValue ? displayName : '-',
-                    style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w500, color: hasValue ? const Color(0xFF0F172A) : Colors.grey),
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
-                Icon(Icons.arrow_drop_down, size: 12, color: hasValue ? const Color(0xFF6366F1) : Colors.grey),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 12,
+                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
+                ),
               ],
             ),
           ),
           itemBuilder: (context) => [
             PopupMenuItem<String>(
               value: '',
-              child: Row(children: [const Icon(Icons.clear, size: 14, color: Colors.red), const SizedBox(width: 8), Text('Clear', style: GoogleFonts.cairo(fontSize: 12, color: Colors.red))]),
+              child: Row(
+                children: [
+                  const Icon(Icons.clear, size: 14, color: Colors.red),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Clear',
+                    style: GoogleFonts.cairo(fontSize: 12, color: Colors.red),
+                  ),
+                ],
+              ),
             ),
             const PopupMenuDivider(),
             ..._allTeamStatuses.map((s) {
               final isSelected = currentValue == s;
               return PopupMenuItem<String>(
                 value: s,
-                child: Row(children: [
-                  if (isSelected) const Icon(Icons.check, size: 16, color: Color(0xFF6366F1)) else const SizedBox(width: 16),
-                  const SizedBox(width: 8),
-                  Text(s, style: GoogleFonts.cairo(fontSize: 12, fontWeight: isSelected ? FontWeight.w700 : FontWeight.w400, color: isSelected ? const Color(0xFF6366F1) : const Color(0xFF334155))),
-                ]),
+                child: Row(
+                  children: [
+                    if (isSelected)
+                      const Icon(
+                        Icons.check,
+                        size: 16,
+                        color: Color(0xFF6366F1),
+                      )
+                    else
+                      const SizedBox(width: 16),
+                    const SizedBox(width: 8),
+                    Text(
+                      s,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: isSelected
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                        color: isSelected
+                            ? const Color(0xFF6366F1)
+                            : const Color(0xFF334155),
+                      ),
+                    ),
+                  ],
+                ),
               );
             }),
           ],
@@ -2933,18 +3205,14 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
           const Spacer(),
           // Copy selected button
-          _buildSmallBtn(
-            Icons.copy,
-            'Copy',
-            _copySelectedOrdersData,
-          ),
+          _buildSmallBtn(Icons.copy, 'Copy', _copySelectedOrdersData),
           const SizedBox(width: 8),
           // Bulk edit button (only in edit mode with selections)
           if (_editMode && _selectedRowsIds.isNotEmpty) ...[
             _buildSmallBtn(
               Icons.edit,
               'Bulk Edit',
-                  () => _showBulkEditDialog(),
+              () => _showBulkEditDialog(),
             ),
             const SizedBox(width: 8),
           ],
@@ -3008,7 +3276,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
                       itemExtentBuilder: (index, details) =>
-                      _flatList[index] is String ? 44.0 : 48.0,
+                          _flatList[index] is String ? 44.0 : 48.0,
                       itemBuilder: (_, i) {
                         final item = _flatList[i];
                         if (item is String)
@@ -3031,7 +3299,7 @@ class _OrdersPageState extends State<OrdersPage> {
           Expanded(
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) =>
-              n.metrics.axis == Axis.vertical ? true : false,
+                  n.metrics.axis == Axis.vertical ? true : false,
               child: Scrollbar(
                 controller: _horizontalScrollController,
                 thumbVisibility: true,
@@ -3053,7 +3321,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               addAutomaticKeepAlives: false,
                               addRepaintBoundaries: true,
                               itemExtentBuilder: (index, details) =>
-                              _flatList[index] is String ? 44.0 : 48.0,
+                                  _flatList[index] is String ? 44.0 : 48.0,
                               itemBuilder: (_, i) {
                                 final item = _flatList[i];
                                 if (item is String)
@@ -3197,9 +3465,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildSectionHeaderPlaceholder(
-      String status,
-      List<SAPMainOrder> orders,
-      ) {
+    String status,
+    List<SAPMainOrder> orders,
+  ) {
     final isExpanded = _expandedSections.contains(status);
     return GestureDetector(
       onTap: () => _toggleSection(status),
@@ -3210,12 +3478,7 @@ class _OrdersPageState extends State<OrdersPage> {
           color: _getStatusColor(status).withOpacity(0.08),
           border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
         ),
-        child: Row(
-          children: [
-
-            const Spacer(),
-          ],
-        ),
+        child: Row(children: [const Spacer()]),
       ),
     );
   }
@@ -3381,7 +3644,13 @@ class _OrdersPageState extends State<OrdersPage> {
               'Product Code',
               style: GoogleFonts.cairo(fontSize: 11),
             ),
-            _editableCell(order.contractNumber, 110, order, 'contract_number', 'Contract Number'),
+            _editableCell(
+              order.contractNumber,
+              110,
+              order,
+              'contract_number',
+              'Contract Number',
+            ),
             _editableCell(
               order.description,
               200,
@@ -3411,7 +3680,13 @@ class _OrdersPageState extends State<OrdersPage> {
               'QTY',
               align: TextAlign.right,
             ),
-            _editableCell(order.unitOfMeasure, 50, order, 'unit_of_measure', 'Unit'),
+            _editableCell(
+              order.unitOfMeasure,
+              50,
+              order,
+              'unit_of_measure',
+              'Unit',
+            ),
             _editableCell(
               _formatNumber(order.value),
               110,
@@ -3425,9 +3700,27 @@ class _OrdersPageState extends State<OrdersPage> {
                 color: const Color(0xFF059669),
               ),
             ),
-            _editableCell(order.salesEngineer, 150, order, 'sales_engineer', 'Sales Engineer'),
-            _editableCell(order.orderDate ?? '-', 100, order, 'order_date', 'Order Date'),
-            _editableCell(order.orderDate ?? '-', 100, order, 'end_date', 'End Date'),
+            _editableCell(
+              order.salesEngineer,
+              150,
+              order,
+              'sales_engineer',
+              'Sales Engineer',
+            ),
+            _editableCell(
+              order.orderDate ?? '-',
+              100,
+              order,
+              'order_date',
+              'Order Date',
+            ),
+            _editableCell(
+              order.endDate ?? '-',
+              100,
+              order,
+              'end_date',
+              'End Date',
+            ),
             _editableCell(
               order.deliveryDate ?? '-',
               100,
@@ -3435,7 +3728,13 @@ class _OrdersPageState extends State<OrdersPage> {
               'delivery_date',
               'Delivery Date',
             ),
-            _editableCell(order.factory ?? '-', 70, order, 'factory', 'Factory'),
+            _editableCell(
+              order.factory ?? '-',
+              70,
+              order,
+              'factory',
+              'Factory',
+            ),
             _designTeamDropdownCell(order.designTeam, order),
             _employeeDropdownCell(
               order.responsibleEngineer,
@@ -3455,18 +3754,21 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _editableCell(
-      String text,
-      double w,
-      SAPMainOrder order,
-      String field,
-      String fieldLabel, {
-        TextAlign align = TextAlign.left,
-        TextStyle? style,
-        TextOverflow overflow = TextOverflow.ellipsis,
-        int maxLines = 1,
-      }) {
+    String text,
+    double w,
+    SAPMainOrder order,
+    String field,
+    String fieldLabel, {
+    TextAlign align = TextAlign.left,
+    TextStyle? style,
+    TextOverflow overflow = TextOverflow.ellipsis,
+    int maxLines = 1,
+  }) {
     final canEdit = _isOrderEditable(order);
-    final isDateField = field == 'order_date' || field == 'delivery_date' || field == 'end_date';
+    final isDateField =
+        field == 'order_date' ||
+        field == 'delivery_date' ||
+        field == 'end_date';
 
     // Only make editable when Edit Mode is ON AND user can edit this order
     if (_editMode && canEdit) {
@@ -3490,16 +3792,27 @@ class _OrdersPageState extends State<OrdersPage> {
                   color: Colors.orange.withOpacity(0.05),
                 ),
                 child: Align(
-                  alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: align == TextAlign.right
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.calendar_today, size: 10, color: Colors.orange),
+                      Icon(
+                        Icons.calendar_today,
+                        size: 10,
+                        color: Colors.orange,
+                      ),
                       const SizedBox(width: 2),
                       Flexible(
                         child: Text(
                           text,
-                          style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                          style:
+                              (style ??
+                              GoogleFonts.cairo(
+                                fontSize: 12,
+                                color: const Color(0xFF334155),
+                              )),
                           overflow: overflow,
                           maxLines: maxLines,
                         ),
@@ -3517,7 +3830,8 @@ class _OrdersPageState extends State<OrdersPage> {
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: InkWell(
-              onTap: () => _editOrderField(order, field, text == '-' ? '' : text),
+              onTap: () =>
+                  _editOrderField(order, field, text == '-' ? '' : text),
               onLongPress: () {
                 final copyValue = text == '-' ? '' : text;
                 _copyFieldToClipboard(fieldLabel, copyValue);
@@ -3531,10 +3845,17 @@ class _OrdersPageState extends State<OrdersPage> {
                   color: Colors.orange.withOpacity(0.05),
                 ),
                 child: Align(
-                  alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+                  alignment: align == TextAlign.right
+                      ? Alignment.centerRight
+                      : Alignment.centerLeft,
                   child: Text(
                     text,
-                    style: (style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155))),
+                    style:
+                        (style ??
+                        GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: const Color(0xFF334155),
+                        )),
                     overflow: overflow,
                     maxLines: maxLines,
                   ),
@@ -3557,10 +3878,17 @@ class _OrdersPageState extends State<OrdersPage> {
             _copyFieldToClipboard(fieldLabel, copyValue);
           },
           child: Align(
-            alignment: align == TextAlign.right ? Alignment.centerRight : Alignment.centerLeft,
+            alignment: align == TextAlign.right
+                ? Alignment.centerRight
+                : Alignment.centerLeft,
             child: Text(
               text,
-              style: style ?? GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
+              style:
+                  style ??
+                  GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: const Color(0xFF334155),
+                  ),
               overflow: overflow,
               maxLines: maxLines,
             ),
@@ -3572,12 +3900,12 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Save inline edit
   Future<void> _saveInlineEdit(
-      SAPMainOrder order,
-      String field,
-      String newValue,
-      String editKey,
-      String oldValue,
-      ) async {
+    SAPMainOrder order,
+    String field,
+    String newValue,
+    String editKey,
+    String oldValue,
+  ) async {
     // Clean up controller
     _editControllers.remove(editKey);
 
@@ -3608,7 +3936,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-                0;
+            0;
       }
 
       await supabase
@@ -3645,7 +3973,7 @@ class _OrdersPageState extends State<OrdersPage> {
     } else if (field == 'value') {
       parsedValue =
           double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ??
-              0;
+          0;
     }
 
     for (var orderId in _selectedRowsIds) {
@@ -3676,10 +4004,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     setState(() => _isLoading = false);
     _showSnackBar('✅ $updated rows updated!');
-    _updateMultipleOrdersLocally(
-      field,
-      parsedValue,
-    );
+    _updateMultipleOrdersLocally(field, parsedValue);
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>
@@ -3785,13 +4110,13 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _cell(
-      String text,
-      double w, {
-        TextAlign align = TextAlign.left,
-        TextStyle? style,
-        TextOverflow overflow = TextOverflow.ellipsis,
-        int maxLines = 1,
-      }) => SizedBox(
+    String text,
+    double w, {
+    TextAlign align = TextAlign.left,
+    TextStyle? style,
+    TextOverflow overflow = TextOverflow.ellipsis,
+    int maxLines = 1,
+  }) => SizedBox(
     width: w,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -3802,7 +4127,7 @@ class _OrdersPageState extends State<OrdersPage> {
         child: Text(
           text,
           style:
-          style ??
+              style ??
               GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
           overflow: overflow,
           maxLines: maxLines,
@@ -3858,12 +4183,12 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _buildExportOption(
-      IconData icon,
-      String label,
-      String subtitle,
-      Color color,
-      VoidCallback onTap,
-      ) => GestureDetector(
+    IconData icon,
+    String label,
+    String subtitle,
+    Color color,
+    VoidCallback onTap,
+  ) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.all(16),
