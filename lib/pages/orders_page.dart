@@ -622,27 +622,13 @@ class _OrdersPageState extends State<OrdersPage> {
                 contractNumber: contractController.text.trim(),
                 description: descriptionController.text.trim(),
                 designOrder: designOrderController.text.trim(),
-                quantity:
-                    double.tryParse(qtyController.text.replaceAll(',', '')) ??
-                    0,
-                unitOfMeasure: unitController.text.trim().isEmpty
-                    ? 'EA'
-                    : unitController.text.trim(),
-                value:
-                    double.tryParse(
-                      valueController.text
-                          .replaceAll(',', '')
-                          .replaceAll('\$', ''),
-                    ) ??
-                    0,
+                quantity: double.tryParse(qtyController.text.replaceAll(',', '')) ?? 0,
+                unitOfMeasure: unitController.text.trim().isEmpty ? 'EA' : unitController.text.trim(),
+                value: double.tryParse(valueController.text.replaceAll(',', '').replaceAll('\$', ''),) ?? 0,
                 salesEngineer: _currentUserName,
                 orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                deliveryDate: deliveryDateController.text.trim().isEmpty
-                    ? null
-                    : deliveryDateController.text.trim(),
-                factory: factoryController.text.trim().isEmpty
-                    ? null
-                    : factoryController.text.trim(),
+                deliveryDate: deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
+                factory: factoryController.text.trim().isEmpty ? null : factoryController.text.trim(),
                 designTeam: widget.loggedInEmployee?.department,
                 responsibleEngineer: null,
                 reviewer: null,
@@ -689,9 +675,7 @@ class _OrdersPageState extends State<OrdersPage> {
               'responsible_engineer': newOrder.responsibleEngineer,
               'reviewer': newOrder.reviewer,
               'correspondence_engineer': newOrder.correspondenceEngineer,
-            })
-            .select()
-            .single();
+            }).select().single();
 
         final createdOrder = SAPMainOrder.fromJson(response);
 
@@ -794,7 +778,7 @@ class _OrdersPageState extends State<OrdersPage> {
       for (var orderId in _selectedRowsIds) {
         final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (order != null) {
-          try {
+          try {-
             await supabase
                 .from('sap_main_orders')
                 .update({field: parsedValue})

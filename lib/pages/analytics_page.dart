@@ -24,7 +24,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   int _totalOrders = 0;
   double _totalValue = 0;
   double _totalQuantity = 0;
-  int _unknownStatus = 0;
   Map<String, int> _ordersByMonth = {};
 
   @override
@@ -84,7 +83,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         _totalOrders = orders.length;
         _totalValue = totalVal;
         _totalQuantity = totalQty;
-        _unknownStatus = unknown;
         _statusDistribution = statusDist;
         _factoryDistribution = factoryDist;
         _engineerWorkloads = engineerDist;
@@ -163,13 +161,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         _totalQuantity.toStringAsFixed(0),
                         Icons.inventory_2,
                         Colors.orange,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildKpiCard(
-                        'Unknown Status',
-                        '$_unknownStatus',
-                        Icons.help_outline,
-                        Colors.red,
                       ),
                     ],
                   ),
@@ -384,9 +375,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   Widget _buildStatusSummary() {
     final entries = _statusDistribution.entries.take(5).toList();
-    final maxVal = entries.isEmpty
-        ? 1
-        : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
+    final maxVal = entries.isEmpty ? 1 : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
 
     return Container(
       padding: const EdgeInsets.all(24),

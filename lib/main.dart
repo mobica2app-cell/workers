@@ -1,6 +1,5 @@
 // lib/main.dart
 import 'dart:ui';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:mobitem/pages/login_page.dart';
@@ -9,7 +8,6 @@ import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/sap_service.dart';
-import 'pages/orders_page.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -128,7 +126,6 @@ class EmployeeAuthService {
   EmployeeAuthService(this._client);
 
   // Login with username and password
-  // lib/services/employee_auth_service.dart
 
   Future<EmployeeAuth?> login(String username, String password) async {
     try {
