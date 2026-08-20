@@ -46,6 +46,7 @@ dependencies:
   desktop_drop: ^0.7.1
   file_picker: ^3.0.4
   universal_html: ^2.3.0
+  responsive_framework: ^1.5.1
 
 dev_dependencies:
   flutter_test:

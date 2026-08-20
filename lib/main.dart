@@ -2,6 +2,7 @@
 import 'package:flutter/material.dart';
 import 'package:mobitem/pages/login_page.dart';
 import 'package:mobitem/pages/main_shell.dart';
+import 'package:responsive_framework/responsive_framework.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/sap_service.dart';
@@ -35,14 +36,26 @@ class MyApp extends StatelessWidget {
           background: const Color(0xFFF8FAFC),
         ),
         scaffoldBackgroundColor: const Color(0xFFF8FAFC),
-        fontFamily: GoogleFonts.cairo().fontFamily, // Use Cairo font
+        fontFamily: GoogleFonts.cairo().fontFamily,
         useMaterial3: true,
-        // Add text theme with Cairo font
         textTheme: GoogleFonts.cairoTextTheme(
           Theme.of(context).textTheme,
         ),
       ),
-      home:  LoginPage(), // Use AuthGate to handle authentication
+      builder: (context, child) {
+        final screenWidth = MediaQuery.of(context).size.width;
+
+        // Force desktop scale using responsive_framework whenever screen width is under 1120px
+        if (screenWidth < 1120) {
+          return ResponsiveScaledBox(
+            width: 1120,
+            child: child!,
+          );
+        }
+
+        return child!;
+      },
+      home: const LoginPage(),
     );
   }
 }
