@@ -45,15 +45,23 @@ class MyApp extends StatelessWidget {
       builder: (context, child) {
         final screenWidth = MediaQuery.of(context).size.width;
 
-        // Force desktop scale using responsive_framework whenever screen width is under 1120px
+        Widget content = child!;
+
+        // Scale to 1120 desktop layout if screen is smaller than 1120px
         if (screenWidth < 1120) {
-          return ResponsiveScaledBox(
+          content = ResponsiveScaledBox(
             width: 1120,
-            child: child!,
+            child: content,
           );
         }
 
-        return child!;
+        // Apply InteractiveViewer globally across all screen sizes
+        return InteractiveViewer(
+          minScale: 1.0,
+          maxScale: 4.0,
+          clipBehavior: Clip.none,
+          child: content,
+        );
       },
       home: const LoginPage(),
     );
