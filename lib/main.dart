@@ -1,5 +1,8 @@
 // lib/main.dart
+import 'dart:ui';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:mobitem/pages/login_page.dart';
 import 'package:mobitem/pages/main_shell.dart';
 import 'package:responsive_framework/responsive_framework.dart';
@@ -47,7 +50,7 @@ class MyApp extends StatelessWidget {
 
         Widget content = child!;
 
-        // Scale to 1120 desktop layout if screen is smaller than 1120px
+        // Scale down to 1120px desktop width when viewed on screens smaller than 1120px
         if (screenWidth < 1120) {
           content = ResponsiveScaledBox(
             width: 1120,
@@ -55,19 +58,70 @@ class MyApp extends StatelessWidget {
           );
         }
 
-        // Apply InteractiveViewer globally across all screen sizes
-        return InteractiveViewer(
-          minScale: 1.0,
-          maxScale: 4.0,
-          clipBehavior: Clip.none,
-          child: content,
-        );
+        return SmartZoomWrapper(child: content);
       },
       home: const LoginPage(),
     );
   }
 }
 
+/// Controls zoom activation via Touch OR by holding the 'Z' key on Desktop/Web
+class SmartZoomWrapper extends StatefulWidget {
+  final Widget child;
+  const SmartZoomWrapper({Key? key, required this.child}) : super(key: key);
+
+  @override
+  State<SmartZoomWrapper> createState() => _SmartZoomWrapperState();
+}
+
+class _SmartZoomWrapperState extends State<SmartZoomWrapper> {
+  final FocusNode _focusNode = FocusNode();
+  bool _isZPressed = false;
+  bool _isTouchDevice = false;
+
+  @override
+  void dispose() {
+    _focusNode.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Enable zoom if it's a touch gesture OR if the 'Z' key is currently held
+    final bool canZoom = _isTouchDevice || _isZPressed;
+
+    return KeyboardListener(
+      focusNode: _focusNode,
+      autofocus: true,
+      onKeyEvent: (event) {
+        final isZDown = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyZ);
+        if (isZDown != _isZPressed) {
+          setState(() {
+            _isZPressed = isZDown;
+          });
+        }
+      },
+      child: Listener(
+        onPointerDown: (event) {
+          final isTouch = event.kind == PointerDeviceKind.touch;
+          if (isTouch != _isTouchDevice) {
+            setState(() {
+              _isTouchDevice = isTouch;
+            });
+          }
+        },
+        child: InteractiveViewer(
+          scaleEnabled: canZoom,
+          panEnabled: canZoom,
+          minScale: 1.0,
+          maxScale: 3.0,
+          clipBehavior: Clip.none,
+          child: widget.child,
+        ),
+      ),
+    );
+  }
+}
 class EmployeeAuthService {
   final SupabaseClient _client;
 
