@@ -51,7 +51,7 @@ class MyApp extends StatelessWidget {
         // Scale down to 1120px desktop width when viewed on screens smaller than 1120px
         if (screenWidth < 1120) {
           content = ResponsiveScaledBox(
-            width: 1120,
+            width: 900,
             child: content,
           );
         }
