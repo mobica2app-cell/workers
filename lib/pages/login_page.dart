@@ -24,6 +24,14 @@ class _LoginPageState extends State<LoginPage> {
   String? _errorMessage;
   bool _rememberMe = false;
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : Colors.grey.shade600;
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : Colors.grey.shade300;
+  Color get _inputFillColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -127,14 +135,20 @@ class _LoginPageState extends State<LoginPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: Container(
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
-              Color(0xFF0F172A),
+            colors: _isDark
+                ? [
+              const Color(0xFF0F172A),
+              const Color(0xFF1E293B),
+              const Color(0xFF0F172A),
+            ]
+                : [
+              const Color(0xFF0F172A),
+              const Color(0xFF1E293B),
+              const Color(0xFF0F172A),
             ],
           ),
         ),
@@ -193,11 +207,13 @@ class _LoginPageState extends State<LoginPage> {
                     width: 420,
                     padding: const EdgeInsets.all(28),
                     decoration: BoxDecoration(
-                      color: Colors.white,
+                      color: _cardColor,
                       borderRadius: BorderRadius.circular(16),
                       boxShadow: [
                         BoxShadow(
-                          color: Colors.black.withOpacity(0.15),
+                          color: _isDark
+                              ? Colors.black.withOpacity(0.3)
+                              : Colors.black.withOpacity(0.15),
                           blurRadius: 20,
                           offset: const Offset(0, 10),
                         ),
@@ -211,7 +227,7 @@ class _LoginPageState extends State<LoginPage> {
                           style: GoogleFonts.cairo(
                             fontSize: 22,
                             fontWeight: FontWeight.w600,
-                            color: const Color(0xFF0F172A),
+                            color: _textColor,
                           ),
                         ),
                         const SizedBox(height: 6),
@@ -219,7 +235,7 @@ class _LoginPageState extends State<LoginPage> {
                           'Enter your credentials to continue',
                           style: GoogleFonts.cairo(
                             fontSize: 13,
-                            color: Colors.grey.shade600,
+                            color: _secondaryTextColor,
                           ),
                         ),
                         const SizedBox(height: 24),
@@ -229,18 +245,35 @@ class _LoginPageState extends State<LoginPage> {
                           Container(
                             padding: const EdgeInsets.all(12),
                             decoration: BoxDecoration(
-                              color: Colors.red.shade50,
+                              color: _isDark
+                                  ? Colors.red.withOpacity(0.1)
+                                  : Colors.red.shade50,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: Colors.red.shade200),
+                              border: Border.all(
+                                color: _isDark
+                                    ? Colors.red.withOpacity(0.3)
+                                    : Colors.red.shade200,
+                              ),
                             ),
                             child: Row(
                               children: [
-                                Icon(Icons.error_outline, color: Colors.red.shade700, size: 20),
+                                Icon(
+                                  Icons.error_outline,
+                                  color: _isDark
+                                      ? Colors.red.shade300
+                                      : Colors.red.shade700,
+                                  size: 20,
+                                ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: Text(
                                     _errorMessage!,
-                                    style: GoogleFonts.cairo(fontSize: 13, color: Colors.red.shade700),
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 13,
+                                      color: _isDark
+                                          ? Colors.red.shade300
+                                          : Colors.red.shade700,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -252,21 +285,26 @@ class _LoginPageState extends State<LoginPage> {
                         // Username Field
                         TextField(
                           controller: _usernameController,
-                          style: GoogleFonts.cairo(),
+                          style: GoogleFonts.cairo(color: _textColor),
                           decoration: InputDecoration(
                             labelText: 'Username',
-                            labelStyle: GoogleFonts.cairo(),
+                            labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                             hintText: 'Enter your username',
-                            hintStyle: GoogleFonts.cairo(fontSize: 14),
-                            prefixIcon: const Icon(Icons.person_outline),
+                            hintStyle: GoogleFonts.cairo(fontSize: 14, color: _secondaryTextColor),
+                            prefixIcon: Icon(Icons.person_outline, color: _secondaryTextColor),
+                            filled: true,
+                            fillColor: _inputFillColor,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: _borderColor),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF0F172A), width: 2),
+                              borderSide: BorderSide(
+                                color: _isDark ? const Color(0xFF60A5FA) : const Color(0xFF0F172A),
+                                width: 2,
+                              ),
                             ),
                           ),
                         ),
@@ -276,28 +314,33 @@ class _LoginPageState extends State<LoginPage> {
                         TextField(
                           controller: _passwordController,
                           obscureText: _obscurePassword,
-                          style: GoogleFonts.cairo(),
+                          style: GoogleFonts.cairo(color: _textColor),
                           decoration: InputDecoration(
                             labelText: 'Password',
-                            labelStyle: GoogleFonts.cairo(),
+                            labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                             hintText: 'Enter your password',
-                            hintStyle: GoogleFonts.cairo(fontSize: 14),
-                            prefixIcon: const Icon(Icons.lock_outline),
+                            hintStyle: GoogleFonts.cairo(fontSize: 14, color: _secondaryTextColor),
+                            prefixIcon: Icon(Icons.lock_outline, color: _secondaryTextColor),
                             suffixIcon: IconButton(
                               icon: Icon(
                                 _obscurePassword ? Icons.visibility_off : Icons.visibility,
-                                color: Colors.grey,
+                                color: _secondaryTextColor,
                               ),
                               onPressed: () => setState(() => _obscurePassword = !_obscurePassword),
                             ),
+                            filled: true,
+                            fillColor: _inputFillColor,
                             border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
                             enabledBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: BorderSide(color: Colors.grey.shade300),
+                              borderSide: BorderSide(color: _borderColor),
                             ),
                             focusedBorder: OutlineInputBorder(
                               borderRadius: BorderRadius.circular(12),
-                              borderSide: const BorderSide(color: Color(0xFF0F172A), width: 2),
+                              borderSide: BorderSide(
+                                color: _isDark ? const Color(0xFF60A5FA) : const Color(0xFF0F172A),
+                                width: 2,
+                              ),
                             ),
                           ),
                           onSubmitted: (_) => _signIn(),
@@ -311,18 +354,21 @@ class _LoginPageState extends State<LoginPage> {
                           child: ElevatedButton(
                             onPressed: _isLoading ? null : _signIn,
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFF0F172A),
-                              foregroundColor: Colors.white,
+                              backgroundColor: _isDark ? const Color(0xFF60A5FA) : const Color(0xFF0F172A),
+                              foregroundColor: _isDark ? const Color(0xFF0F172A) : Colors.white,
                               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                               elevation: 0,
+                              disabledBackgroundColor: _isDark
+                                  ? const Color(0xFF60A5FA).withOpacity(0.5)
+                                  : const Color(0xFF0F172A).withOpacity(0.5),
                             ),
                             child: _isLoading
-                                ? const SizedBox(
+                                ? SizedBox(
                               width: 22,
                               height: 22,
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
-                                color: Colors.white,
+                                color: _isDark ? const Color(0xFF0F172A) : Colors.white,
                               ),
                             )
                                 : Text(

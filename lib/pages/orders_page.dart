@@ -6,7 +6,7 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mobitem/pages/employee_managment_page.dart';
-import 'package:mobitem/pages/product_tracking_service.dart';
+import 'package:mobitem/services/product_tracking_service.dart';
 import 'package:mobitem/pages/track_order.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
@@ -98,6 +98,17 @@ class _OrdersPageState extends State<OrdersPage> {
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
   List<String> _allStatuses = [];
+
+  // Theme helper getters
+  bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
+
+  Color get _backgroundColor => _isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDarkMode ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _hoverColor => _isDarkMode ? const Color(0xFF334155).withOpacity(0.3) : const Color(0xFFF1F5F9);
+  Color get _headerBgColor => _isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
 
   String get _userStatusKey {
     final userId = widget.loggedInEmployee?.id ?? 'default';
@@ -466,7 +477,7 @@ class _OrdersPageState extends State<OrdersPage> {
               '${_selectedRowsIds.length} rows selected',
               style: GoogleFonts.cairo(
                 fontSize: 13,
-                color: const Color(0xFF64748B),
+                color: _secondaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -738,11 +749,11 @@ class _OrdersPageState extends State<OrdersPage> {
               Navigator.pop(ctx, order);
             },
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: Theme.of(context).colorScheme.primary,
             ),
             child: Text(
               'Add Task',
-              style: GoogleFonts.cairo(color: Colors.white),
+              style: GoogleFonts.cairo(color: Theme.of(context).colorScheme.onPrimary),
             ),
           ),
         ],
@@ -822,7 +833,7 @@ class _OrdersPageState extends State<OrdersPage> {
               'Apply to ${_selectedRowsIds.length} selected rows',
               style: GoogleFonts.cairo(
                 fontSize: 13,
-                color: const Color(0xFF64748B),
+                color: _secondaryTextColor,
               ),
             ),
             const SizedBox(height: 12),
@@ -848,11 +859,11 @@ class _OrdersPageState extends State<OrdersPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: Theme.of(context).colorScheme.primary,
             ),
             child: Text(
               'Apply to ${_selectedRowsIds.length} rows',
-              style: GoogleFonts.cairo(color: Colors.white),
+              style: GoogleFonts.cairo(color: Theme.of(context).colorScheme.onPrimary),
             ),
           ),
         ],
@@ -879,7 +890,7 @@ class _OrdersPageState extends State<OrdersPage> {
         final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (order != null) {
           try {
-            -await supabase
+            await supabase
                 .from('sap_main_orders')
                 .update({field: parsedValue})
                 .eq('id', order.id);
@@ -1000,9 +1011,9 @@ class _OrdersPageState extends State<OrdersPage> {
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, controller.text),
             style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF0F172A),
+              backgroundColor: Theme.of(context).colorScheme.primary,
             ),
-            child: Text('Save', style: GoogleFonts.cairo(color: Colors.white)),
+            child: Text('Save', style: GoogleFonts.cairo(color: Theme.of(context).colorScheme.onPrimary)),
           ),
         ],
       ),
@@ -1616,7 +1627,7 @@ class _OrdersPageState extends State<OrdersPage> {
       case 'on_hold':
         return Colors.red;
       default:
-        return Colors.grey;
+        return _isDarkMode ? Colors.grey.shade400 : Colors.grey;
     }
   }
 
@@ -2039,7 +2050,7 @@ class _OrdersPageState extends State<OrdersPage> {
               '${selected.length} orders',
               style: GoogleFonts.cairo(
                 fontSize: 14,
-                color: const Color(0xFF64748B),
+                color: _secondaryTextColor,
               ),
             ),
             const SizedBox(height: 16),
@@ -2166,7 +2177,7 @@ class _OrdersPageState extends State<OrdersPage> {
         builder: (ctx, setDlg) => AlertDialog(
           title: Row(
             children: [
-              const Icon(Icons.filter_list, color: Color(0xFF0F172A), size: 22),
+              Icon(Icons.filter_list, color: Theme.of(context).colorScheme.primary, size: 22),
               const SizedBox(width: 8),
               Text(
                 'Filter Orders',
@@ -2226,7 +2237,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 hintText: 'e.g. 9100035288',
                                 hintStyle: GoogleFonts.cairo(
                                   fontSize: 11,
-                                  color: Colors.grey,
+                                  color: _secondaryTextColor,
                                 ),
                                 prefixIcon: const Icon(
                                   Icons.description,
@@ -2255,7 +2266,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 hintText: 'e.g. 20083982',
                                 hintStyle: GoogleFonts.cairo(
                                   fontSize: 11,
-                                  color: Colors.grey,
+                                  color: _secondaryTextColor,
                                 ),
                                 prefixIcon: const Icon(Icons.receipt, size: 18),
                                 border: OutlineInputBorder(
@@ -2434,8 +2445,8 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A),
-                    foregroundColor: Colors.white,
+                    backgroundColor: Theme.of(context).colorScheme.primary,
+                    foregroundColor: Theme.of(context).colorScheme.onPrimary,
                     padding: const EdgeInsets.symmetric(
                       horizontal: 16,
                       vertical: 10,
@@ -2458,9 +2469,9 @@ class _OrdersPageState extends State<OrdersPage> {
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
-        color: const Color(0xFFF8FAFC),
+        color: _hoverColor,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -2470,7 +2481,7 @@ class _OrdersPageState extends State<OrdersPage> {
             style: GoogleFonts.cairo(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 10),
@@ -2531,6 +2542,7 @@ class _OrdersPageState extends State<OrdersPage> {
             Expanded(
               child: Container(
                 padding: const EdgeInsets.all(18),
+                color: _backgroundColor,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
@@ -2558,8 +2570,8 @@ class _OrdersPageState extends State<OrdersPage> {
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: Colors.white,
-        border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+        color: _surfaceColor,
+        border: Border(bottom: BorderSide(color: _borderColor)),
       ),
       child: Row(
         children: [
@@ -2568,7 +2580,7 @@ class _OrdersPageState extends State<OrdersPage> {
             style: GoogleFonts.cairo(
               fontSize: 24,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           if (_selectedRowsIds.isNotEmpty) ...[
@@ -2594,7 +2606,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 'Clear',
                 style: GoogleFonts.cairo(
                   fontSize: 13,
-                  color: const Color(0xFF64748B),
+                  color: _secondaryTextColor,
                 ),
               ),
             ),
@@ -2625,7 +2637,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   style: GoogleFonts.cairo(
                     fontSize: 11,
                     fontWeight: FontWeight.w600,
-                    color: _editMode ? Colors.orange : const Color(0xFF64748B),
+                    color: _editMode ? Colors.orange : _secondaryTextColor,
                   ),
                 ),
               ),
@@ -2651,7 +2663,7 @@ class _OrdersPageState extends State<OrdersPage> {
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(6),
               ),
-              backgroundColor: Colors.white,
+              backgroundColor: _surfaceColor,
             ),
           ),
 
@@ -2675,7 +2687,7 @@ class _OrdersPageState extends State<OrdersPage> {
               side: const BorderSide(color: Color(0xFFD97706)),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              backgroundColor: Colors.white,
+              backgroundColor: _surfaceColor,
             ),
           ),
 
@@ -2711,12 +2723,12 @@ class _OrdersPageState extends State<OrdersPage> {
             decoration: BoxDecoration(
               color: hasValue
                   ? const Color(0xFF6366F1).withOpacity(0.05)
-                  : Colors.grey.withOpacity(0.05),
+                  : _hoverColor,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
                 color: hasValue
                     ? const Color(0xFF6366F1).withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
+                    : _borderColor,
               ),
             ),
             child: Row(
@@ -2728,7 +2740,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     style: GoogleFonts.cairo(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
-                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
+                      color: hasValue ? _textColor : _secondaryTextColor,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -2736,7 +2748,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 Icon(
                   Icons.arrow_drop_down,
                   size: 12,
-                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
+                  color: hasValue ? const Color(0xFF6366F1) : _secondaryTextColor,
                 ),
               ],
             ),
@@ -2788,7 +2800,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                   : FontWeight.w400,
                               color: isSelected
                                   ? const Color(0xFF6366F1)
-                                  : const Color(0xFF334155),
+                                  : _textColor,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -2797,7 +2809,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               emp.role!,
                               style: GoogleFonts.cairo(
                                 fontSize: 10,
-                                color: Colors.grey,
+                                color: _secondaryTextColor,
                               ),
                               overflow: TextOverflow.ellipsis,
                             ),
@@ -2893,7 +2905,7 @@ class _OrdersPageState extends State<OrdersPage> {
           overflow: TextOverflow.ellipsis,
           style: GoogleFonts.cairo(
             fontSize: 13,
-            color: const Color(0xFF45464D),
+            color: _secondaryTextColor,
           ),
         ),
         if (_searchQuery.isNotEmpty)
@@ -2947,14 +2959,14 @@ class _OrdersPageState extends State<OrdersPage> {
           _searchQuery = v;
           _rebuildGroups();
         },
-        style: GoogleFonts.cairo(fontSize: 14),
+        style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
         decoration: InputDecoration(
           hintText: 'Search...',
           hintStyle: GoogleFonts.cairo(
-            color: Colors.grey.shade400,
+            color: _secondaryTextColor,
             fontSize: 14,
           ),
-          prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
+          prefixIcon: Icon(Icons.search, color: _secondaryTextColor, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
             icon: const Icon(Icons.clear, size: 18),
@@ -2966,10 +2978,10 @@ class _OrdersPageState extends State<OrdersPage> {
           )
               : null,
           filled: true,
-          fillColor: Colors.white,
+          fillColor: _surfaceColor,
           border: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: Colors.grey.shade300),
+            borderSide: BorderSide(color: _borderColor),
           ),
           focusedBorder: OutlineInputBorder(
             borderRadius: BorderRadius.circular(8),
@@ -2995,11 +3007,11 @@ class _OrdersPageState extends State<OrdersPage> {
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         decoration: BoxDecoration(
-          border: Border.all(color: const Color(0xFFCBD5E1)),
+          border: Border.all(color: _borderColor),
           borderRadius: BorderRadius.circular(6),
           color: _sortBy != 'default'
               ? const Color(0xFF6366F1).withOpacity(0.05)
-              : Colors.white,
+              : _surfaceColor,
         ),
         child: Row(
           mainAxisSize: MainAxisSize.min,
@@ -3009,7 +3021,7 @@ class _OrdersPageState extends State<OrdersPage> {
               size: 16,
               color: _sortBy != 'default'
                   ? const Color(0xFF6366F1)
-                  : const Color(0xFF334155),
+                  : _secondaryTextColor,
             ),
             const SizedBox(width: 4),
             Text(
@@ -3019,7 +3031,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 fontWeight: FontWeight.w600,
                 color: _sortBy != 'default'
                     ? const Color(0xFF6366F1)
-                    : const Color(0xFF334155),
+                    : _secondaryTextColor,
               ),
             ),
             const Icon(Icons.arrow_drop_down, size: 16),
@@ -3036,7 +3048,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 size: 16,
                 color: _sortBy == 'default'
                     ? const Color(0xFF6366F1)
-                    : Colors.grey,
+                    : _secondaryTextColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -3064,7 +3076,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 size: 14,
                 color: _sortBy == 'value_desc'
                     ? const Color(0xFF6366F1)
-                    : Colors.grey,
+                    : _secondaryTextColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -3090,7 +3102,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 size: 14,
                 color: _sortBy == 'value_asc'
                     ? const Color(0xFF6366F1)
-                    : Colors.grey,
+                    : _secondaryTextColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -3117,7 +3129,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 size: 14,
                 color: _sortBy == 'date_desc'
                     ? const Color(0xFF6366F1)
-                    : Colors.grey,
+                    : _secondaryTextColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -3143,7 +3155,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 size: 14,
                 color: _sortBy == 'date_asc'
                     ? const Color(0xFF6366F1)
-                    : Colors.grey,
+                    : _secondaryTextColor,
               ),
               const SizedBox(width: 8),
               Text(
@@ -3174,8 +3186,8 @@ class _OrdersPageState extends State<OrdersPage> {
         style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
       ),
       style: ElevatedButton.styleFrom(
-        backgroundColor: const Color(0xFF0F172A),
-        foregroundColor: Colors.white,
+        backgroundColor: Theme.of(context).colorScheme.primary,
+        foregroundColor: Theme.of(context).colorScheme.onPrimary,
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
@@ -3203,12 +3215,12 @@ class _OrdersPageState extends State<OrdersPage> {
             decoration: BoxDecoration(
               color: hasValue
                   ? const Color(0xFF6366F1).withOpacity(0.05)
-                  : Colors.grey.withOpacity(0.05),
+                  : _hoverColor,
               borderRadius: BorderRadius.circular(4),
               border: Border.all(
                 color: hasValue
                     ? const Color(0xFF6366F1).withOpacity(0.2)
-                    : Colors.grey.withOpacity(0.2),
+                    : _borderColor,
               ),
             ),
             child: Row(
@@ -3220,7 +3232,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     style: GoogleFonts.cairo(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,
-                      color: hasValue ? const Color(0xFF0F172A) : Colors.grey,
+                      color: hasValue ? _textColor : _secondaryTextColor,
                     ),
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -3228,7 +3240,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 Icon(
                   Icons.arrow_drop_down,
                   size: 12,
-                  color: hasValue ? const Color(0xFF6366F1) : Colors.grey,
+                  color: hasValue ? const Color(0xFF6366F1) : _secondaryTextColor,
                 ),
               ],
             ),
@@ -3272,7 +3284,7 @@ class _OrdersPageState extends State<OrdersPage> {
                             : FontWeight.w400,
                         color: isSelected
                             ? const Color(0xFF6366F1)
-                            : const Color(0xFF334155),
+                            : _textColor,
                       ),
                     ),
                   ],
@@ -3297,7 +3309,7 @@ class _OrdersPageState extends State<OrdersPage> {
       side: const BorderSide(color: Color(0xFF059669)),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-      backgroundColor: Colors.white,
+      backgroundColor: _surfaceColor,
     ),
   );
 
@@ -3365,13 +3377,13 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Widget _buildTableContainer() {
     if (_isLoading && !_initialLoadDone)
-      return const Center(child: CircularProgressIndicator());
+      return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
     if (_allOrders.isEmpty)
       return Center(
         child: Text(
           'No orders',
           style: GoogleFonts.cairo(
-            color: const Color(0xFF45464D),
+            color: _secondaryTextColor,
             fontSize: 14,
           ),
         ),
@@ -3382,9 +3394,9 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildExpandableSections() {
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _surfaceColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -3488,8 +3500,8 @@ class _OrdersPageState extends State<OrdersPage> {
         decoration: BoxDecoration(
           color: _getStatusColor(status).withOpacity(0.08),
           border: Border(
-            bottom: BorderSide(color: Colors.grey.shade200),
-            right: BorderSide(color: Colors.grey.shade300, width: 2),
+            bottom: BorderSide(color: _borderColor),
+            right: BorderSide(color: _borderColor, width: 2),
           ),
         ),
         child: Row(
@@ -3582,9 +3594,9 @@ class _OrdersPageState extends State<OrdersPage> {
       style: OutlinedButton.styleFrom(
         foregroundColor: const Color(0xFF6366F1),
         side: BorderSide(
-          color: hasMyWork ? const Color(0xFF6366F1) : const Color(0xFF6366F1),
+          color: const Color(0xFF6366F1),
         ),
-        backgroundColor: hasMyWork ? const Color(0xFF6366F1) : Colors.white,
+        backgroundColor: hasMyWork ? const Color(0xFF6366F1) : _surfaceColor,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
       ),
@@ -3603,7 +3615,7 @@ class _OrdersPageState extends State<OrdersPage> {
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(
           color: _getStatusColor(status).withOpacity(0.08),
-          border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+          border: Border(bottom: BorderSide(color: _borderColor)),
         ),
         child: Row(children: [const Spacer()]),
       ),
@@ -3614,10 +3626,10 @@ class _OrdersPageState extends State<OrdersPage> {
     height: 48,
     padding: const EdgeInsets.symmetric(horizontal: 10),
     decoration: BoxDecoration(
-      color: const Color(0xFFF1F5F9),
+      color: _headerBgColor,
       border: Border(
-        bottom: BorderSide(color: Colors.grey.shade200),
-        right: BorderSide(color: Colors.grey.shade300, width: 2),
+        bottom: BorderSide(color: _borderColor),
+        right: BorderSide(color: _borderColor, width: 2),
       ),
     ),
     child: Row(
@@ -3630,7 +3642,7 @@ class _OrdersPageState extends State<OrdersPage> {
             style: GoogleFonts.cairo(
               fontSize: 13,
               fontWeight: FontWeight.w700,
-              color: const Color(0xFF1E293B),
+              color: _textColor,
             ),
           ),
         ),
@@ -3641,7 +3653,7 @@ class _OrdersPageState extends State<OrdersPage> {
             child: Icon(
               Icons.track_changes,
               size: 16,
-              color: Colors.grey.shade500,
+              color: _secondaryTextColor,
             ),
           ),
       ],
@@ -3661,11 +3673,11 @@ class _OrdersPageState extends State<OrdersPage> {
         padding: const EdgeInsets.symmetric(horizontal: 12),
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF001761).withOpacity(0.15)
-              : Colors.white,
+              ? const Color(0xFF001761).withOpacity(_isDarkMode ? 0.3 : 0.15)
+              : _surfaceColor,
           border: Border(
-            bottom: BorderSide(color: Colors.grey.shade50),
-            right: BorderSide(color: Colors.grey.shade300, width: 2),
+            bottom: BorderSide(color: _borderColor.withOpacity(0.3)),
+            right: BorderSide(color: _borderColor, width: 2),
           ),
         ),
         child: Row(
@@ -3688,7 +3700,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 style: GoogleFonts.cairo(
                   fontSize: 13,
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF0F172A),
+                  color: _textColor,
                 ),
                 overflow: TextOverflow.ellipsis,
                 maxLines: 2,
@@ -3720,8 +3732,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildColumnHeaders() => Container(
     height: 48,
     decoration: BoxDecoration(
-      color: const Color(0xFFF1F5F9),
-      border: Border(bottom: BorderSide(color: Colors.grey.shade200)),
+      color: _headerBgColor,
+      border: Border(bottom: BorderSide(color: _borderColor)),
     ),
     child: Row(
       children: [
@@ -3755,9 +3767,9 @@ class _OrdersPageState extends State<OrdersPage> {
         height: 48,
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF001761).withOpacity(0.15)
-              : Colors.white,
-          border: Border(bottom: BorderSide(color: Colors.grey.shade50)),
+              ? const Color(0xFF001761).withOpacity(_isDarkMode ? 0.3 : 0.15)
+              : _surfaceColor,
+          border: Border(bottom: BorderSide(color: _borderColor.withOpacity(0.3))),
         ),
         child: Row(
           children: [
@@ -3769,7 +3781,7 @@ class _OrdersPageState extends State<OrdersPage> {
               order,
               'product_code',
               'Product Code',
-              style: GoogleFonts.cairo(fontSize: 11),
+              style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
             ),
             _editableCell(
               order.contractNumber,
@@ -3938,7 +3950,7 @@ class _OrdersPageState extends State<OrdersPage> {
                           (style ??
                               GoogleFonts.cairo(
                                 fontSize: 12,
-                                color: const Color(0xFF334155),
+                                color: _textColor,
                               )),
                           overflow: overflow,
                           maxLines: maxLines,
@@ -3981,7 +3993,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     (style ??
                         GoogleFonts.cairo(
                           fontSize: 12,
-                          color: const Color(0xFF334155),
+                          color: _textColor,
                         )),
                     overflow: overflow,
                     maxLines: maxLines,
@@ -4014,7 +4026,7 @@ class _OrdersPageState extends State<OrdersPage> {
               style ??
                   GoogleFonts.cairo(
                     fontSize: 12,
-                    color: const Color(0xFF334155),
+                    color: _textColor,
                   ),
               overflow: overflow,
               maxLines: maxLines,
@@ -4148,7 +4160,7 @@ class _OrdersPageState extends State<OrdersPage> {
               style: GoogleFonts.cairo(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,
-                color: const Color(0xFF1E293B),
+                color: _textColor,
               ),
             ),
           ),
@@ -4156,7 +4168,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _statusCell(String status, SAPMainOrder order) {
-    // Dropdown only for Tasks orders
+    // Dropdown for status
     return SizedBox(
       width: 140,
       child: Padding(
@@ -4217,7 +4229,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       fontSize: 12,
                       color: s == status
                           ? _getStatusColor(s)
-                          : const Color(0xFF334155),
+                          : _textColor,
                       fontWeight: s == status
                           ? FontWeight.w700
                           : FontWeight.w400,
@@ -4255,7 +4267,7 @@ class _OrdersPageState extends State<OrdersPage> {
           text,
           style:
           style ??
-              GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
+              GoogleFonts.cairo(fontSize: 12, color: _textColor),
           overflow: overflow,
           maxLines: maxLines,
         ),
@@ -4285,7 +4297,7 @@ class _OrdersPageState extends State<OrdersPage> {
     padding: const EdgeInsets.symmetric(horizontal: 4),
     child: IconButton(
       onPressed: onTap,
-      icon: Icon(icon, color: const Color(0xFF45464D)),
+      icon: Icon(icon, color: _secondaryTextColor),
       style: IconButton.styleFrom(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(100)),
       ),
@@ -4301,11 +4313,11 @@ class _OrdersPageState extends State<OrdersPage> {
           style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         style: OutlinedButton.styleFrom(
-          foregroundColor: const Color(0xFF334155),
-          side: const BorderSide(color: Color(0xFFCBD5E1)),
+          foregroundColor: _secondaryTextColor,
+          side: BorderSide(color: _borderColor),
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-          backgroundColor: Colors.white,
+          backgroundColor: _surfaceColor,
         ),
       );
 
@@ -4342,7 +4354,7 @@ class _OrdersPageState extends State<OrdersPage> {
             subtitle,
             style: GoogleFonts.cairo(
               fontSize: 10,
-              color: const Color(0xFF64748B),
+              color: _secondaryTextColor,
             ),
             textAlign: TextAlign.center,
           ),
@@ -4351,6 +4363,7 @@ class _OrdersPageState extends State<OrdersPage> {
     ),
   );
 }
+
 class _StatusArrangementDialog extends StatefulWidget {
   final List<String> statuses;
   final Function(List<String>) onReorder;
@@ -4377,17 +4390,24 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDarkMode = Theme.of(context).brightness == Brightness.dark;
+    final surfaceColor = isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final textColor = isDarkMode ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+    final secondaryTextColor = isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final borderColor = isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final hoverColor = isDarkMode ? const Color(0xFF334155).withOpacity(0.3) : Colors.grey.shade50;
+
     return AlertDialog(
       title: Row(
         children: [
           Text(
             'Arrange Status Order',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+            style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: textColor),
           ),
           const Spacer(),
           Icon(
             Icons.drag_indicator,
-            color: Colors.grey.shade400,
+            color: secondaryTextColor,
             size: 20,
           ),
         ],
@@ -4399,7 +4419,7 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
           children: [
             Text(
               '🖱️ Drag and drop to arrange. Changes saved automatically.',
-              style: GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF64748B)),
+              style: GoogleFonts.cairo(fontSize: 12, color: secondaryTextColor),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -4422,22 +4442,22 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
                     margin: const EdgeInsets.only(bottom: 4),
                     padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     decoration: BoxDecoration(
-                      color: Colors.grey.shade50,
+                      color: hoverColor,
                       borderRadius: BorderRadius.circular(6),
-                      border: Border.all(color: Colors.grey.shade200),
+                      border: Border.all(color: borderColor),
                     ),
                     child: Row(
                       children: [
                         Icon(
                           Icons.drag_indicator,
-                          color: Colors.grey.shade400,
+                          color: secondaryTextColor,
                           size: 20,
                         ),
                         const SizedBox(width: 8),
                         Expanded(
                           child: Text(
                             '${index + 1}. ${_localStatuses[index]}',
-                            style: GoogleFonts.cairo(fontSize: 13),
+                            style: GoogleFonts.cairo(fontSize: 13, color: textColor),
                             overflow: TextOverflow.ellipsis,
                           ),
                         ),
@@ -4462,7 +4482,7 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
         ),
         TextButton(
           onPressed: () => Navigator.pop(context),
-          child: Text('Done', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+          child: Text('Done', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: textColor)),
         ),
       ],
     );

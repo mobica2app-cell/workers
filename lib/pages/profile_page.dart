@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:universal_html/html.dart' as html;
 import '../main.dart';
 import '../services/sap_service.dart';
 import 'login_page.dart';
@@ -28,6 +29,10 @@ class _ProfilePageState extends State<ProfilePage>
   String _workFilter = 'All';
   TabController? _tabController;
 
+  // Theme preference
+  bool _isDarkMode = false;
+  static const String _themeKey = 'app_theme_preference';
+
   // Summary counts
   int _totalWork = 0;
   int _salesEngineerCount = 0;
@@ -35,18 +40,57 @@ class _ProfilePageState extends State<ProfilePage>
   int _reviewerCount = 0;
   int _correspondenceEngineerCount = 0;
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _chipBackground => _isDark ? const Color(0xFF334155) : Colors.grey.shade100;
+
   @override
   void initState() {
     super.initState();
     _tabController = TabController(length: 3, vsync: this);
     _employee = widget.employee;
     _loadWorkData();
+
+    // Add this line to listen for theme changes
+    ThemeNotifier.instance.addListener(_onThemeChanged);
+  }
+
+// Add this method to handle theme changes
+  void _onThemeChanged() {
+    if (mounted) {
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    // Add this line to remove the listener
+    ThemeNotifier.instance.removeListener(_onThemeChanged);
     _tabController?.dispose();
     super.dispose();
+  }
+
+  void _toggleTheme(bool value) {
+    ThemeNotifier.instance.toggleTheme(value);
+
+    // Show confirmation
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          value ? '🌙 Dark mode enabled' : '☀️ Light mode enabled',
+          style: GoogleFonts.cairo(),
+        ),
+        backgroundColor: value ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 2),
+      ),
+    );
   }
 
   Future<void> _loadWorkData() async {
@@ -203,9 +247,9 @@ class _ProfilePageState extends State<ProfilePage>
                   }
                 },
                 style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF0F172A)),
+                    backgroundColor: Theme.of(context).colorScheme.primary),
                 child: Text(
-                    'Change', style: GoogleFonts.cairo(color: Colors.white)),
+                    'Change', style: GoogleFonts.cairo(color: Theme.of(context).colorScheme.onPrimary)),
               ),
             ],
           ),
@@ -215,19 +259,30 @@ class _ProfilePageState extends State<ProfilePage>
   @override
   Widget build(BuildContext context) {
     if (_isLoading)
-      return const Scaffold(body: Center(child: CircularProgressIndicator()));
+      return Scaffold(
+        body: Center(
+          child: CircularProgressIndicator(
+            color: Theme.of(context).colorScheme.primary,
+          ),
+        ),
+      );
 
     if (_employee == null) {
-      return Scaffold(body: Center(
+      return Scaffold(
+        backgroundColor: _backgroundColor,
+        body: Center(
           child: Column(mainAxisAlignment: MainAxisAlignment.center, children: [
-            Icon(Icons.error_outline, size: 64, color: Colors.grey[400]),
+            Icon(Icons.error_outline, size: 64, color: _secondaryTextColor),
             const SizedBox(height: 16),
             Text('Please login first', style: GoogleFonts.cairo(
-                fontSize: 18, color: Colors.grey[600])),
-          ])));
+                fontSize: 18, color: _secondaryTextColor)),
+          ]),
+        ),
+      );
     }
 
     return Scaffold(
+      backgroundColor: _backgroundColor,
       body: NestedScrollView(
         headerSliverBuilder: (context, innerBoxIsScrolled) =>
         [
@@ -293,15 +348,18 @@ class _ProfilePageState extends State<ProfilePage>
             ),
           ),
           SliverPersistentHeader(pinned: true,
-              delegate: _SliverAppBarDelegate(TabBar(controller: _tabController,
-                  labelColor: const Color(0xFF0F172A),
-                  unselectedLabelColor: Colors.grey,
-                  indicatorColor: const Color(0xFF0F172A),
-                  labelStyle: GoogleFonts.cairo(fontWeight: FontWeight.w600,
-                      fontSize: 14),
-                  tabs: const [Tab(text: 'Profile'), Tab(text: 'My Work'), Tab(
-                      text: 'By Role')
-                  ]))),
+              delegate: _SliverAppBarDelegate(
+                TabBar(controller: _tabController,
+                    labelColor: Theme.of(context).colorScheme.primary,
+                    unselectedLabelColor: _secondaryTextColor,
+                    indicatorColor: Theme.of(context).colorScheme.primary,
+                    labelStyle: GoogleFonts.cairo(fontWeight: FontWeight.w600,
+                        fontSize: 14),
+                    tabs: const [Tab(text: 'Profile'), Tab(text: 'My Work'), Tab(
+                        text: 'By Role')
+                    ]),
+                surfaceColor: _surfaceColor,
+              )),
         ],
         body: TabBarView(controller: _tabController, children: [
           _buildProfileTab(),
@@ -317,13 +375,14 @@ class _ProfilePageState extends State<ProfilePage>
       padding: const EdgeInsets.all(16),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Card(
+          color: _cardColor,
           child: Padding(padding: const EdgeInsets.all(16),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Employee Information', style: GoogleFonts.cairo(
                     fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF0F172A))),
+                    color: _textColor)),
                 const SizedBox(height: 16),
                 _buildInfoTile(Icons.person, 'Username', _employee!.username),
                 _buildInfoTile(Icons.badge, 'Full Name', _employee!.fullName),
@@ -342,13 +401,56 @@ class _ProfilePageState extends State<ProfilePage>
               ])),
         ),
         const SizedBox(height: 16),
+        // Theme Settings Card
         Card(
+          color: _cardColor,
+          child: Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(Icons.palette_outlined, color: _textColor, size: 24),
+                    const SizedBox(width: 8),
+                    Text('Appearance', style: GoogleFonts.cairo(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: _textColor)),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                // Replace the existing SwitchListTile with this
+                SwitchListTile(
+                  title: Text('Dark Mode', style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor)),
+                  subtitle: Text('Use dark theme throughout the app',
+                      style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _secondaryTextColor)),
+                  value: ThemeNotifier.instance.isDarkMode, // Changed from _isDarkMode
+                  onChanged: _toggleTheme,
+                  secondary: Icon(
+                    ThemeNotifier.instance.isDarkMode ? Icons.dark_mode : Icons.light_mode, // Changed from _isDarkMode
+                    color: ThemeNotifier.instance.isDarkMode ? Colors.blue : Colors.orange, // Changed from _isDarkMode
+                  ),
+                  activeColor: Colors.blue,
+                ),
+              ],
+            ),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Card(
+          color: _cardColor,
           child: Padding(padding: const EdgeInsets.all(16),
               child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start, children: [
                 Text('Work Summary', style: GoogleFonts.cairo(fontSize: 18,
                     fontWeight: FontWeight.w600,
-                    color: const Color(0xFF0F172A))),
+                    color: _textColor)),
                 const SizedBox(height: 16),
                 Row(children: [
                   _buildSummaryCard(
@@ -375,6 +477,8 @@ class _ProfilePageState extends State<ProfilePage>
                 icon: const Icon(Icons.lock_outline),
                 label: Text('Change Password', style: GoogleFonts.cairo()),
                 style: OutlinedButton.styleFrom(
+                    foregroundColor: _textColor,
+                    side: BorderSide(color: _borderColor),
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))))),
@@ -400,10 +504,10 @@ class _ProfilePageState extends State<ProfilePage>
         child: _filteredWorkItems.isEmpty
             ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(Icons.work_off, size: 64, color: Colors.grey[400]),
+              Icon(Icons.work_off, size: 64, color: _secondaryTextColor),
               const SizedBox(height: 16),
               Text('No work found', style: GoogleFonts.cairo(
-                  fontSize: 16, color: Colors.grey[600]))
+                  fontSize: 16, color: _secondaryTextColor))
             ]))
             : ListView.builder(
             padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -449,6 +553,7 @@ class _ProfilePageState extends State<ProfilePage>
           const SizedBox(height: 8),
           ...items.map((item) =>
               Card(
+                color: _cardColor,
                 margin: const EdgeInsets.only(bottom: 6),
                 child: ListTile(
                   leading: CircleAvatar(
@@ -456,13 +561,14 @@ class _ProfilePageState extends State<ProfilePage>
                       child: Icon(
                           item.roleIcon, color: item.roleColor, size: 18)),
                   title: Text(item.order.description, style: GoogleFonts.cairo(
-                      fontSize: 13, fontWeight: FontWeight.w600),
+                      fontSize: 13, fontWeight: FontWeight.w600,
+                      color: _textColor),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis),
                   subtitle: Text(
                       '${item.order.designOrder} • ${item.order.factory ??
                           "N/A"}', style: GoogleFonts.cairo(
-                      fontSize: 11, color: Colors.grey)),
+                      fontSize: 11, color: _secondaryTextColor)),
                   trailing: Container(padding: const EdgeInsets.symmetric(
                       horizontal: 8, vertical: 3),
                       decoration: BoxDecoration(color: _getStatusColor(item
@@ -483,6 +589,7 @@ class _ProfilePageState extends State<ProfilePage>
 
   Widget _buildWorkCard(_EmployeeWorkItem item) {
     return Card(
+      color: _cardColor,
       margin: const EdgeInsets.only(bottom: 8),
       child: Padding(
         padding: const EdgeInsets.all(14),
@@ -515,7 +622,7 @@ class _ProfilePageState extends State<ProfilePage>
           const SizedBox(height: 10),
           Text(item.order.description, style: GoogleFonts.cairo(fontSize: 14,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A)),
+              color: _textColor),
               maxLines: 2,
               overflow: TextOverflow.ellipsis),
           const SizedBox(height: 8),
@@ -536,11 +643,11 @@ class _ProfilePageState extends State<ProfilePage>
           if (item.order.deliveryDate != null) ...[
             const SizedBox(height: 6),
             Row(children: [
-              Icon(Icons.local_shipping, size: 12, color: Colors.grey[600]),
+              Icon(Icons.local_shipping, size: 12, color: _secondaryTextColor),
               const SizedBox(width: 4),
               Text('Delivery: ${item.order.deliveryDate}',
                   style: GoogleFonts.cairo(
-                      fontSize: 11, color: Colors.grey[600]))
+                      fontSize: 11, color: _secondaryTextColor))
             ]),
           ],
         ]),
@@ -551,16 +658,16 @@ class _ProfilePageState extends State<ProfilePage>
   Widget _buildInfoChip(IconData icon, String text) {
     return Container(
         padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-        decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05),
+        decoration: BoxDecoration(color: _chipBackground,
             borderRadius: BorderRadius.circular(4),
-            border: Border.all(color: Colors.grey.withOpacity(0.1))),
+            border: Border.all(color: _borderColor)),
         child: Row(mainAxisSize: MainAxisSize.min,
             children: [
-              Icon(icon, size: 11, color: Colors.grey[600]),
+              Icon(icon, size: 11, color: _secondaryTextColor),
               const SizedBox(width: 3),
               Text(text, style: GoogleFonts.cairo(fontSize: 10,
                   fontWeight: FontWeight.w500,
-                  color: const Color(0xFF475569)))
+                  color: _secondaryTextColor))
             ]));
   }
 
@@ -568,14 +675,14 @@ class _ProfilePageState extends State<ProfilePage>
       {Color? valueColor}) {
     return Padding(
         padding: const EdgeInsets.symmetric(vertical: 8), child: Row(children: [
-      Icon(icon, size: 20, color: const Color(0xFF64748B)),
+      Icon(icon, size: 20, color: _secondaryTextColor),
       const SizedBox(width: 12),
       Text(label, style: GoogleFonts.cairo(
-          fontSize: 14, color: const Color(0xFF64748B))),
+          fontSize: 14, color: _secondaryTextColor)),
       const Spacer(),
       Text(value, style: GoogleFonts.cairo(fontSize: 14,
           fontWeight: FontWeight.w600,
-          color: valueColor ?? const Color(0xFF0F172A))),
+          color: valueColor ?? _textColor)),
     ]));
   }
 
@@ -601,15 +708,13 @@ class _ProfilePageState extends State<ProfilePage>
                 status.length > 20 ? '${status.substring(0, 18)}...' : status,
                 style: GoogleFonts.cairo(fontSize: 12,
                     fontWeight: FontWeight.w600,
-                    color: isSelected ? Colors.white : const Color(
-                        0xFF334155))),
+                    color: isSelected ? Colors.white : _textColor)),
             onSelected: (selected) => _filterWork(status),
-            selectedColor: const Color(0xFF0F172A),
+            selectedColor: Theme.of(context).colorScheme.primary,
             checkmarkColor: Colors.white,
-            backgroundColor: Colors.white,
+            backgroundColor: _surfaceColor,
             side: BorderSide(
-                color: isSelected ? const Color(0xFF0F172A) : Colors.grey
-                    .shade300))
+                color: isSelected ? Theme.of(context).colorScheme.primary : _borderColor))
     );
   }
 
@@ -635,7 +740,7 @@ class _ProfilePageState extends State<ProfilePage>
       case 'Approval':
         return Colors.green;
       case 'Unknown':
-        return Colors.grey;
+        return _isDark ? Colors.grey.shade400 : Colors.grey;
       default:
         return Colors.orange;
     }
@@ -654,15 +759,17 @@ class _EmployeeWorkItem {
 
 class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
   final TabBar _tabBar;
+  final Color surfaceColor;
 
-  _SliverAppBarDelegate(this._tabBar);
+  _SliverAppBarDelegate(this._tabBar, {required this.surfaceColor});
 
   @override double get minExtent => _tabBar.preferredSize.height;
 
   @override double get maxExtent => _tabBar.preferredSize.height;
 
   @override Widget build(BuildContext context, double shrinkOffset,
-      bool overlapsContent) => Container(color: Colors.white, child: _tabBar);
+      bool overlapsContent) => Container(color: surfaceColor, child: _tabBar);
 
   @override bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
 }
+

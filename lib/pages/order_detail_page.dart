@@ -6,7 +6,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/employee_model.dart';
 import '../services/employee_service.dart';
 import '../services/sap_service.dart';
-import 'employee_profile_page.dart';
 
 class OrderDetailPage extends StatefulWidget {
   final SAPMainOrder order;
@@ -32,6 +31,17 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   // All orders with the same CONTRACT number
   List<SAPMainOrder> _relatedOrders = [];
   bool _isLoadingRelatedOrders = false;
+
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _chipBackground => _isDark ? const Color(0xFF334155).withOpacity(0.3) : Colors.grey.withOpacity(0.05);
+  Color get _chipBorder => _isDark ? const Color(0xFF334155) : Colors.grey.withOpacity(0.1);
 
   double get _totalValue {
     return _relatedOrders.fold(0, (sum, order) => sum + order.value);
@@ -133,7 +143,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
       case 'in_progress': return Colors.blue;
       case 'completed': return Colors.green;
       case 'on_hold': return Colors.red;
-      default: return Colors.grey;
+      default: return _isDark ? Colors.grey.shade400 : Colors.grey;
     }
   }
 
@@ -161,7 +171,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text('Contract ${widget.order.contractNumber}', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0F172A),
@@ -171,14 +181,29 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
         ],
       ),
       body: _isLoadingRelatedOrders
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : SingleChildScrollView(
         padding: const EdgeInsets.all(24),
         child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
           // Header Card
           Container(
             padding: const EdgeInsets.all(24),
-            decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0)), boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, 2))]),
+            decoration: BoxDecoration(
+              color: _cardColor,
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.05),
+                  blurRadius: 10,
+                  offset: const Offset(0, 2),
+                ),
+              ],
+            ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Row(children: [
                 Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -193,9 +218,9 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                   ],
                 ])),
                 Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-                  Text('Total Value', style: GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w600)),
+                  Text('Total Value', style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor, fontWeight: FontWeight.w600)),
                   const SizedBox(height: 4),
-                  Text('\$${_formatNumber(_totalValue)}', style: GoogleFonts.cairo(fontSize: 28, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))),
+                  Text('\$${_formatNumber(_totalValue)}', style: GoogleFonts.cairo(fontSize: 28, fontWeight: FontWeight.bold, color: _textColor)),
                 ]),
               ]),
               const SizedBox(height: 16),
@@ -213,14 +238,21 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           ]),
           const SizedBox(height: 24),
           // Items List
-          Text('Contract Items', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+          Text('Contract Items', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w600, color: _textColor)),
           const SizedBox(height: 12),
           ..._relatedOrders.map((order) => _buildOrderCard(order)),
           // Summary Footer
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
-            decoration: BoxDecoration(gradient: const LinearGradient(colors: [Color(0xFF0F172A), Color(0xFF1E293B)], begin: Alignment.topLeft, end: Alignment.bottomRight), borderRadius: BorderRadius.circular(12)),
+            decoration: BoxDecoration(
+              gradient: const LinearGradient(
+                colors: [Color(0xFF0F172A), Color(0xFF1E293B)],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
               Text('Contract Summary', style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: Colors.white70)),
               const SizedBox(height: 12),
@@ -246,17 +278,26 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     if (_itemJobs.isEmpty) {
       return Container(
         padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: Colors.grey.withOpacity(0.2))),
+        decoration: BoxDecoration(
+          color: _chipBackground,
+          borderRadius: BorderRadius.circular(8),
+          border: Border.all(color: _chipBorder),
+        ),
         child: Row(children: [
-          Icon(Icons.info_outline, size: 20, color: Colors.grey[600]), const SizedBox(width: 12),
-          Text('No work assigned yet', style: GoogleFonts.cairo(fontSize: 14, color: Colors.grey[600])),
+          Icon(Icons.info_outline, size: 20, color: _secondaryTextColor),
+          const SizedBox(width: 12),
+          Text('No work assigned yet', style: GoogleFonts.cairo(fontSize: 14, color: _secondaryTextColor)),
         ]),
       );
     }
 
     return Container(
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(color: const Color(0xFF6366F1).withOpacity(0.05), borderRadius: BorderRadius.circular(8), border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.2))),
+      decoration: BoxDecoration(
+        color: const Color(0xFF6366F1).withOpacity(0.05),
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.2)),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           Text('Work Progress', style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF6366F1))),
@@ -264,7 +305,15 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
           Text('$progress%', style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.bold, color: const Color(0xFF6366F1))),
         ]),
         const SizedBox(height: 8),
-        ClipRRect(borderRadius: BorderRadius.circular(4), child: LinearProgressIndicator(value: progress / 100, backgroundColor: Colors.grey.withOpacity(0.2), valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)), minHeight: 8)),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(4),
+          child: LinearProgressIndicator(
+            value: progress / 100,
+            backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.2),
+            valueColor: const AlwaysStoppedAnimation<Color>(Color(0xFF6366F1)),
+            minHeight: 8,
+          ),
+        ),
         const SizedBox(height: 12),
         Row(children: [
           _buildProgressBadge('Completed', completedJobs, Colors.green),
@@ -280,9 +329,14 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   Widget _buildProgressBadge(String label, int count, Color color) {
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-      decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(12), border: Border.all(color: color.withOpacity(0.3))),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.3)),
+      ),
       child: Row(mainAxisSize: MainAxisSize.min, children: [
-        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)), const SizedBox(width: 4),
+        Container(width: 8, height: 8, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+        const SizedBox(width: 4),
         Text('$count $label', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: color)),
       ]),
     );
@@ -296,18 +350,40 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
     return Card(
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10), side: BorderSide(color: const Color(0xFFE2E8F0))),
+      color: _cardColor,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: _borderColor),
+      ),
       child: InkWell(
-        onTap: job != null && employee != null ? () => Navigator.push(context, MaterialPageRoute(builder: (context) => EmployeeProfilePage(employee: employee))) : null,
         borderRadius: BorderRadius.circular(10),
         child: Padding(
           padding: const EdgeInsets.all(14),
           child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
             Row(children: [
-              Container(padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3), decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.05), borderRadius: BorderRadius.circular(4)), child: Text('#${order.itemNumber}', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A)))),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: _isDark ? const Color(0xFF334155) : const Color(0xFF0F172A).withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text('#${order.itemNumber}', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor)),
+              ),
               const SizedBox(width: 10),
-              Expanded(child: Text(order.description, style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)), maxLines: 2, overflow: TextOverflow.ellipsis)),
-              Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4), decoration: BoxDecoration(color: _getStatusColor(status).withOpacity(0.1), borderRadius: BorderRadius.circular(20), border: Border.all(color: _getStatusColor(status).withOpacity(0.3))), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(_getStatusIcon(status), size: 14, color: _getStatusColor(status)), const SizedBox(width: 4), Text(_getStatusLabel(status), style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _getStatusColor(status)))])),
+              Expanded(child: Text(order.description, style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: _textColor), maxLines: 2, overflow: TextOverflow.ellipsis)),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                decoration: BoxDecoration(
+                  color: _getStatusColor(status).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: _getStatusColor(status).withOpacity(0.3)),
+                ),
+                child: Row(mainAxisSize: MainAxisSize.min, children: [
+                  Icon(_getStatusIcon(status), size: 14, color: _getStatusColor(status)),
+                  const SizedBox(width: 4),
+                  Text(_getStatusLabel(status), style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _getStatusColor(status))),
+                ]),
+              ),
             ]),
             const SizedBox(height: 10),
             Row(children: [
@@ -330,12 +406,26 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
                 _buildItemDetailChip(Icons.rate_review, order.reviewer!),
             ]),
             if (job != null) ...[
-              const Divider(height: 20),
+              Divider(height: 20, color: _borderColor),
               Row(children: [
-                CircleAvatar(radius: 14, backgroundColor: _getStatusColor(job.status), child: Text(job.employeeName.isNotEmpty ? job.employeeName[0].toUpperCase() : '?', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white))),
+                CircleAvatar(
+                  radius: 14,
+                  backgroundColor: _getStatusColor(job.status),
+                  child: Text(
+                    job.employeeName.isNotEmpty ? job.employeeName[0].toUpperCase() : '?',
+                    style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white),
+                  ),
+                ),
                 const SizedBox(width: 8),
-                Expanded(child: Text(job.employeeName, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600))),
-                Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2), decoration: BoxDecoration(color: const Color(0xFF0F172A).withOpacity(0.05), borderRadius: BorderRadius.circular(4)), child: Text(job.stageName, style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600))),
+                Expanded(child: Text(job.employeeName, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: _textColor))),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                  decoration: BoxDecoration(
+                    color: _isDark ? const Color(0xFF334155) : const Color(0xFF0F172A).withOpacity(0.05),
+                    borderRadius: BorderRadius.circular(4),
+                  ),
+                  child: Text(job.stageName, style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: _secondaryTextColor)),
+                ),
               ]),
             ],
           ]),
@@ -345,19 +435,54 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
   }
 
   Widget _buildItemDetailChip(IconData icon, String text) {
-    return Container(padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3), decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05), borderRadius: BorderRadius.circular(4), border: Border.all(color: Colors.grey.withOpacity(0.1))), child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 12, color: Colors.grey[600]), const SizedBox(width: 3), Text(text, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w500, color: const Color(0xFF475569)))]));
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+      decoration: BoxDecoration(
+        color: _chipBackground,
+        borderRadius: BorderRadius.circular(4),
+        border: Border.all(color: _chipBorder),
+      ),
+      child: Row(mainAxisSize: MainAxisSize.min, children: [
+        Icon(icon, size: 12, color: _secondaryTextColor),
+        const SizedBox(width: 3),
+        Text(text, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w500, color: _secondaryTextColor)),
+      ]),
+    );
   }
 
   Widget _buildInfoRow(String label, String value) {
-    return Row(children: [SizedBox(width: 100, child: Text(label, style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B), fontWeight: FontWeight.w600))), Expanded(child: Text(value, style: GoogleFonts.cairo(fontSize: 14, color: const Color(0xFF0F172A), fontWeight: FontWeight.w500)))]);
+    return Row(children: [
+      SizedBox(width: 100, child: Text(label, style: GoogleFonts.cairo(fontSize: 13, color: _secondaryTextColor, fontWeight: FontWeight.w600))),
+      Expanded(child: Text(value, style: GoogleFonts.cairo(fontSize: 14, color: _textColor, fontWeight: FontWeight.w500))),
+    ]);
   }
 
   Widget _buildStatCard(String label, String value, IconData icon, Color color) {
-    return Expanded(child: Container(padding: const EdgeInsets.all(16), decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))), child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [Icon(icon, size: 18, color: color), const SizedBox(height: 8), Text(value, style: GoogleFonts.cairo(fontSize: 22, fontWeight: FontWeight.bold, color: const Color(0xFF0F172A))), Text(label, style: GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF64748B), fontWeight: FontWeight.w500))])));
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: _cardColor,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: _borderColor),
+        ),
+        child: Column(crossAxisAlignment: CrossAxisAlignment.center, children: [
+          Icon(icon, size: 18, color: color),
+          const SizedBox(height: 8),
+          Text(value, style: GoogleFonts.cairo(fontSize: 22, fontWeight: FontWeight.bold, color: _textColor)),
+          Text(label, style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor, fontWeight: FontWeight.w500)),
+        ]),
+      ),
+    );
   }
 
   Widget _buildSummaryItem(String label, String value, IconData icon) {
-    return Column(children: [Icon(icon, size: 20, color: Colors.white54), const SizedBox(height: 4), Text(value, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)), Text(label, style: GoogleFonts.cairo(fontSize: 11, color: Colors.white54))]);
+    return Column(children: [
+      Icon(icon, size: 20, color: Colors.white54),
+      const SizedBox(height: 4),
+      Text(value, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.white)),
+      Text(label, style: GoogleFonts.cairo(fontSize: 11, color: Colors.white54)),
+    ]);
   }
 
   String _formatNumber(double number) {

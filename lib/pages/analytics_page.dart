@@ -26,6 +26,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   double _totalQuantity = 0;
   Map<String, int> _ordersByMonth = {};
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -110,93 +119,97 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _backgroundColor,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Text(
-                        'Analytics',
-                        style: GoogleFonts.cairo(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const Spacer(),
-                      IconButton(
-                        onPressed: _loadAnalytics,
-                        icon: const Icon(Icons.refresh),
-                        tooltip: 'Refresh',
-                      ),
-                    ],
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Text(
+                  'Analytics',
+                  style: GoogleFonts.cairo(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
                   ),
-                  const SizedBox(height: 24),
-
-                  // KPI Row
-                  Row(
-                    children: [
-                      _buildKpiCard(
-                        'Total Orders',
-                        '$_totalOrders',
-                        Icons.receipt_long,
-                        Colors.blue,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildKpiCard(
-                        'Total Value',
-                        '\$${_formatNumber(_totalValue)}',
-                        Icons.attach_money,
-                        Colors.green,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildKpiCard(
-                        'Total QTY',
-                        _totalQuantity.toStringAsFixed(0),
-                        Icons.inventory_2,
-                        Colors.orange,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Charts Row 1
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 3, child: _buildStatusPieChart()),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 2, child: _buildStatusSummary()),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Charts Row 2
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 1, child: _buildFactoryChart()),
-                      const SizedBox(width: 16),
-                      Expanded(flex: 1, child: _buildEngineerWorkloadChart()),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Monthly Trends
-                  _buildMonthlyTrendsChart(),
-                  const SizedBox(height: 24),
-
-                  // Status Distribution Table
-                  _buildStatusTable(),
-                ],
-              ),
+                ),
+                const Spacer(),
+                IconButton(
+                  onPressed: _loadAnalytics,
+                  icon: Icon(Icons.refresh, color: _secondaryTextColor),
+                  tooltip: 'Refresh',
+                ),
+              ],
             ),
+            const SizedBox(height: 24),
+
+            // KPI Row
+            Row(
+              children: [
+                _buildKpiCard(
+                  'Total Orders',
+                  '$_totalOrders',
+                  Icons.receipt_long,
+                  Colors.blue,
+                ),
+                const SizedBox(width: 16),
+                _buildKpiCard(
+                  'Total Value',
+                  '\$${_formatNumber(_totalValue)}',
+                  Icons.attach_money,
+                  Colors.green,
+                ),
+                const SizedBox(width: 16),
+                _buildKpiCard(
+                  'Total QTY',
+                  _totalQuantity.toStringAsFixed(0),
+                  Icons.inventory_2,
+                  Colors.orange,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Charts Row 1
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 3, child: _buildStatusPieChart()),
+                const SizedBox(width: 16),
+                Expanded(flex: 2, child: _buildStatusSummary()),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Charts Row 2
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 1, child: _buildFactoryChart()),
+                const SizedBox(width: 16),
+                Expanded(flex: 1, child: _buildEngineerWorkloadChart()),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Monthly Trends
+            _buildMonthlyTrendsChart(),
+            const SizedBox(height: 24),
+
+            // Status Distribution Table
+            _buildStatusTable(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -205,12 +218,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _cardColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: _borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -235,14 +248,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   style: GoogleFonts.cairo(
                     fontSize: 24,
                     fontWeight: FontWeight.bold,
-                    color: const Color(0xFF0F172A),
+                    color: _textColor,
                   ),
                 ),
                 Text(
                   title,
                   style: GoogleFonts.cairo(
                     fontSize: 12,
-                    color: const Color(0xFF64748B),
+                    color: _secondaryTextColor,
                   ),
                 ),
               ],
@@ -274,12 +287,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -293,7 +306,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -348,7 +361,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                 e.value.key.length > 18
                                     ? '${e.value.key.substring(0, 16)}...'
                                     : e.value.key,
-                                style: GoogleFonts.cairo(fontSize: 11),
+                                style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
                                 overflow: TextOverflow.ellipsis,
                               ),
                             ),
@@ -357,6 +370,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               style: GoogleFonts.cairo(
                                 fontSize: 11,
                                 fontWeight: FontWeight.w600,
+                                color: _textColor,
                               ),
                             ),
                           ],
@@ -380,12 +394,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -399,7 +413,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 24),
@@ -420,6 +434,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           style: GoogleFonts.cairo(
                             fontSize: 12,
                             fontWeight: FontWeight.w500,
+                            color: _textColor,
                           ),
                           overflow: TextOverflow.ellipsis,
                         ),
@@ -439,7 +454,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: e.value / maxVal,
-                      backgroundColor: Colors.grey.withOpacity(0.1),
+                      backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                       valueColor: const AlwaysStoppedAnimation<Color>(
                         Colors.blue,
                       ),
@@ -464,12 +479,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -483,7 +498,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -498,20 +513,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     .entries
                     .map(
                       (e) => BarChartGroupData(
-                        x: e.key,
-                        barRods: [
-                          BarChartRodData(
-                            toY: e.value.value.toDouble(),
-                            color: Colors.blue,
-                            width: 20,
-                            borderRadius: const BorderRadius.only(
-                              topLeft: Radius.circular(6),
-                              topRight: Radius.circular(6),
-                            ),
-                          ),
-                        ],
+                    x: e.key,
+                    barRods: [
+                      BarChartRodData(
+                        toY: e.value.value.toDouble(),
+                        color: Colors.blue,
+                        width: 20,
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(6),
+                          topRight: Radius.circular(6),
+                        ),
                       ),
-                    )
+                    ],
+                  ),
+                )
                     .toList(),
                 titlesData: FlTitlesData(
                   show: true,
@@ -524,7 +539,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               entries[value.toInt()].key,
-                              style: GoogleFonts.cairo(fontSize: 9),
+                              style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
                             ),
                           );
                         return const SizedBox();
@@ -537,7 +552,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       reservedSize: 30,
                       getTitlesWidget: (value, meta) => Text(
                         '${value.toInt()}',
-                        style: GoogleFonts.cairo(fontSize: 10),
+                        style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor),
                       ),
                     ),
                   ),
@@ -548,7 +563,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                gridData: FlGridData(show: true, drawVerticalLine: false),
+                gridData: FlGridData(
+                  show: true,
+                  drawVerticalLine: false,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: _borderColor,
+                    strokeWidth: 1,
+                  ),
+                ),
                 borderData: FlBorderData(show: false),
               ),
             ),
@@ -570,12 +592,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -589,7 +611,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -599,7 +621,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               child: Center(
                 child: Text(
                   'No data',
-                  style: GoogleFonts.cairo(color: Colors.grey),
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
                 ),
               ),
             )
@@ -615,20 +637,20 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       .entries
                       .map(
                         (e) => BarChartGroupData(
-                          x: e.key,
-                          barRods: [
-                            BarChartRodData(
-                              toY: e.value.value.toDouble(),
-                              color: Colors.orange,
-                              width: 18,
-                              borderRadius: const BorderRadius.only(
-                                topLeft: Radius.circular(6),
-                                topRight: Radius.circular(6),
-                              ),
-                            ),
-                          ],
+                      x: e.key,
+                      barRods: [
+                        BarChartRodData(
+                          toY: e.value.value.toDouble(),
+                          color: Colors.orange,
+                          width: 18,
+                          borderRadius: const BorderRadius.only(
+                            topLeft: Radius.circular(6),
+                            topRight: Radius.circular(6),
+                          ),
                         ),
-                      )
+                      ],
+                    ),
+                  )
                       .toList(),
                   titlesData: FlTitlesData(
                     show: true,
@@ -643,7 +665,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                                 entries[value.toInt()].key.length > 10
                                     ? '${entries[value.toInt()].key.substring(0, 8)}..'
                                     : entries[value.toInt()].key,
-                                style: GoogleFonts.cairo(fontSize: 9),
+                                style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
                               ),
                             );
                           return const SizedBox();
@@ -656,7 +678,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         reservedSize: 30,
                         getTitlesWidget: (value, meta) => Text(
                           '${value.toInt()}',
-                          style: GoogleFonts.cairo(fontSize: 10),
+                          style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor),
                         ),
                       ),
                     ),
@@ -667,7 +689,14 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       sideTitles: SideTitles(showTitles: false),
                     ),
                   ),
-                  gridData: FlGridData(show: true, drawVerticalLine: false),
+                  gridData: FlGridData(
+                    show: true,
+                    drawVerticalLine: false,
+                    getDrawingHorizontalLine: (value) => FlLine(
+                      color: _borderColor,
+                      strokeWidth: 1,
+                    ),
+                  ),
                   borderData: FlBorderData(show: false),
                 ),
               ),
@@ -686,12 +715,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -705,7 +734,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -722,10 +751,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         .entries
                         .map(
                           (e) => FlSpot(
-                            e.key.toDouble(),
-                            e.value.value.toDouble(),
-                          ),
-                        )
+                        e.key.toDouble(),
+                        e.value.value.toDouble(),
+                      ),
+                    )
                         .toList(),
                     isCurved: true,
                     color: const Color(0xFF6366F1),
@@ -747,7 +776,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                             padding: const EdgeInsets.only(top: 8),
                             child: Text(
                               entries[value.toInt()].key,
-                              style: GoogleFonts.cairo(fontSize: 9),
+                              style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
                             ),
                           );
                         return const SizedBox();
@@ -760,7 +789,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       reservedSize: 30,
                       getTitlesWidget: (value, meta) => Text(
                         '${value.toInt()}',
-                        style: GoogleFonts.cairo(fontSize: 10),
+                        style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor),
                       ),
                     ),
                   ),
@@ -771,7 +800,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     sideTitles: SideTitles(showTitles: false),
                   ),
                 ),
-                gridData: FlGridData(show: true),
+                gridData: FlGridData(
+                  show: true,
+                  getDrawingHorizontalLine: (value) => FlLine(
+                    color: _borderColor,
+                    strokeWidth: 1,
+                  ),
+                  getDrawingVerticalLine: (value) => FlLine(
+                    color: _borderColor,
+                    strokeWidth: 1,
+                  ),
+                ),
                 borderData: FlBorderData(show: false),
               ),
             ),
@@ -788,12 +827,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -807,7 +846,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -819,7 +858,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             },
             children: [
               TableRow(
-                decoration: BoxDecoration(color: Colors.grey.withOpacity(0.05)),
+                decoration: BoxDecoration(color: _isDark ? const Color(0xFF334155).withOpacity(0.3) : Colors.grey.withOpacity(0.05)),
                 children: [
                   _tableHeader('Status'),
                   _tableHeader('Count'),
@@ -852,7 +891,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       style: GoogleFonts.cairo(
         fontSize: 13,
         fontWeight: FontWeight.w700,
-        color: const Color(0xFF0F172A),
+        color: _textColor,
       ),
     ),
   );
@@ -861,7 +900,10 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     padding: const EdgeInsets.all(12),
     child: Text(
       text,
-      style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF334155)),
+      style: GoogleFonts.cairo(
+        fontSize: 13,
+        color: _secondaryTextColor,
+      ),
     ),
   );
 }

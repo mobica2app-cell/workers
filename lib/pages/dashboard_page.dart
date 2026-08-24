@@ -3,8 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../services/sap_service.dart';
-import 'main.dart';
+import '../../services/sap_service.dart';
+import '../main.dart';
 
 
 class DashboardPage extends StatefulWidget {
@@ -45,6 +45,15 @@ class _DashboardPageState extends State<DashboardPage> {
   final EmployeeAuthService _authService = EmployeeAuthService(
     Supabase.instance.client,
   );
+
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
 
   @override
   void initState() {
@@ -100,10 +109,10 @@ class _DashboardPageState extends State<DashboardPage> {
 
       // Top engineers
       final topEngineers =
-          engineerCount.entries
-              .map((e) => {'name': e.key, 'count': e.value})
-              .toList()
-            ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
+      engineerCount.entries
+          .map((e) => {'name': e.key, 'count': e.value})
+          .toList()
+        ..sort((a, b) => (b['count'] as int).compareTo(a['count'] as int));
 
       // Recent orders (last 10)
       final recent = List<SAPMainOrder>.from(orders)
@@ -158,7 +167,7 @@ class _DashboardPageState extends State<DashboardPage> {
       case 'Sales':
         return Colors.deepOrange;
       case 'Unknown':
-        return Colors.grey;
+        return _isDark ? Colors.grey.shade400 : Colors.grey;
       default:
         return Colors.orange;
     }
@@ -167,144 +176,148 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: _backgroundColor,
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Text(
-                        'Dashboard',
-                        style: GoogleFonts.cairo(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: const Color(0xFF0F172A),
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                        style: GoogleFonts.cairo(
-                          fontSize: 14,
-                          color: const Color(0xFF64748B),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        onPressed: _loadDashboardData,
-                        icon: const Icon(Icons.refresh),
-                        tooltip: 'Refresh',
-                      ),
-                    ],
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Text(
+                  'Dashboard',
+                  style: GoogleFonts.cairo(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
                   ),
-                  const SizedBox(height: 24),
-
-                  // Stats Cards
-                  Row(
-                    children: [
-                      _buildStatCard(
-                        'Total Orders',
-                        '$_totalOrders',
-                        Icons.receipt_long,
-                        Colors.blue,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'Total Value',
-                        '\$${_formatNumber(_totalValue)}',
-                        Icons.attach_money,
-                        Colors.green,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'Employees',
-                        '$_totalEmployees',
-                        Icons.people,
-                        Colors.orange,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'Factories',
-                        '$_totalFactories',
-                        Icons.factory,
-                        Colors.purple,
-                      ),
-                    ],
+                ),
+                const Spacer(),
+                Text(
+                  DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    color: _secondaryTextColor,
                   ),
-                  const SizedBox(height: 16),
-                  Row(
-                    children: [
-                      _buildStatCard(
-                        'Total QTY',
-                        _totalQuantity.toStringAsFixed(0),
-                        Icons.inventory_2,
-                        Colors.teal,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'This Month',
-                        '$_ordersThisMonth',
-                        Icons.calendar_today,
-                        Colors.indigo,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'Avg Value',
-                        '\$${_formatNumber(_totalOrders > 0 ? _totalValue / _totalOrders : 0)}',
-                        Icons.trending_up,
-                        Colors.amber,
-                      ),
-                      const SizedBox(width: 16),
-                      _buildStatCard(
-                        'Products',
-                        '${_statusDistribution.values.fold(0, (a, b) => a + b)}',
-                        Icons.category,
-                        Colors.pink,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Charts Row
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(flex: 2, child: _buildStatusDistributionCard()),
-                      const SizedBox(width: 16),
-                      Expanded(child: _buildTopEngineersCard()),
-                    ],
-                  ),
-                  const SizedBox(height: 24),
-
-                  // Recent Orders
-                  _buildRecentOrdersCard(),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: _loadDashboardData,
+                  icon: Icon(Icons.refresh, color: _secondaryTextColor),
+                  tooltip: 'Refresh',
+                ),
+              ],
             ),
+            const SizedBox(height: 24),
+
+            // Stats Cards
+            Row(
+              children: [
+                _buildStatCard(
+                  'Total Orders',
+                  '$_totalOrders',
+                  Icons.receipt_long,
+                  Colors.blue,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'Total Value',
+                  '\$${_formatNumber(_totalValue)}',
+                  Icons.attach_money,
+                  Colors.green,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'Employees',
+                  '$_totalEmployees',
+                  Icons.people,
+                  Colors.orange,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'Factories',
+                  '$_totalFactories',
+                  Icons.factory,
+                  Colors.purple,
+                ),
+              ],
+            ),
+            const SizedBox(height: 16),
+            Row(
+              children: [
+                _buildStatCard(
+                  'Total QTY',
+                  _totalQuantity.toStringAsFixed(0),
+                  Icons.inventory_2,
+                  Colors.teal,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'This Month',
+                  '$_ordersThisMonth',
+                  Icons.calendar_today,
+                  Colors.indigo,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'Avg Value',
+                  '\$${_formatNumber(_totalOrders > 0 ? _totalValue / _totalOrders : 0)}',
+                  Icons.trending_up,
+                  Colors.amber,
+                ),
+                const SizedBox(width: 16),
+                _buildStatCard(
+                  'Products',
+                  '${_statusDistribution.values.fold(0, (a, b) => a + b)}',
+                  Icons.category,
+                  Colors.pink,
+                ),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Charts Row
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(flex: 2, child: _buildStatusDistributionCard()),
+                const SizedBox(width: 16),
+                Expanded(child: _buildTopEngineersCard()),
+              ],
+            ),
+            const SizedBox(height: 24),
+
+            // Recent Orders
+            _buildRecentOrdersCard(),
+          ],
+        ),
+      ),
     );
   }
 
   Widget _buildStatCard(
-    String title,
-    String value,
-    IconData icon,
-    Color color,
-  ) {
+      String title,
+      String value,
+      IconData icon,
+      Color color,
+      ) {
     return Expanded(
       child: Container(
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _cardColor,
           borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: const Color(0xFFE2E8F0)),
+          border: Border.all(color: _borderColor),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.04),
+              color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
               blurRadius: 10,
               offset: const Offset(0, 2),
             ),
@@ -327,7 +340,7 @@ class _DashboardPageState extends State<DashboardPage> {
               style: GoogleFonts.cairo(
                 fontSize: 28,
                 fontWeight: FontWeight.bold,
-                color: const Color(0xFF0F172A),
+                color: _textColor,
               ),
             ),
             const SizedBox(height: 4),
@@ -335,7 +348,7 @@ class _DashboardPageState extends State<DashboardPage> {
               title,
               style: GoogleFonts.cairo(
                 fontSize: 13,
-                color: const Color(0xFF64748B),
+                color: _secondaryTextColor,
               ),
             ),
           ],
@@ -360,12 +373,12 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -379,7 +392,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -387,7 +400,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Center(
               child: Text(
                 'No data',
-                style: GoogleFonts.cairo(color: Colors.grey),
+                style: GoogleFonts.cairo(color: _secondaryTextColor),
               ),
             )
           else
@@ -421,6 +434,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: GoogleFonts.cairo(
                               fontSize: 13,
                               fontWeight: FontWeight.w500,
+                              color: _textColor,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -440,7 +454,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       borderRadius: BorderRadius.circular(4),
                       child: LinearProgressIndicator(
                         value: pct / 100,
-                        backgroundColor: Colors.grey.withOpacity(0.1),
+                        backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                         valueColor: AlwaysStoppedAnimation<Color>(color),
                         minHeight: 6,
                       ),
@@ -458,12 +472,12 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -477,7 +491,7 @@ class _DashboardPageState extends State<DashboardPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 20),
@@ -485,7 +499,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Center(
               child: Text(
                 'No data',
-                style: GoogleFonts.cairo(color: Colors.grey),
+                style: GoogleFonts.cairo(color: _secondaryTextColor),
               ),
             )
           else
@@ -523,6 +537,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: GoogleFonts.cairo(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
+                              color: _textColor,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -530,7 +545,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             '${eng['count']} orders',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
-                              color: Colors.grey,
+                              color: _secondaryTextColor,
                             ),
                           ),
                         ],
@@ -549,12 +564,12 @@ class _DashboardPageState extends State<DashboardPage> {
     return Container(
       padding: const EdgeInsets.all(24),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
             blurRadius: 10,
             offset: const Offset(0, 2),
           ),
@@ -570,7 +585,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 style: GoogleFonts.cairo(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF0F172A),
+                  color: _textColor,
                 ),
               ),
               const Spacer(),
@@ -578,7 +593,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 '${_recentOrders.length} orders',
                 style: GoogleFonts.cairo(
                   fontSize: 13,
-                  color: const Color(0xFF64748B),
+                  color: _secondaryTextColor,
                 ),
               ),
             ],
@@ -590,17 +605,17 @@ class _DashboardPageState extends State<DashboardPage> {
                 padding: const EdgeInsets.all(40),
                 child: Text(
                   'No orders yet',
-                  style: GoogleFonts.cairo(color: Colors.grey),
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
                 ),
               ),
             )
           else
             ..._recentOrders.map(
-              (order) => Container(
+                  (order) => Container(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 decoration: BoxDecoration(
                   border: Border(
-                    bottom: BorderSide(color: Colors.grey.withOpacity(0.1)),
+                    bottom: BorderSide(color: _borderColor.withOpacity(0.5)),
                   ),
                 ),
                 child: Row(
@@ -630,6 +645,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             style: GoogleFonts.cairo(
                               fontSize: 13,
                               fontWeight: FontWeight.w600,
+                              color: _textColor,
                             ),
                             overflow: TextOverflow.ellipsis,
                           ),
@@ -637,7 +653,7 @@ class _DashboardPageState extends State<DashboardPage> {
                             '${order.customerName} • ${order.designOrder}',
                             style: GoogleFonts.cairo(
                               fontSize: 11,
-                              color: Colors.grey[600],
+                              color: _secondaryTextColor,
                             ),
                           ),
                         ],

@@ -29,6 +29,15 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   String _dateFilter = 'all';
   List<Map<String, dynamic>> _filteredAuditLogs = [];
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8F9FA);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : Colors.grey.shade200;
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -96,8 +105,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     });
   }
 
-  // Get employee's tasks
-  // Get employee's tasks with priority logic (correspondence > responsible)
   // Get employee's tasks with priority logic (correspondence > responsible)
   List<SAPMainOrder> _getEmployeeTasks(EmployeeAuth employee) {
     final assignedOrders = <String, SAPMainOrder>{};
@@ -117,8 +124,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return assignedOrders.values.toList();
   }
 
-  // Get completed count for employee
-  // Get completed count for employee based on filtered audit logs
   // Get completed count for employee based on filtered audit logs
   int _getEmployeeCompleted(EmployeeAuth employee) {
     // Get order IDs that were changed to "Done" in the filtered period
@@ -172,7 +177,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       case 'Solid Work Section': return Colors.pink;
       case 'Data Entry': return Colors.cyan;
       case 'Management': return Colors.deepOrange;
-      default: return Colors.grey;
+      default: return _isDark ? Colors.grey.shade400 : Colors.grey;
     }
   }
 
@@ -194,14 +199,18 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text('Departments', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : Column(
         children: [
           Padding(
@@ -213,13 +222,13 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                     setState(() => _searchQuery = value);
                     _applyFilters();
                   },
-                  style: GoogleFonts.cairo(fontSize: 14),
+                  style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
                   decoration: InputDecoration(
                     hintText: 'Search by Design Order ID...',
-                    hintStyle: GoogleFonts.cairo(color: Colors.grey),
-                    prefixIcon: const Icon(Icons.search),
+                    hintStyle: GoogleFonts.cairo(color: _secondaryTextColor),
+                    prefixIcon: Icon(Icons.search, color: _secondaryTextColor),
                     filled: true,
-                    fillColor: Colors.white,
+                    fillColor: _cardColor,
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.circular(10),
                       borderSide: BorderSide.none,
@@ -243,7 +252,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   alignment: Alignment.centerLeft,
                   child: Text(
                     '${_filteredAuditLogs.length} changes in selected period',
-                    style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF64748B)),
+                    style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
                   ),
                 ),
               ],
@@ -280,7 +289,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         style: GoogleFonts.cairo(
           fontSize: 11,
           fontWeight: FontWeight.w600,
-          color: isSelected ? Colors.white : const Color(0xFF334155),
+          color: isSelected ? Colors.white : _textColor,
         ),
       ),
       onSelected: (selected) {
@@ -289,8 +298,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       },
       selectedColor: const Color(0xFF6366F1),
       checkmarkColor: Colors.white,
-      backgroundColor: Colors.white,
-      side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : Colors.grey.shade300),
+      backgroundColor: _cardColor,
+      side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : _borderColor),
     );
   }
 
@@ -300,6 +309,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     final totalCompleted = employees.fold(0, (sum, emp) => sum + _getEmployeeCompleted(emp));
 
     return Card(
+      color: _cardColor,
       margin: const EdgeInsets.only(bottom: 12),
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -312,7 +322,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
           decoration: BoxDecoration(color: color.withOpacity(0.1), borderRadius: BorderRadius.circular(8)),
           child: Icon(_getDepartmentIcon(department), color: color, size: 24),
         ),
-        title: Text(department, style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+        title: Text(department, style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.w600, color: _textColor)),
         subtitle: Row(children: [
           _buildBadge('${employees.length} Employees', color),
           const SizedBox(width: 8),
@@ -323,7 +333,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         childrenPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
         expandedCrossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Divider(),
+          Divider(color: _borderColor),
           const SizedBox(height: 8),
           ...employees.map((emp) => _buildEmployeeTile(emp, color)),
         ],
@@ -342,9 +352,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: _isDark ? const Color(0xFF0F172A) : Colors.white,
           borderRadius: BorderRadius.circular(8),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(color: _borderColor),
         ),
         child: Row(
           children: [
@@ -359,7 +369,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+                    Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor)),
                     if (employee.role != null) ...[
                       const SizedBox(width: 8),
                       _buildBadge(employee.role!, Colors.purple),
@@ -370,7 +380,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                     borderRadius: BorderRadius.circular(4),
                     child: LinearProgressIndicator(
                       value: progress / 100,
-                      backgroundColor: Colors.grey.withOpacity(0.1),
+                      backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
                       valueColor: AlwaysStoppedAnimation<Color>(deptColor),
                       minHeight: 6,
                     ),
@@ -382,9 +392,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
             Column(
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
-                Text('${tasks.length} tasks', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
+                Text('${tasks.length} tasks', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: _textColor)),
                 Text('$completed done', style: GoogleFonts.cairo(fontSize: 10, color: Colors.green)),
-                const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                Icon(Icons.chevron_right, size: 16, color: _secondaryTextColor),
               ],
             ),
           ],
@@ -394,7 +404,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   }
 
   // Show employee tasks as cards
-  // Show employee's completed tasks in the filtered period
   void _showEmployeeTasks(EmployeeAuth employee, Color deptColor) {
     // Get completed order IDs from filtered audit logs
     final completedOrderIds = <String>{};
@@ -419,9 +428,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       backgroundColor: Colors.transparent,
       builder: (context) => Container(
         height: MediaQuery.of(context).size.height * 0.85,
-        decoration: const BoxDecoration(
-          color: Color(0xFFF8F9FA),
-          borderRadius: BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+        decoration: BoxDecoration(
+          color: _backgroundColor,
+          borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
         ),
         child: Column(
           children: [
@@ -444,14 +453,14 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w700, color: const Color(0xFF0F172A))),
-                        Text(employee.role ?? 'Employee', style: GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF64748B))),
+                        Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w700, color: _textColor)),
+                        Text(employee.role ?? 'Employee', style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor)),
                       ],
                     ),
                   ),
                   IconButton(
                     onPressed: () => Navigator.pop(context),
-                    icon: const Icon(Icons.close, color: Color(0xFF64748B)),
+                    icon: Icon(Icons.close, color: _secondaryTextColor),
                   ),
                 ],
               ),
@@ -484,9 +493,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.check_circle_outline, size: 60, color: Colors.grey.shade300),
+                    Icon(Icons.check_circle_outline, size: 60, color: _secondaryTextColor),
                     const SizedBox(height: 12),
-                    Text('No completed orders in this period', style: GoogleFonts.cairo(color: Colors.grey)),
+                    Text('No completed orders in this period', style: GoogleFonts.cairo(color: _secondaryTextColor)),
                   ],
                 ),
               )
@@ -505,7 +514,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     );
   }
 
-// Helper to get date filter label
+  // Helper to get date filter label
   String _getDateFilterLabel() {
     switch (_dateFilter) {
       case 'today': return 'Today';
@@ -515,9 +524,10 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     }
   }
 
-// Completed task card - opens OrderTrackingPage on tap
+  // Completed task card - opens OrderTrackingPage on tap
   Widget _buildCompletedTaskCard(SAPMainOrder task, Color deptColor, EmployeeAuth employee) {
     return Card(
+      color: _cardColor,
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(
@@ -547,7 +557,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   Expanded(
                     child: Text(
                       task.description.isNotEmpty ? task.description : 'No description',
-                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -589,7 +599,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   const SizedBox(width: 12),
                   _buildTaskInfo(Icons.person, task.customerName),
                   const Spacer(),
-                  const Icon(Icons.chevron_right, size: 16, color: Colors.grey),
+                  Icon(Icons.chevron_right, size: 16, color: _secondaryTextColor),
                 ],
               ),
             ],
@@ -598,14 +608,16 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       ),
     );
   }
+
   // Individual task card
   Widget _buildTaskCard(SAPMainOrder task, bool isDone) {
     return Card(
+      color: _cardColor,
       margin: const EdgeInsets.only(bottom: 8),
       elevation: 0,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: isDone ? Colors.green.withOpacity(0.3) : Colors.grey.shade200),
+        side: BorderSide(color: isDone ? Colors.green.withOpacity(0.3) : _borderColor),
       ),
       child: Padding(
         padding: const EdgeInsets.all(12),
@@ -617,7 +629,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 Expanded(
                   child: Text(
                     task.description.isNotEmpty ? task.description : 'No description',
-                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A)),
+                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -674,11 +686,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
-        Icon(icon, size: 12, color: Colors.grey),
+        Icon(icon, size: 12, color: _secondaryTextColor),
         const SizedBox(width: 4),
         Text(
           text,
-          style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF64748B)),
+          style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),

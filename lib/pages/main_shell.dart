@@ -4,7 +4,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:mobitem/pages/analytics_page.dart';
 import 'package:mobitem/pages/profile_page.dart';
 import 'package:universal_html/html.dart' as html;
-import '../dashboard_page.dart';
+import 'dashboard_page.dart';
 import '../services/sap_service.dart';
 import 'department_tracking_page.dart';
 import 'login_page.dart';
@@ -27,13 +27,21 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+
   // Check if user is head/admin
   bool get _isHead {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
     return role == 'head' || role == 'software head' || role == 'admin';
   }
 
-  // Full nav items for head users (4 tabs)
+  // Full nav items for head users (5 tabs)
   final List<_NavItem> _headNavItems = [
     _NavItem(icon: Icons.list_alt, label: 'Orders'),
     _NavItem(icon: Icons.dashboard_outlined, label: 'Dashboard'),
@@ -55,9 +63,10 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _backgroundColor,
       body: Row(
         children: [
-          // Sidebar
+          // Sidebar (always dark)
           Container(
             width: 240,
             color: const Color(0xFF0F172A),
@@ -162,10 +171,14 @@ class _MainShellState extends State<MainShell> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Logout', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
-        content: Text('Are you sure you want to logout?', style: GoogleFonts.cairo()),
+        backgroundColor: _surfaceColor,
+        title: Text('Logout', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor)),
+        content: Text('Are you sure you want to logout?', style: GoogleFonts.cairo(color: _secondaryTextColor)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: Text('Cancel', style: GoogleFonts.cairo())),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text('Cancel', style: GoogleFonts.cairo(color: _secondaryTextColor)),
+          ),
           ElevatedButton(
             onPressed: () {
               Navigator.pop(ctx);
@@ -213,13 +226,13 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildPage() {
     if (_isHead) {
-      // Head users: 4 tabs (Orders, Dashboard, Analytics, Profile)
+      // Head users: 5 tabs (Orders, Dashboard, Analytics, Profile, Departments)
       switch (_selectedIndex) {
         case 0: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
         case 1: return DashboardPage(sapService: widget.sapService);
         case 2: return AnalyticsPage(sapService: widget.sapService);
         case 3: return ProfilePage(employee: widget.loggedInEmployee);
-        case 4:return const DepartmentTrackingPage();
+        case 4: return const DepartmentTrackingPage();
         default: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
       }
     } else {

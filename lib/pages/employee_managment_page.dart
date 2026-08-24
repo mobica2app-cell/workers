@@ -22,6 +22,15 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
   String? _filterDepartment;
   String? _filterRole;
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
   // Get unique departments and roles from data
   List<String> get _departments {
     final depts = _employees
@@ -84,9 +93,10 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: _surfaceColor,
           title: Text(
             'Add New Employee',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+            style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -94,18 +104,20 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
               children: [
                 TextField(
                   controller: nameController,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Full Name',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: usernameController,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Username',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -113,18 +125,20 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 TextField(
                   controller: passwordController,
                   obscureText: true,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Password',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: phoneController,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Phone Number',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -136,16 +150,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                       : null,
                   decoration: InputDecoration(
                     labelText: 'Department',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                   items: _departments
                       .map(
                         (dept) => DropdownMenuItem(
-                          value: dept,
-                          child: Text(dept, style: GoogleFonts.cairo()),
-                        ),
-                      )
+                      value: dept,
+                      child: Text(dept, style: GoogleFonts.cairo(color: _textColor)),
+                    ),
+                  )
                       .toList(),
                   onChanged: (value) =>
                       setDialogState(() => selectedDepartment = value ?? ''),
@@ -156,16 +170,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   value: _roles.contains(selectedRole) ? selectedRole : null,
                   decoration: InputDecoration(
                     labelText: 'Role',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                   items: _roles
                       .map(
                         (role) => DropdownMenuItem(
-                          value: role,
-                          child: Text(role, style: GoogleFonts.cairo()),
-                        ),
-                      )
+                      value: role,
+                      child: Text(role, style: GoogleFonts.cairo(color: _textColor)),
+                    ),
+                  )
                       .toList(),
                   onChanged: (value) =>
                       setDialogState(() => selectedRole = value ?? ''),
@@ -176,7 +190,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: GoogleFonts.cairo()),
+              child: Text('Cancel', style: GoogleFonts.cairo(color: _secondaryTextColor)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -264,9 +278,10 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
       context: context,
       builder: (context) => StatefulBuilder(
         builder: (context, setDialogState) => AlertDialog(
+          backgroundColor: _surfaceColor,
           title: Text(
             'Edit Employee',
-            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+            style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor),
           ),
           content: SingleChildScrollView(
             child: Column(
@@ -274,9 +289,10 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
               children: [
                 TextField(
                   controller: nameController,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Full Name',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -284,21 +300,23 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 TextField(
                   controller: usernameController,
                   enabled: false,
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
                   decoration: InputDecoration(
                     labelText: 'Username',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
-                    disabledBorder: const OutlineInputBorder(
-                      borderSide: BorderSide(color: Colors.grey),
+                    disabledBorder: OutlineInputBorder(
+                      borderSide: BorderSide(color: _borderColor),
                     ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: phoneController,
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Phone Number',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                 ),
@@ -309,16 +327,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                       : null,
                   decoration: InputDecoration(
                     labelText: 'Department',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                   items: _departments
                       .map(
                         (dept) => DropdownMenuItem(
-                          value: dept,
-                          child: Text(dept, style: GoogleFonts.cairo()),
-                        ),
-                      )
+                      value: dept,
+                      child: Text(dept, style: GoogleFonts.cairo(color: _textColor)),
+                    ),
+                  )
                       .toList(),
                   onChanged: (value) =>
                       setDialogState(() => selectedDepartment = value ?? ''),
@@ -328,16 +346,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   value: _roles.contains(selectedRole) ? selectedRole : null,
                   decoration: InputDecoration(
                     labelText: 'Role',
-                    labelStyle: GoogleFonts.cairo(),
+                    labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
                   ),
                   items: _roles
                       .map(
                         (role) => DropdownMenuItem(
-                          value: role,
-                          child: Text(role, style: GoogleFonts.cairo()),
-                        ),
-                      )
+                      value: role,
+                      child: Text(role, style: GoogleFonts.cairo(color: _textColor)),
+                    ),
+                  )
                       .toList(),
                   onChanged: (value) =>
                       setDialogState(() => selectedRole = value ?? ''),
@@ -348,7 +366,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: Text('Cancel', style: GoogleFonts.cairo()),
+              child: Text('Cancel', style: GoogleFonts.cairo(color: _secondaryTextColor)),
             ),
             ElevatedButton(
               onPressed: () async {
@@ -407,6 +425,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text(
           'Employee Management',
@@ -430,10 +449,11 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 Expanded(
                   child: TextField(
                     onChanged: (value) => setState(() => _searchQuery = value),
+                    style: GoogleFonts.cairo(color: _textColor),
                     decoration: InputDecoration(
                       hintText: 'Search employees...',
-                      hintStyle: GoogleFonts.cairo(),
-                      prefixIcon: const Icon(Icons.search),
+                      hintStyle: GoogleFonts.cairo(color: _secondaryTextColor),
+                      prefixIcon: Icon(Icons.search, color: _secondaryTextColor),
                       border: const OutlineInputBorder(),
                     ),
                   ),
@@ -441,19 +461,19 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 const SizedBox(width: 12),
                 DropdownButton<String>(
                   value: _filterDepartment,
-                  hint: Text('Department', style: GoogleFonts.cairo()),
+                  hint: Text('Department', style: GoogleFonts.cairo(color: _secondaryTextColor)),
                   items: [
                     DropdownMenuItem(
                       value: null,
                       child: Text(
                         'All Departments',
-                        style: GoogleFonts.cairo(),
+                        style: GoogleFonts.cairo(color: _textColor),
                       ),
                     ),
                     ..._departments.map(
-                      (dept) => DropdownMenuItem(
+                          (dept) => DropdownMenuItem(
                         value: dept,
-                        child: Text(dept, style: GoogleFonts.cairo()),
+                        child: Text(dept, style: GoogleFonts.cairo(color: _textColor)),
                       ),
                     ),
                   ],
@@ -465,16 +485,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 const SizedBox(width: 12),
                 DropdownButton<String>(
                   value: _filterRole,
-                  hint: Text('Role', style: GoogleFonts.cairo()),
+                  hint: Text('Role', style: GoogleFonts.cairo(color: _secondaryTextColor)),
                   items: [
                     DropdownMenuItem(
                       value: null,
-                      child: Text('All Roles', style: GoogleFonts.cairo()),
+                      child: Text('All Roles', style: GoogleFonts.cairo(color: _textColor)),
                     ),
                     ..._roles.map(
-                      (role) => DropdownMenuItem(
+                          (role) => DropdownMenuItem(
                         value: role,
-                        child: Text(role, style: GoogleFonts.cairo()),
+                        child: Text(role, style: GoogleFonts.cairo(color: _textColor)),
                       ),
                     ),
                   ],
@@ -489,33 +509,37 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
           // Employee List
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator())
+                ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            )
                 : _employees.isEmpty
                 ? Center(
-                    child: Text(
-                      'No employees found',
-                      style: GoogleFonts.cairo(
-                        fontSize: 16,
-                        color: Colors.grey,
-                      ),
-                    ),
-                  )
+              child: Text(
+                'No employees found',
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  color: _secondaryTextColor,
+                ),
+              ),
+            )
                 : ListView.builder(
-                    itemCount: _employees.length,
-                    itemBuilder: (context, index) {
-                      final employee = _employees[index];
-                      if (_searchQuery.isNotEmpty &&
-                          !employee.fullName.toLowerCase().contains(
-                            _searchQuery.toLowerCase(),
-                          ) &&
-                          !employee.username.toLowerCase().contains(
-                            _searchQuery.toLowerCase(),
-                          )) {
-                        return const SizedBox.shrink();
-                      }
-                      return _buildEmployeeCard(employee);
-                    },
-                  ),
+              itemCount: _employees.length,
+              itemBuilder: (context, index) {
+                final employee = _employees[index];
+                if (_searchQuery.isNotEmpty &&
+                    !employee.fullName.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    ) &&
+                    !employee.username.toLowerCase().contains(
+                      _searchQuery.toLowerCase(),
+                    )) {
+                  return const SizedBox.shrink();
+                }
+                return _buildEmployeeCard(employee);
+              },
+            ),
           ),
         ],
       ),
@@ -524,6 +548,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
 
   Widget _buildEmployeeCard(EmployeeAuth employee) {
     return Card(
+      color: _cardColor,
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
       child: ListTile(
         leading: CircleAvatar(
@@ -538,12 +563,12 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
         ),
         title: Text(
           employee.fullName,
-          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor),
         ),
         subtitle: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(employee.username, style: GoogleFonts.cairo(fontSize: 12)),
+            Text(employee.username, style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor)),
             const SizedBox(height: 4),
             Row(
               children: [
@@ -570,9 +595,9 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
               case 'toggle_active':
                 _authService
                     .updateEmployee(
-                      id: employee.id,
-                      isActive: !employee.isActive,
-                    )
+                  id: employee.id,
+                  isActive: !employee.isActive,
+                )
                     .then((_) => _loadEmployees());
                 break;
               case 'reset_password':
@@ -587,7 +612,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 children: [
                   const Icon(Icons.edit, size: 20, color: Colors.orange),
                   const SizedBox(width: 8),
-                  Text('Edit', style: GoogleFonts.cairo()),
+                  Text('Edit', style: GoogleFonts.cairo(color: _textColor)),
                 ],
               ),
             ),
@@ -597,7 +622,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 children: [
                   const Icon(Icons.lock_reset, size: 20, color: Colors.blue),
                   const SizedBox(width: 8),
-                  Text('Reset Password', style: GoogleFonts.cairo()),
+                  Text('Reset Password', style: GoogleFonts.cairo(color: _textColor)),
                 ],
               ),
             ),
@@ -614,7 +639,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   const SizedBox(width: 8),
                   Text(
                     employee.isActive ? 'Deactivate' : 'Activate',
-                    style: GoogleFonts.cairo(),
+                    style: GoogleFonts.cairo(color: _textColor),
                   ),
                 ],
               ),
@@ -630,23 +655,25 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
+        backgroundColor: _surfaceColor,
         title: Text(
           'Reset Password',
-          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+          style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor),
         ),
         content: TextField(
           controller: passwordController,
           obscureText: true,
+          style: GoogleFonts.cairo(color: _textColor),
           decoration: InputDecoration(
             labelText: 'New Password',
-            labelStyle: GoogleFonts.cairo(),
+            labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
             border: const OutlineInputBorder(),
           ),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: Text('Cancel', style: GoogleFonts.cairo()),
+            child: Text('Cancel', style: GoogleFonts.cairo(color: _secondaryTextColor)),
           ),
           ElevatedButton(
             onPressed: () async {
@@ -729,7 +756,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
       case 'Management':
         return Colors.deepOrange;
       default:
-        return Colors.grey;
+        return _isDark ? Colors.grey.shade400 : Colors.grey;
     }
   }
 }

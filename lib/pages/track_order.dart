@@ -20,6 +20,16 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   List<Map<String, dynamic>> _auditLogs = [];
   bool _isLoading = true;
 
+  // Theme helper getters
+  bool get _isDark => Theme.of(context).brightness == Brightness.dark;
+  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8F9FA);
+  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+  Color get _tertiaryTextColor => _isDark ? const Color(0xFF64748B) : const Color(0xFF45464D);
+  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
   @override
   void initState() {
     super.initState();
@@ -55,7 +65,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8F9FA),
+      backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text(
           'Order Tracking',
@@ -65,22 +75,26 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         foregroundColor: Colors.white,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : SingleChildScrollView(
-              padding: const EdgeInsets.all(24),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  _buildHeader(),
-                  const SizedBox(height: 24),
-                  _buildProcessFlow(),
-                  const SizedBox(height: 24),
-                  _buildOrderSummary(),
-                  const SizedBox(height: 24),
-                  _buildAuditLogSection(),
-                ],
-              ),
-            ),
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildHeader(),
+            const SizedBox(height: 24),
+            _buildProcessFlow(),
+            const SizedBox(height: 24),
+            _buildOrderSummary(),
+            const SizedBox(height: 24),
+            _buildAuditLogSection(),
+          ],
+        ),
+      ),
     );
   }
 
@@ -88,9 +102,9 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Row(
         children: [
@@ -111,7 +125,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                       style: GoogleFonts.cairo(
                         fontSize: 24,
                         fontWeight: FontWeight.w700,
-                        color: const Color(0xFF0F172A),
+                        color: _textColor,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -140,7 +154,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                   widget.order.description,
                   style: GoogleFonts.cairo(
                     fontSize: 14,
-                    color: const Color(0xFF64748B),
+                    color: _secondaryTextColor,
                   ),
                 ),
                 const SizedBox(height: 4),
@@ -148,7 +162,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                   widget.order.customerName,
                   style: GoogleFonts.cairo(
                     fontSize: 13,
-                    color: const Color(0xFF45464D),
+                    color: _tertiaryTextColor,
                   ),
                 ),
               ],
@@ -164,17 +178,21 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
 
     return Container(
       padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(12), border: Border.all(color: const Color(0xFFE2E8F0))),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderColor),
+      ),
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Row(children: [
           const Icon(Icons.route, color: Color(0xFF6366F1), size: 20),
           const SizedBox(width: 8),
-          Text('Process Flow', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+          Text('Process Flow', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w600, color: _textColor)),
           const Spacer(),
           if (widget.order.deliveryDate != null)
             Column(crossAxisAlignment: CrossAxisAlignment.end, children: [
-              Text('Delivery Date', style: GoogleFonts.cairo(fontSize: 11, color: const Color(0xFF64748B))),
-              Text(widget.order.deliveryDate!, style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: const Color(0xFF0F172A))),
+              Text('Delivery Date', style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+              Text(widget.order.deliveryDate!, style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w600, color: _textColor)),
             ]),
         ]),
         const SizedBox(height: 24),
@@ -231,10 +249,10 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   }
 
   Widget _buildSingleStep(
-    String status,
-    Map<String, dynamic>? auditLog,
-    bool isCurrent,
-  ) {
+      String status,
+      Map<String, dynamic>? auditLog,
+      bool isCurrent,
+      ) {
     return Center(
       child: _buildStepCircle(
         status: status,
@@ -324,7 +342,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                     dateStr,
                     style: GoogleFonts.cairo(
                       fontSize: 9,
-                      color: const Color(0xFF64748B),
+                      color: _secondaryTextColor,
                     ),
                   ),
                   if (changedBy != null)
@@ -332,7 +350,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                       changedBy,
                       style: GoogleFonts.cairo(
                         fontSize: 9,
-                        color: const Color(0xFF64748B),
+                        color: _secondaryTextColor,
                       ),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
@@ -369,7 +387,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return Container(
       width: 50,
       height: 3,
-      color: isCompleted ? const Color(0xFF059669) : const Color(0xFFE2E8F0),
+      color: isCompleted ? const Color(0xFF059669) : _borderColor,
       margin: const EdgeInsets.only(bottom: 70),
     );
   }
@@ -378,9 +396,9 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -390,7 +408,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
           ),
           const SizedBox(height: 16),
@@ -430,9 +448,9 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: _cardColor,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: const Color(0xFFE2E8F0)),
+        border: Border.all(color: _borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -446,7 +464,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                 style: GoogleFonts.cairo(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF0F172A),
+                  color: _textColor,
                 ),
               ),
               const Spacer(),
@@ -454,7 +472,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                 '${_auditLogs.length} changes',
                 style: GoogleFonts.cairo(
                   fontSize: 12,
-                  color: const Color(0xFF64748B),
+                  color: _secondaryTextColor,
                 ),
               ),
             ],
@@ -498,7 +516,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                   text: TextSpan(
                     style: GoogleFonts.cairo(
                       fontSize: 13,
-                      color: const Color(0xFF0F172A),
+                      color: _textColor,
                     ),
                     children: [
                       TextSpan(
@@ -510,7 +528,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                         TextSpan(
                           text: '${log['old_value']}',
                           style: GoogleFonts.cairo(
-                            color: Colors.red.shade700,
+                            color: _isDark ? Colors.red.shade300 : Colors.red.shade700,
                             decoration: TextDecoration.lineThrough,
                           ),
                         ),
@@ -532,7 +550,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
                   'By ${log['changed_by']} • ${_formatDateTime(log['changed_at'])}',
                   style: GoogleFonts.cairo(
                     fontSize: 11,
-                    color: const Color(0xFF94A3B8),
+                    color: _secondaryTextColor,
                   ),
                 ),
               ],
@@ -553,7 +571,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
             style: GoogleFonts.cairo(
               fontSize: 11,
               fontWeight: FontWeight.w500,
-              color: const Color(0xFF64748B),
+              color: _secondaryTextColor,
             ),
           ),
           const SizedBox(height: 4),
@@ -562,7 +580,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
             style: GoogleFonts.cairo(
               fontSize: 13,
               fontWeight: FontWeight.w500,
-              color: const Color(0xFF0F172A),
+              color: _textColor,
             ),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
