@@ -622,13 +622,27 @@ class _OrdersPageState extends State<OrdersPage> {
                 contractNumber: contractController.text.trim(),
                 description: descriptionController.text.trim(),
                 designOrder: designOrderController.text.trim(),
-                quantity: double.tryParse(qtyController.text.replaceAll(',', '')) ?? 0,
-                unitOfMeasure: unitController.text.trim().isEmpty ? 'EA' : unitController.text.trim(),
-                value: double.tryParse(valueController.text.replaceAll(',', '').replaceAll('\$', ''),) ?? 0,
+                quantity:
+                    double.tryParse(qtyController.text.replaceAll(',', '')) ??
+                    0,
+                unitOfMeasure: unitController.text.trim().isEmpty
+                    ? 'EA'
+                    : unitController.text.trim(),
+                value:
+                    double.tryParse(
+                      valueController.text
+                          .replaceAll(',', '')
+                          .replaceAll('\$', ''),
+                    ) ??
+                    0,
                 salesEngineer: _currentUserName,
                 orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                deliveryDate: deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
-                factory: factoryController.text.trim().isEmpty ? null : factoryController.text.trim(),
+                deliveryDate: deliveryDateController.text.trim().isEmpty
+                    ? null
+                    : deliveryDateController.text.trim(),
+                factory: factoryController.text.trim().isEmpty
+                    ? null
+                    : factoryController.text.trim(),
                 designTeam: widget.loggedInEmployee?.department,
                 responsibleEngineer: null,
                 reviewer: null,
@@ -675,7 +689,9 @@ class _OrdersPageState extends State<OrdersPage> {
               'responsible_engineer': newOrder.responsibleEngineer,
               'reviewer': newOrder.reviewer,
               'correspondence_engineer': newOrder.correspondenceEngineer,
-            }).select().single();
+            })
+            .select()
+            .single();
 
         final createdOrder = SAPMainOrder.fromJson(response);
 
@@ -778,8 +794,8 @@ class _OrdersPageState extends State<OrdersPage> {
       for (var orderId in _selectedRowsIds) {
         final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (order != null) {
-          try {-
-            await supabase
+          try {
+            -await supabase
                 .from('sap_main_orders')
                 .update({field: parsedValue})
                 .eq('id', order.id);
@@ -1527,6 +1543,26 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
+    // Check if all selected orders are "Tasks" (or user is admin/data entry)
+    final selectedOrders = _allOrders
+        .where((o) => _selectedRowsIds.contains(o.id))
+        .toList();
+
+    // Check if user can delete these orders
+    bool canDeleteAll = _isAdmin || _isDataEntry;
+
+    if (!canDeleteAll) {
+      // Regular users can only delete "Tasks" orders
+      canDeleteAll = selectedOrders.every(
+        (o) => o.status.toLowerCase() == 'tasks',
+      );
+    }
+
+    if (!canDeleteAll) {
+      _showSnackBar('⚠️ You can only delete Tasks orders');
+      return;
+    }
+
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1576,7 +1612,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
       if (order != null) {
         try {
-          // Log the deletion before actually deleting
           await _auditService.logChange(
             orderId: order.id,
             designOrder: order.designOrder,
@@ -1590,7 +1625,6 @@ class _OrdersPageState extends State<OrdersPage> {
             notes: 'Order permanently deleted',
           );
 
-          // Delete the order
           await supabase.from('sap_main_orders').delete().eq('id', order.id);
           deleted++;
           deletedIds.add(order.id);
@@ -1605,7 +1639,6 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
 
-    // Remove deleted orders from local list (no full reload needed)
     setState(() {
       _allOrders.removeWhere((o) => deletedIds.contains(o.id));
       _orderIndexMap.removeWhere((key, value) => deletedIds.contains(key.id));
@@ -1614,7 +1647,6 @@ class _OrdersPageState extends State<OrdersPage> {
       _isLoading = false;
     });
 
-    // Rebuild groups with updated list
     _rebuildGroups();
 
     if (mounted) {
@@ -1630,7 +1662,6 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
-    // Log summary if multiple orders were deleted
     if (deleted > 1) {
       await _auditService.logChange(
         orderId: 'bulk_delete',
@@ -3167,6 +3198,15 @@ class _OrdersPageState extends State<OrdersPage> {
   );
 
   Widget _buildSelectionToolbar() {
+    // Check if all selected orders are "Tasks" (for showing delete button)
+    final selectedOrders = _allOrders
+        .where((o) => _selectedRowsIds.contains(o.id))
+        .toList();
+    final allAreTasks =
+        selectedOrders.isNotEmpty &&
+        selectedOrders.every((o) => o.status.toLowerCase() == 'tasks');
+    final canDelete = _isAdmin || _isDataEntry || allAreTasks;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
@@ -3188,10 +3228,8 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           const Spacer(),
-          // Copy selected button
           _buildSmallBtn(Icons.copy, 'Copy', _copySelectedOrdersData),
           const SizedBox(width: 8),
-          // Bulk edit button (only in edit mode with selections)
           if (_editMode && _selectedRowsIds.isNotEmpty) ...[
             _buildSmallBtn(
               Icons.edit,
@@ -3206,7 +3244,8 @@ class _OrdersPageState extends State<OrdersPage> {
             _exportSelectedOrders,
           ),
           const SizedBox(width: 8),
-          if (_canImportDelete) ...[
+          // Show delete for admin/data entry OR when all selected are Tasks
+          if (canDelete) ...[
             _buildSmallBtn(
               Icons.delete_outline,
               'Delete',
