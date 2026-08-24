@@ -467,7 +467,6 @@ class _OrdersPageState extends State<OrdersPage> {
     final unitController = TextEditingController(text: 'EA');
     final valueController = TextEditingController();
     final factoryController = TextEditingController();
-    final deliveryDateController = TextEditingController();
 
     final newOrder = await showDialog<SAPMainOrder>(
       context: context,
@@ -502,7 +501,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       child: TextField(
                         controller: designOrderController,
                         style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: _buildInputDecoration('Design Order'),
+                        decoration: _buildInputDecoration('Design Order (Optional)'),
                       ),
                     ),
                   ],
@@ -565,26 +564,10 @@ class _OrdersPageState extends State<OrdersPage> {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        controller: factoryController,
-                        style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: _buildInputDecoration('Factory'),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: TextField(
-                        controller: deliveryDateController,
-                        style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: _buildInputDecoration(
-                          'Delivery Date (YYYY-MM-DD)',
-                        ),
-                      ),
-                    ),
-                  ],
+                TextField(
+                  controller: factoryController,
+                  style: GoogleFonts.cairo(fontSize: 13),
+                  decoration: _buildInputDecoration('Factory'),
                 ),
               ],
             ),
@@ -597,12 +580,11 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (nameController.text.isEmpty ||
-                  designOrderController.text.isEmpty) {
+              if (nameController.text.isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Customer Name and Design Order are required',
+                      'Customer Name is required',
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,
@@ -621,25 +603,26 @@ class _OrdersPageState extends State<OrdersPage> {
                 productCode: productCodeController.text.trim(),
                 contractNumber: contractController.text.trim(),
                 description: descriptionController.text.trim(),
-                designOrder: designOrderController.text.trim(),
+                designOrder: designOrderController.text.trim().isEmpty
+                    ? '0' // ✅ Default to "0" if empty
+                    : designOrderController.text.trim(),
                 quantity:
-                    double.tryParse(qtyController.text.replaceAll(',', '')) ??
+                double.tryParse(qtyController.text.replaceAll(',', '')) ??
                     0,
                 unitOfMeasure: unitController.text.trim().isEmpty
                     ? 'EA'
                     : unitController.text.trim(),
                 value:
-                    double.tryParse(
-                      valueController.text
-                          .replaceAll(',', '')
-                          .replaceAll('\$', ''),
-                    ) ??
+                double.tryParse(
+                  valueController.text
+                      .replaceAll(',', '')
+                      .replaceAll('\$', ''),
+                ) ??
                     0,
                 salesEngineer: _currentUserName,
-                orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
-                deliveryDate: deliveryDateController.text.trim().isEmpty
-                    ? null
-                    : deliveryDateController.text.trim(),
+                orderDate: null, // ✅ No dates
+                deliveryDate: null, // ✅ No dates
+                endDate: null, // ✅ No dates
                 factory: factoryController.text.trim().isEmpty
                     ? null
                     : factoryController.text.trim(),
@@ -671,31 +654,31 @@ class _OrdersPageState extends State<OrdersPage> {
         final response = await supabase
             .from('sap_main_orders')
             .insert({
-              'status': 'Tasks',
-              'customer_name': newOrder.customerName,
-              'item_number': newOrder.itemNumber,
-              'product_code': newOrder.productCode,
-              'contract_number': newOrder.contractNumber,
-              'description': newOrder.description,
-              'design_order': newOrder.designOrder,
-              'quantity': newOrder.quantity,
-              'unit_of_measure': newOrder.unitOfMeasure,
-              'value': newOrder.value,
-              'sales_engineer': newOrder.salesEngineer,
-              'order_date': newOrder.orderDate,
-              'delivery_date': newOrder.deliveryDate,
-              'factory': newOrder.factory,
-              'design_team': newOrder.designTeam,
-              'responsible_engineer': newOrder.responsibleEngineer,
-              'reviewer': newOrder.reviewer,
-              'correspondence_engineer': newOrder.correspondenceEngineer,
-            })
+          'status': 'Tasks',
+          'customer_name': newOrder.customerName,
+          'item_number': newOrder.itemNumber,
+          'product_code': newOrder.productCode,
+          'contract_number': newOrder.contractNumber,
+          'description': newOrder.description,
+          'design_order': newOrder.designOrder, // ✅ "0" if empty
+          'quantity': newOrder.quantity,
+          'unit_of_measure': newOrder.unitOfMeasure,
+          'value': newOrder.value,
+          'sales_engineer': newOrder.salesEngineer,
+          'order_date': null, // ✅ No dates
+          'delivery_date': null, // ✅ No dates
+          'end_date': null, // ✅ No dates
+          'factory': newOrder.factory,
+          'design_team': newOrder.designTeam,
+          'responsible_engineer': newOrder.responsibleEngineer,
+          'reviewer': newOrder.reviewer,
+          'correspondence_engineer': newOrder.correspondenceEngineer,
+        })
             .select()
             .single();
 
         final createdOrder = SAPMainOrder.fromJson(response);
 
-        // Add to local list
         setState(() {
           _allOrders.add(createdOrder);
           _orderIndexMap[createdOrder] = _allOrders.length - 1;
