@@ -170,6 +170,44 @@ class _ProfilePageState extends State<ProfilePage>
     }
   }
 
+  Future<void> _showLogoutDialog() async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: _surfaceColor,
+        title: Text('Logout', style: GoogleFonts.cairo(fontWeight: FontWeight.w600, color: _textColor)),
+        content: Text('Are you sure you want to logout?', style: GoogleFonts.cairo(color: _secondaryTextColor)),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: Text('Cancel', style: GoogleFonts.cairo(color: _secondaryTextColor)),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
+            child: Text('Logout', style: GoogleFonts.cairo(color: Colors.white)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm == true && mounted) {
+      try {
+        // Clear remembered credentials
+        html.window.localStorage.remove('remembered_username');
+        html.window.localStorage.remove('remembered_password');
+      } catch (e) {
+        print('Error clearing storage: $e');
+      }
+
+      // Navigate to login page
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (context) => const LoginPage()),
+            (route) => false,
+      );
+    }
+  }
+
   void _filterWork(String status) {
     setState(() {
       _workFilter = status;
@@ -482,6 +520,32 @@ class _ProfilePageState extends State<ProfilePage>
                     padding: const EdgeInsets.symmetric(vertical: 14),
                     shape: RoundedRectangleBorder(
                         borderRadius: BorderRadius.circular(10))))),
+        const SizedBox(height: 12),
+
+// Logout button
+        SizedBox(
+          width: double.infinity,
+          child: OutlinedButton.icon(
+            onPressed: () => _showLogoutDialog(),
+            icon: const Icon(Icons.logout, color: Colors.red),
+            label: Text(
+              'Logout',
+              style: GoogleFonts.cairo(
+                color: Colors.red,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: Colors.red,
+              side: const BorderSide(color: Colors.red),
+              padding: const EdgeInsets.symmetric(vertical: 14),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              backgroundColor: Colors.red.withOpacity(0.05),
+            ),
+          ),
+        ),
       ]),
     );
   }
