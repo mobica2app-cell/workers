@@ -484,7 +484,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 TextField(
                   controller: nameController,
                   style: GoogleFonts.cairo(fontSize: 13),
-                  decoration: _buildInputDecoration('Customer Name'),
+                  decoration: _buildInputDecoration('Customer Name *'),
                 ),
                 const SizedBox(height: 10),
                 Row(
@@ -501,7 +501,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       child: TextField(
                         controller: designOrderController,
                         style: GoogleFonts.cairo(fontSize: 13),
-                        decoration: _buildInputDecoration('Design Order (Optional)'),
+                        decoration: _buildInputDecoration('Design Order'),
                       ),
                     ),
                   ],
@@ -580,7 +580,8 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
           ElevatedButton(
             onPressed: () {
-              if (nameController.text.isEmpty) {
+              // Only Customer Name is required
+              if (nameController.text.trim().isEmpty) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
@@ -597,32 +598,29 @@ class _OrdersPageState extends State<OrdersPage> {
                 id: '',
                 status: 'Tasks',
                 customerName: nameController.text.trim(),
+                // Empty values default to "0"
                 itemNumber: itemController.text.trim().isEmpty
-                    ? '1'
+                    ? '0'
                     : itemController.text.trim(),
-                productCode: productCodeController.text.trim(),
-                contractNumber: contractController.text.trim(),
+                productCode: productCodeController.text.trim().isEmpty
+                    ? '0'
+                    : productCodeController.text.trim(),
+                contractNumber: contractController.text.trim().isEmpty
+                    ? '0'
+                    : contractController.text.trim(),
                 description: descriptionController.text.trim(),
                 designOrder: designOrderController.text.trim().isEmpty
-                    ? '0' // ✅ Default to "0" if empty
+                    ? '0'
                     : designOrderController.text.trim(),
-                quantity:
-                double.tryParse(qtyController.text.replaceAll(',', '')) ??
-                    0,
+                quantity: double.tryParse(qtyController.text.replaceAll(',', '')) ?? 0,
                 unitOfMeasure: unitController.text.trim().isEmpty
                     ? 'EA'
                     : unitController.text.trim(),
-                value:
-                double.tryParse(
-                  valueController.text
-                      .replaceAll(',', '')
-                      .replaceAll('\$', ''),
-                ) ??
-                    0,
+                value: double.tryParse(valueController.text.replaceAll(',', '').replaceAll('\$', '')) ?? 0,
                 salesEngineer: _currentUserName,
-                orderDate: null, // ✅ No dates
-                deliveryDate: null, // ✅ No dates
-                endDate: null, // ✅ No dates
+                orderDate: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+                // No delivery date
+                deliveryDate: null,
                 factory: factoryController.text.trim().isEmpty
                     ? null
                     : factoryController.text.trim(),
@@ -660,14 +658,13 @@ class _OrdersPageState extends State<OrdersPage> {
           'product_code': newOrder.productCode,
           'contract_number': newOrder.contractNumber,
           'description': newOrder.description,
-          'design_order': newOrder.designOrder, // ✅ "0" if empty
+          'design_order': newOrder.designOrder,
           'quantity': newOrder.quantity,
           'unit_of_measure': newOrder.unitOfMeasure,
           'value': newOrder.value,
           'sales_engineer': newOrder.salesEngineer,
-          'order_date': null, // ✅ No dates
-          'delivery_date': null, // ✅ No dates
-          'end_date': null, // ✅ No dates
+          'order_date': newOrder.orderDate,
+          'delivery_date': null, // No delivery date
           'factory': newOrder.factory,
           'design_team': newOrder.designTeam,
           'responsible_engineer': newOrder.responsibleEngineer,
