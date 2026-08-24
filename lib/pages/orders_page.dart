@@ -2588,7 +2588,7 @@ class _OrdersPageState extends State<OrdersPage> {
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
               decoration: BoxDecoration(
-                color: const Color(0xFF6366F1).withOpacity(0.1),
+                color: const Color(0xFFE69D00).withOpacity(0.15),
                 borderRadius: BorderRadius.circular(20),
               ),
               child: Text(
@@ -2596,7 +2596,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 style: GoogleFonts.cairo(
                   fontSize: 13,
                   fontWeight: FontWeight.w600,
-                  color: const Color(0xFF6366F1),
+                  color: const Color(0xFFE69D00),
                 ),
               ),
             ),
@@ -3327,20 +3327,20 @@ class _OrdersPageState extends State<OrdersPage> {
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       decoration: BoxDecoration(
-        color: const Color(0xFF6366F1).withOpacity(0.05),
+        color: const Color(0xFFE69D00).withOpacity(0.05),
         borderRadius: BorderRadius.circular(8),
-        border: Border.all(color: const Color(0xFF6366F1).withOpacity(0.2)),
+        border: Border.all(color: const Color(0xFFE69D00).withOpacity(0.2)),
       ),
       child: Row(
         children: [
-          const Icon(Icons.check_circle, size: 18, color: Color(0xFF6366F1)),
+          const Icon(Icons.check_circle, size: 18, color: Color(0xFFE69D00)),
           const SizedBox(width: 8),
           Text(
             '${_selectedRowsIds.length} selected',
             style: GoogleFonts.cairo(
               fontSize: 13,
               fontWeight: FontWeight.w600,
-              color: const Color(0xFF6366F1),
+              color: const Color(0xFFE69D00),
             ),
           ),
           const Spacer(),
@@ -4284,11 +4284,11 @@ class _OrdersPageState extends State<OrdersPage> {
           style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
         ),
         style: TextButton.styleFrom(
-          foregroundColor: const Color(0xFF6366F1),
+          foregroundColor: const Color(0xFFE69D00),
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(4),
-            side: BorderSide(color: const Color(0xFF6366F1).withOpacity(0.3)),
+            side: BorderSide(color: const Color(0xFFE69D00).withOpacity(0.3)),
           ),
         ),
       );
