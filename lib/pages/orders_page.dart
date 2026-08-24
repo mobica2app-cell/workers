@@ -1,4 +1,6 @@
 // lib/pages/orders_page.dart
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -7,6 +9,7 @@ import 'package:mobitem/pages/employee_managment_page.dart';
 import 'package:mobitem/pages/product_tracking_service.dart';
 import 'package:mobitem/pages/track_order.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:universal_html/html.dart' as html;
 import '../main.dart';
 import '../models/employee_model.dart';
 import '../models/product_tracking_model.dart';
@@ -94,7 +97,14 @@ class _OrdersPageState extends State<OrdersPage> {
   final Set<String> _expandedSections = {};
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
-  static const List<String> _allStatuses = [
+  List<String> _allStatuses = [];
+
+  String get _userStatusKey {
+    final userId = widget.loggedInEmployee?.id ?? 'default';
+    return 'status_order_$userId';
+  }
+
+  static const List<String> _defaultStatuses = [
     'Drawing Submittal',
     'Approval',
     'modifications submitted',
@@ -133,6 +143,99 @@ class _OrdersPageState extends State<OrdersPage> {
     'cladding division',
     'Unknown',
   ];
+
+  void _loadStatusesFromStorage() {
+    try {
+      final saved = html.window.localStorage[_userStatusKey];
+      if (saved != null && saved.isNotEmpty) {
+        final decoded = jsonDecode(saved) as List<dynamic>;
+        _allStatuses = decoded.map((e) => e.toString()).toList();
+
+        // Check for new statuses that might not be in saved list
+        for (var status in _defaultStatuses) {
+          if (!_allStatuses.contains(status)) {
+            _allStatuses.add(status);
+          }
+        }
+      } else {
+        _allStatuses = List.from(_defaultStatuses);
+        _saveStatusesToStorage();
+      }
+    } catch (e) {
+      _allStatuses = List.from(_defaultStatuses);
+    }
+  }
+
+// Save statuses to localStorage
+  void _saveStatusesToStorage() {
+    try {
+      html.window.localStorage[_userStatusKey] = jsonEncode(_allStatuses);
+    } catch (e) {
+      print('Error saving statuses: $e');
+    }
+  }
+
+// Move status up
+  void _moveStatusUp(int index) {
+    if (index > 0) {
+      setState(() {
+        final temp = _allStatuses[index];
+        _allStatuses[index] = _allStatuses[index - 1];
+        _allStatuses[index - 1] = temp;
+        _saveStatusesToStorage();
+        _rebuildGroups();
+      });
+    }
+  }
+
+// Move status down
+  void _moveStatusDown(int index) {
+    if (index < _allStatuses.length - 1) {
+      setState(() {
+        final temp = _allStatuses[index];
+        _allStatuses[index] = _allStatuses[index + 1];
+        _allStatuses[index + 1] = temp;
+        _saveStatusesToStorage();
+        _rebuildGroups();
+      });
+    }
+  }
+
+// Reset to default
+  void _resetStatusesToDefault() {
+    setState(() {
+      _allStatuses = List.from(_defaultStatuses);
+      _saveStatusesToStorage();
+      _rebuildGroups();
+    });
+  }
+
+  void _showStatusArrangementDialog() {
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        // Use a separate StatefulWidget for the dialog to avoid conflicts
+        return _StatusArrangementDialog(
+          statuses: List.from(_allStatuses),
+          onReorder: (newList) {
+            setState(() {
+              _allStatuses = newList;
+              _saveStatusesToStorage();
+              _rebuildGroups();
+            });
+          },
+          onReset: () {
+            setState(() {
+              _allStatuses = List.from(_defaultStatuses);
+              _saveStatusesToStorage();
+              _rebuildGroups();
+            });
+          },
+        );
+      },
+    );
+  }
+
 
   // Add this method to check if user is admin
   bool get _isAdmin {
@@ -335,6 +438,7 @@ class _OrdersPageState extends State<OrdersPage> {
   @override
   void initState() {
     super.initState();
+    _loadStatusesFromStorage();
     _loadAllDataOnce();
   }
 
@@ -768,7 +872,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-            0;
+                0;
       }
 
       for (var orderId in _selectedRowsIds) {
@@ -805,10 +909,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method for date picking
   Future<void> _pickDateForEdit(
-    SAPMainOrder order,
-    String field,
-    String currentValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String currentValue,
+      ) async {
     final currentDate = DateTime.tryParse(currentValue) ?? DateTime.now();
 
     final pickedDate = await showDatePicker(
@@ -855,10 +959,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method to show an edit dialog for any field
   Future<void> _editOrderField(
-    SAPMainOrder order,
-    String field,
-    String currentValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String currentValue,
+      ) async {
     // If multiple rows are selected in edit mode, apply to ALL selected rows
     if (_editMode && _selectedRowsIds.length > 1) {
       // Just call bulk edit directly
@@ -916,7 +1020,7 @@ class _OrdersPageState extends State<OrdersPage> {
               double.tryParse(
                 newValue.replaceAll(',', '').replaceAll('\$', ''),
               ) ??
-              0;
+                  0;
         }
 
         await supabase
@@ -1061,9 +1165,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> _updateOrderDesignTeam(
-    SAPMainOrder order,
-    String newValue,
-  ) async {
+      SAPMainOrder order,
+      String newValue,
+      ) async {
     final oldValue = order.designTeam;
 
     // Auto-map status based on design team
@@ -1336,10 +1440,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update engineer assignment in database
   Future<void> _updateOrderEngineer(
-    SAPMainOrder order,
-    String field,
-    String? newValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String? newValue,
+      ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
     // If multiple rows selected, apply to all
@@ -1534,7 +1638,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (!canDeleteAll) {
       // Regular users can only delete "Tasks" orders
       canDeleteAll = selectedOrders.every(
-        (o) => o.status.toLowerCase() == 'tasks',
+            (o) => o.status.toLowerCase() == 'tasks',
       );
     }
 
@@ -1597,7 +1701,7 @@ class _OrdersPageState extends State<OrdersPage> {
             designOrder: order.designOrder,
             fieldName: 'order_deleted',
             oldValue:
-                '${order.designOrder} | ${order.customerName} | ${order.description}',
+            '${order.designOrder} | ${order.customerName} | ${order.description}',
             newValue: null,
             changedBy: _currentUserName,
             changedById: _currentUserId,
@@ -1652,7 +1756,7 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
         actionType: 'delete',
         notes:
-            'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
+        'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
       );
     }
   }
@@ -1795,9 +1899,9 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) =>
-                o.contractNumber.toLowerCase().contains(q) ||
-                o.customerName.toLowerCase().contains(q),
-          )
+        o.contractNumber.toLowerCase().contains(q) ||
+            o.customerName.toLowerCase().contains(q),
+      )
           .toList();
     }
     if (_filterStatus != null)
@@ -1810,17 +1914,17 @@ class _OrdersPageState extends State<OrdersPage> {
       result = result
           .where(
             (o) => o.contractNumber.toLowerCase().contains(
-              _filterContractNumber!.toLowerCase(),
-            ),
-          )
+          _filterContractNumber!.toLowerCase(),
+        ),
+      )
           .toList();
     if (_filterDesignOrder != null)
       result = result
           .where(
             (o) => o.designOrder.toLowerCase().contains(
-              _filterDesignOrder!.toLowerCase(),
-            ),
-          )
+          _filterDesignOrder!.toLowerCase(),
+        ),
+      )
           .toList();
     if (_filterSalesEngineer != null)
       result = result
@@ -1847,7 +1951,7 @@ class _OrdersPageState extends State<OrdersPage> {
         result = result
             .where(
               (o) => o.correspondenceEngineer == _filterCorrespondenceEngineer,
-            )
+        )
             .toList();
     }
 
@@ -1857,14 +1961,14 @@ class _OrdersPageState extends State<OrdersPage> {
 
   bool get _hasActiveFilters =>
       _filterStatus != null ||
-      _filterFactory != null ||
-      _filterDesignTeam != null ||
-      _filterContractNumber != null ||
-      _filterDesignOrder != null ||
-      _filterSalesEngineer != null ||
-      _filterResponsibleEngineer != null ||
-      _filterReviewer != null ||
-      _filterCorrespondenceEngineer != null;
+          _filterFactory != null ||
+          _filterDesignTeam != null ||
+          _filterContractNumber != null ||
+          _filterDesignOrder != null ||
+          _filterSalesEngineer != null ||
+          _filterResponsibleEngineer != null ||
+          _filterReviewer != null ||
+          _filterCorrespondenceEngineer != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -1890,7 +1994,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final sectionOrders = _groupedOrders[status] ?? [];
       if (sectionOrders.isEmpty) return;
       final allSelected = sectionOrders.every(
-        (o) => _selectedRowsIds.contains(o.id),
+            (o) => _selectedRowsIds.contains(o.id),
       );
       if (allSelected) {
         for (var o in sectionOrders) {
@@ -1947,7 +2051,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     'Save',
                     'Save to device',
                     const Color(0xFF059669),
-                    () async {
+                        () async {
                       Navigator.pop(ctx);
                       await _saveOrders(selected, 'Selected');
                     },
@@ -2137,7 +2241,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                                  tempContractNumber = v.isEmpty ? null : v,
+                              tempContractNumber = v.isEmpty ? null : v,
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2163,7 +2267,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 ),
                               ),
                               onChanged: (v) =>
-                                  tempDesignOrder = v.isEmpty ? null : v,
+                              tempDesignOrder = v.isEmpty ? null : v,
                             ),
                           ),
                         ],
@@ -2183,7 +2287,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Status',
                               tempStatus,
                               ['All', ..._allStatuses],
-                              (v) => setDlg(() => tempStatus = v),
+                                  (v) => setDlg(() => tempStatus = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2192,7 +2296,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Factory (${factories.length})',
                               tempFactory,
                               ['All', ...factories.toList()..sort()],
-                              (v) => setDlg(() => tempFactory = v),
+                                  (v) => setDlg(() => tempFactory = v),
                             ),
                           ),
                         ],
@@ -2202,7 +2306,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         'Design Team (${designTeams.length})',
                         tempDesignTeam,
                         ['All', ...designTeams.toList()..sort()],
-                        (v) => setDlg(() => tempDesignTeam = v),
+                            (v) => setDlg(() => tempDesignTeam = v),
                       ),
                     ],
                   ),
@@ -2219,7 +2323,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Sales Eng. (${salesEngineers.length})',
                               tempSalesEngineer,
                               ['All', ...salesEngineers.toList()..sort()],
-                              (v) => setDlg(() => tempSalesEngineer = v),
+                                  (v) => setDlg(() => tempSalesEngineer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2228,7 +2332,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Resp. Eng. (${responsibleEngineers.length})',
                               tempResponsibleEngineer,
                               ['All', ...responsibleEngineers.toList()..sort()],
-                              (v) => setDlg(() => tempResponsibleEngineer = v),
+                                  (v) => setDlg(() => tempResponsibleEngineer = v),
                             ),
                           ),
                         ],
@@ -2241,7 +2345,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               'Reviewer (${reviewers.length})',
                               tempReviewer,
                               ['All', ...reviewers.toList()..sort()],
-                              (v) => setDlg(() => tempReviewer = v),
+                                  (v) => setDlg(() => tempReviewer = v),
                             ),
                           ),
                           const SizedBox(width: 10),
@@ -2253,7 +2357,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                 'All',
                                 ...correspondenceEngineers.toList()..sort(),
                               ],
-                              (v) =>
+                                  (v) =>
                                   setDlg(() => tempCorrespondenceEngineer = v),
                             ),
                           ),
@@ -2378,11 +2482,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Helper widget for filter dropdowns
   Widget _buildFilterDropdown(
-    String label,
-    String? value,
-    List<String> items,
-    Function(String?) onChanged,
-  ) {
+      String label,
+      String? value,
+      List<String> items,
+      Function(String?) onChanged,
+      ) {
     return DropdownButtonFormField<String>(
       value: value,
       isExpanded: true,
@@ -2399,14 +2503,14 @@ class _OrdersPageState extends State<OrdersPage> {
       items: items
           .map(
             (s) => DropdownMenuItem(
-              value: s == 'All' ? null : s,
-              child: Text(
-                s == 'All' ? 'All' : s,
-                style: GoogleFonts.cairo(fontSize: 12),
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-          )
+          value: s == 'All' ? null : s,
+          child: Text(
+            s == 'All' ? 'All' : s,
+            style: GoogleFonts.cairo(fontSize: 12),
+            overflow: TextOverflow.ellipsis,
+          ),
+        ),
+      )
           .toList(),
       onChanged: (v) => onChanged(v),
     );
@@ -2447,8 +2551,8 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildTopBar() {
     final isAdmin =
         widget.loggedInEmployee?.role?.toLowerCase() == 'admin' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
-        widget.loggedInEmployee?.role?.toLowerCase() == 'head';
+            widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
+            widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
     return Container(
       height: 64,
@@ -2556,16 +2660,36 @@ class _OrdersPageState extends State<OrdersPage> {
           // Only show people icon for admin/head users
           if (isAdmin)
             _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
+
+          const SizedBox(width: 8),
+
+          OutlinedButton.icon(
+            onPressed: _showStatusArrangementDialog,
+            icon: const Icon(Icons.swap_vert, size: 16),
+            label: Text(
+              'Arrange',
+              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
+            ),
+            style: OutlinedButton.styleFrom(
+              foregroundColor: const Color(0xFFD97706),
+              side: const BorderSide(color: Color(0xFFD97706)),
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+              backgroundColor: Colors.white,
+            ),
+          ),
+
+          const SizedBox(width: 8),
         ],
       ),
     );
   }
 
   Widget _employeeDropdownCell(
-    String? currentValue,
-    SAPMainOrder order,
-    String field,
-  ) {
+      String? currentValue,
+      SAPMainOrder order,
+      String field,
+      ) {
     final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
@@ -2833,13 +2957,13 @@ class _OrdersPageState extends State<OrdersPage> {
           prefixIcon: Icon(Icons.search, color: Colors.grey.shade400, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
               ? IconButton(
-                  icon: const Icon(Icons.clear, size: 18),
-                  onPressed: () {
-                    _searchController.clear();
-                    _searchQuery = '';
-                    _rebuildGroups();
-                  },
-                )
+            icon: const Icon(Icons.clear, size: 18),
+            onPressed: () {
+              _searchController.clear();
+              _searchQuery = '';
+              _rebuildGroups();
+            },
+          )
               : null,
           filled: true,
           fillColor: Colors.white,
@@ -3184,7 +3308,7 @@ class _OrdersPageState extends State<OrdersPage> {
         .toList();
     final allAreTasks =
         selectedOrders.isNotEmpty &&
-        selectedOrders.every((o) => o.status.toLowerCase() == 'tasks');
+            selectedOrders.every((o) => o.status.toLowerCase() == 'tasks');
     final canDelete = _isAdmin || _isDataEntry || allAreTasks;
 
     return Container(
@@ -3214,7 +3338,7 @@ class _OrdersPageState extends State<OrdersPage> {
             _buildSmallBtn(
               Icons.edit,
               'Bulk Edit',
-              () => _showBulkEditDialog(),
+                  () => _showBulkEditDialog(),
             ),
             const SizedBox(width: 8),
           ],
@@ -3279,7 +3403,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       addAutomaticKeepAlives: false,
                       addRepaintBoundaries: true,
                       itemExtentBuilder: (index, details) =>
-                          _flatList[index] is String ? 44.0 : 48.0,
+                      _flatList[index] is String ? 44.0 : 48.0,
                       itemBuilder: (_, i) {
                         final item = _flatList[i];
                         if (item is String)
@@ -3302,7 +3426,7 @@ class _OrdersPageState extends State<OrdersPage> {
           Expanded(
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) =>
-                  n.metrics.axis == Axis.vertical ? true : false,
+              n.metrics.axis == Axis.vertical ? true : false,
               child: Scrollbar(
                 controller: _horizontalScrollController,
                 thumbVisibility: true,
@@ -3324,7 +3448,7 @@ class _OrdersPageState extends State<OrdersPage> {
                               addAutomaticKeepAlives: false,
                               addRepaintBoundaries: true,
                               itemExtentBuilder: (index, details) =>
-                                  _flatList[index] is String ? 44.0 : 48.0,
+                              _flatList[index] is String ? 44.0 : 48.0,
                               itemBuilder: (_, i) {
                                 final item = _flatList[i];
                                 if (item is String)
@@ -3468,9 +3592,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildSectionHeaderPlaceholder(
-    String status,
-    List<SAPMainOrder> orders,
-  ) {
+      String status,
+      List<SAPMainOrder> orders,
+      ) {
     final isExpanded = _expandedSections.contains(status);
     return GestureDetector(
       onTap: () => _toggleSection(status),
@@ -3757,21 +3881,21 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _editableCell(
-    String text,
-    double w,
-    SAPMainOrder order,
-    String field,
-    String fieldLabel, {
-    TextAlign align = TextAlign.left,
-    TextStyle? style,
-    TextOverflow overflow = TextOverflow.ellipsis,
-    int maxLines = 1,
-  }) {
+      String text,
+      double w,
+      SAPMainOrder order,
+      String field,
+      String fieldLabel, {
+        TextAlign align = TextAlign.left,
+        TextStyle? style,
+        TextOverflow overflow = TextOverflow.ellipsis,
+        int maxLines = 1,
+      }) {
     final canEdit = _isOrderEditable(order);
     final isDateField =
         field == 'order_date' ||
-        field == 'delivery_date' ||
-        field == 'end_date';
+            field == 'delivery_date' ||
+            field == 'end_date';
 
     // Only make editable when Edit Mode is ON AND user can edit this order
     if (_editMode && canEdit) {
@@ -3811,7 +3935,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         child: Text(
                           text,
                           style:
-                              (style ??
+                          (style ??
                               GoogleFonts.cairo(
                                 fontSize: 12,
                                 color: const Color(0xFF334155),
@@ -3854,7 +3978,7 @@ class _OrdersPageState extends State<OrdersPage> {
                   child: Text(
                     text,
                     style:
-                        (style ??
+                    (style ??
                         GoogleFonts.cairo(
                           fontSize: 12,
                           color: const Color(0xFF334155),
@@ -3887,7 +4011,7 @@ class _OrdersPageState extends State<OrdersPage> {
             child: Text(
               text,
               style:
-                  style ??
+              style ??
                   GoogleFonts.cairo(
                     fontSize: 12,
                     color: const Color(0xFF334155),
@@ -3903,12 +4027,12 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Save inline edit
   Future<void> _saveInlineEdit(
-    SAPMainOrder order,
-    String field,
-    String newValue,
-    String editKey,
-    String oldValue,
-  ) async {
+      SAPMainOrder order,
+      String field,
+      String newValue,
+      String editKey,
+      String oldValue,
+      ) async {
     // Clean up controller
     _editControllers.remove(editKey);
 
@@ -3939,7 +4063,7 @@ class _OrdersPageState extends State<OrdersPage> {
             double.tryParse(
               newValue.replaceAll(',', '').replaceAll('\$', ''),
             ) ??
-            0;
+                0;
       }
 
       await supabase
@@ -3976,7 +4100,7 @@ class _OrdersPageState extends State<OrdersPage> {
     } else if (field == 'value') {
       parsedValue =
           double.tryParse(newValue.replaceAll(',', '').replaceAll('\$', '')) ??
-          0;
+              0;
     }
 
     for (var orderId in _selectedRowsIds) {
@@ -4113,13 +4237,13 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _cell(
-    String text,
-    double w, {
-    TextAlign align = TextAlign.left,
-    TextStyle? style,
-    TextOverflow overflow = TextOverflow.ellipsis,
-    int maxLines = 1,
-  }) => SizedBox(
+      String text,
+      double w, {
+        TextAlign align = TextAlign.left,
+        TextStyle? style,
+        TextOverflow overflow = TextOverflow.ellipsis,
+        int maxLines = 1,
+      }) => SizedBox(
     width: w,
     child: Padding(
       padding: const EdgeInsets.symmetric(horizontal: 4),
@@ -4130,7 +4254,7 @@ class _OrdersPageState extends State<OrdersPage> {
         child: Text(
           text,
           style:
-              style ??
+          style ??
               GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF334155)),
           overflow: overflow,
           maxLines: maxLines,
@@ -4186,12 +4310,12 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _buildExportOption(
-    IconData icon,
-    String label,
-    String subtitle,
-    Color color,
-    VoidCallback onTap,
-  ) => GestureDetector(
+      IconData icon,
+      String label,
+      String subtitle,
+      Color color,
+      VoidCallback onTap,
+      ) => GestureDetector(
     onTap: onTap,
     child: Container(
       padding: const EdgeInsets.all(16),
@@ -4226,4 +4350,121 @@ class _OrdersPageState extends State<OrdersPage> {
       ),
     ),
   );
+}
+class _StatusArrangementDialog extends StatefulWidget {
+  final List<String> statuses;
+  final Function(List<String>) onReorder;
+  final VoidCallback onReset;
+
+  const _StatusArrangementDialog({
+    required this.statuses,
+    required this.onReorder,
+    required this.onReset,
+  });
+
+  @override
+  State<_StatusArrangementDialog> createState() => _StatusArrangementDialogState();
+}
+
+class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
+  late List<String> _localStatuses;
+
+  @override
+  void initState() {
+    super.initState();
+    _localStatuses = List.from(widget.statuses);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Row(
+        children: [
+          Text(
+            'Arrange Status Order',
+            style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+          ),
+          const Spacer(),
+          Icon(
+            Icons.drag_indicator,
+            color: Colors.grey.shade400,
+            size: 20,
+          ),
+        ],
+      ),
+      content: SizedBox(
+        width: 400,
+        height: 500,
+        child: Column(
+          children: [
+            Text(
+              '🖱️ Drag and drop to arrange. Changes saved automatically.',
+              style: GoogleFonts.cairo(fontSize: 12, color: const Color(0xFF64748B)),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: ReorderableListView.builder(
+                itemCount: _localStatuses.length,
+                onReorder: (oldIndex, newIndex) {
+                  setState(() {
+                    if (newIndex > oldIndex) {
+                      newIndex -= 1;
+                    }
+                    final item = _localStatuses.removeAt(oldIndex);
+                    _localStatuses.insert(newIndex, item);
+                  });
+                  // Save changes
+                  widget.onReorder(List.from(_localStatuses));
+                },
+                itemBuilder: (context, index) {
+                  return Container(
+                    key: ValueKey(_localStatuses[index]),
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade50,
+                      borderRadius: BorderRadius.circular(6),
+                      border: Border.all(color: Colors.grey.shade200),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(
+                          Icons.drag_indicator,
+                          color: Colors.grey.shade400,
+                          size: 20,
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            '${index + 1}. ${_localStatuses[index]}',
+                            style: GoogleFonts.cairo(fontSize: 13),
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () {
+            widget.onReset();
+            setState(() {
+              _localStatuses = List.from(widget.statuses);
+            });
+          },
+          child: Text('Reset to Default', style: GoogleFonts.cairo(color: Colors.red)),
+        ),
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Done', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        ),
+      ],
+    );
+  }
 }
