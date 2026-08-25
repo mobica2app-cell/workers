@@ -19,7 +19,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   List<Map<String, dynamic>> _allExcelData = [];
   List<Map<String, dynamic>> _newRecords = [];
   List<Map<String, dynamic>> _duplicateRecords = [];
-  bool _importDuplicates = false; // New flag
 
   // Per-row dates (3 dates)
   final Map<int, DateTime?> _rowOrderDates = {};
@@ -279,14 +278,9 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     }
   }
 
-  Future<void> _importRecords() async {
-    // Determine records to import based on _importDuplicates flag
-    final recordsToImport = _importDuplicates
-        ? _allExcelData
-        : _newRecords;
-
-    if (recordsToImport.isEmpty) {
-      _showMessage('No records to import');
+  Future<void> _importNewRecords() async {
+    if (_newRecords.isEmpty) {
+      _showMessage('No new records to import');
       return;
     }
 
@@ -294,10 +288,9 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final supabase = Supabase.instance.client;
     int imported = 0, failed = 0;
 
-    final enrichedRecords = recordsToImport.map((record) {
-      final globalIndex = _allExcelData.indexOf(record);
+    final enrichedRecords = _newRecords.map((record) {
       return {
-        'status': 'imported',
+        'status': 'imported', // Always "imported" - cannot be changed
         'customer_name': record['customer_name'] ?? '',
         'item_number': record['item_number'] ?? '',
         'product_code': record['product_code'] ?? '',
@@ -308,15 +301,9 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         'unit_of_measure': record['unit_of_measure'] ?? 'EA',
         'value': double.tryParse(record['value']?.toString().replaceAll(',', '').replaceAll('\$', '') ?? '0') ?? 0,
         'sales_engineer': record['sales_engineer'] ?? '',
-        'order_date': _rowOrderDates[globalIndex] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowOrderDates[globalIndex]!)
-            : null,
-        'end_date': _rowEndDates[globalIndex] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowEndDates[globalIndex]!)
-            : null,
-        'delivery_date': _rowDeliveryDates[globalIndex] != null
-            ? DateFormat('yyyy-MM-dd').format(_rowDeliveryDates[globalIndex]!)
-            : null,
+        'order_date': null,
+        'end_date': null,
+        'delivery_date': null,
         'factory': record['factory'] ?? null,
         'design_team': null,
         'responsible_engineer': null,
@@ -359,10 +346,8 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               _buildResultRow('Imported:', '$imported', greenColor),
               const SizedBox(height: 4),
               _buildResultRow('Failed:', '$failed', failed > 0 ? redColor : Colors.grey),
-              if (_duplicateRows > 0 && !_importDuplicates) ...[
-                const SizedBox(height: 4),
-                _buildResultRow('Duplicates skipped:', '$_duplicateRows', orangeColor),
-              ],
+              const SizedBox(height: 4),
+              _buildResultRow('Duplicates skipped:', '$_duplicateRows', orangeColor),
               const SizedBox(height: 4),
               _buildResultRow('Status:', 'imported', blueColor),
             ],
@@ -381,78 +366,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         ),
       );
     }
-  }
-
-  void _showDuplicateWarning() {
-    if (_duplicateRows == 0) return;
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber, color: orangeColor, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              'Duplicate Records Detected',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Found $_duplicateRows duplicate record(s) in your file.',
-              style: GoogleFonts.cairo(fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: orangeColor.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: orangeColor.withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: orangeColor, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Do you want to import duplicates anyway?',
-                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: orangeColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Import only new records
-              setState(() => _importDuplicates = false);
-              _importRecords();
-            },
-            child: Text('Skip Duplicates', style: GoogleFonts.cairo()),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Import everything including duplicates
-              setState(() => _importDuplicates = true);
-              _importRecords();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: orangeColor),
-            child: Text('Import All', style: GoogleFonts.cairo(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showMessage(String message) {
@@ -539,6 +452,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               ],
             ),
           ),
+          // Status badge showing "imported"
           if (_fileLoaded) ...[
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
@@ -762,6 +676,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         width: 1600,
         child: Column(
           children: [
+            // Header row
             Container(
               height: 36,
               decoration: const BoxDecoration(
@@ -788,12 +703,14 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 ],
               ),
             ),
+            // Data rows
             Expanded(
               child: ListView.builder(
                 itemCount: displayData.length > 100 ? 100 : displayData.length,
                 itemBuilder: (context, rowIndex) {
                   final record = displayData[rowIndex];
                   final globalIndex = _allExcelData.indexOf(record);
+                  final status = _rowStatuses[globalIndex] ?? _defaultStatus;
                   final orderDate = _rowOrderDates[globalIndex];
                   final endDate = _rowEndDates[globalIndex];
                   final deliveryDate = _rowDeliveryDates[globalIndex];
@@ -808,6 +725,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                     ),
                     child: Row(
                       children: [
+                        // Status dropdown
                         SizedBox(
                           width: 110,
                           child: Padding(
@@ -831,28 +749,71 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                             ),
                           ),
                         ),
-                        _previewDataCell(record['customer_name']?.toString() ?? '', 140),
-                        _previewDataCell(record['design_order']?.toString() ?? '', 100),
-                        _previewDataCell(record['contract_number']?.toString() ?? '', 100),
-                        _previewDataCell(record['item_number']?.toString() ?? '', 60),
-                        _previewDataCell(record['product_code']?.toString() ?? '', 120),
-                        _previewDataCell(record['description']?.toString() ?? '', 200),
-                        _previewDataCell(record['quantity']?.toString() ?? '', 50),
-                        _previewDataCell(record['unit_of_measure']?.toString() ?? '', 40),
+                        _previewDataCell(
+                          record['customer_name']?.toString() ?? '',
+                          140,
+                        ),
+                        _previewDataCell(
+                          record['design_order']?.toString() ?? '',
+                          100,
+                        ),
+                        _previewDataCell(
+                          record['contract_number']?.toString() ?? '',
+                          100,
+                        ),
+                        _previewDataCell(
+                          record['item_number']?.toString() ?? '',
+                          60,
+                        ),
+                        _previewDataCell(
+                          record['product_code']?.toString() ?? '',
+                          120,
+                        ),
+                        _previewDataCell(
+                          record['description']?.toString() ?? '',
+                          200,
+                        ),
+                        _previewDataCell(
+                          record['quantity']?.toString() ?? '',
+                          50,
+                        ),
+                        _previewDataCell(
+                          record['unit_of_measure']?.toString() ?? '',
+                          40,
+                        ),
                         _previewDataCell(record['value']?.toString() ?? '', 90),
-                        _previewDataCell(record['sales_engineer']?.toString() ?? '', 130),
-                        _previewDataCell(record['factory']?.toString() ?? '', 60),
+                        _previewDataCell(
+                          record['sales_engineer']?.toString() ?? '',
+                          130,
+                        ),
+                        _previewDataCell(
+                          record['factory']?.toString() ?? '',
+                          60,
+                        ),
+                        // Date pickers
                         SizedBox(
                           width: 110,
-                          child: _buildDateCell('Order', orderDate, () => _pickDateForRow(globalIndex, 'order_date')),
+                          child: _buildDateCell(
+                            'Order',
+                            orderDate,
+                                () => _pickDateForRow(globalIndex, 'order_date'),
+                          ),
                         ),
                         SizedBox(
                           width: 110,
-                          child: _buildDateCell('End', endDate, () => _pickDateForRow(globalIndex, 'end_date')),
+                          child: _buildDateCell(
+                            'End',
+                            endDate,
+                                () => _pickDateForRow(globalIndex, 'end_date'),
+                          ),
                         ),
                         SizedBox(
                           width: 110,
-                          child: _buildDateCell('Delivery', deliveryDate, () => _pickDateForRow(globalIndex, 'delivery_date')),
+                          child: _buildDateCell(
+                            'Delivery',
+                            deliveryDate,
+                                () => _pickDateForRow(globalIndex, 'delivery_date'),
+                          ),
                         ),
                       ],
                     ),
@@ -957,10 +918,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           ),
           const SizedBox(width: 12),
           ElevatedButton.icon(
-            onPressed: (_fileLoaded && _totalRows > 0) ? _showDuplicateWarning : null,
+            onPressed: (_fileLoaded && _newRows > 0) ? _importNewRecords : null,
             icon: const Icon(Icons.upload, size: 18),
             label: Text(
-              'Import $_totalRows Records',
+              'Import $_newRows Records',
               style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
             ),
             style: ElevatedButton.styleFrom(
@@ -978,3 +939,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     );
   }
 }
+
+
+
