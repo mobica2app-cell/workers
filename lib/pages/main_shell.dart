@@ -249,7 +249,7 @@ class _MainShellState extends State<MainShell> {
           hoverColor: Colors.white.withOpacity(0.05),
           splashColor: const Color(0xFF6366F1).withOpacity(0.1),
           child: AnimatedContainer(
-            duration: const Duration(milliseconds: 200),
+            duration: const Duration(milliseconds: 100),
             padding: EdgeInsets.symmetric(
               horizontal: _isCollapsed ? 12 : 16,
               vertical: 12,

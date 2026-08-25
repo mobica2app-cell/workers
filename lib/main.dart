@@ -487,12 +487,10 @@ void main() async {
 
 
 /*
-
 flutter pub get
 flutter build web --release
 git add .
 git commit -m "Update"
 git push
-
 
 */
