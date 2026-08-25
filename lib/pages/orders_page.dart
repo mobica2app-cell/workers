@@ -1,6 +1,5 @@
 // lib/pages/orders_page.dart
 import 'dart:convert';
-
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -46,8 +45,7 @@ class _OrdersPageState extends State<OrdersPage> {
   String? _filterDesignTeam;
   bool _filterMyWork = false;
   bool _editMode = false;
-  String _sortBy =
-      'date_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
+  String _sortBy = 'date_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
   // Fast O(1) Lookups & Pre-computed Lists
   Map<SAPMainOrder, int> _orderIndexMap = {};
@@ -1911,7 +1909,8 @@ class _OrdersPageState extends State<OrdersPage> {
           .where(
             (o) =>
         o.contractNumber.toLowerCase().contains(q) ||
-            o.customerName.toLowerCase().contains(q),
+            o.customerName.toLowerCase().contains(q) ||
+            o.designOrder.toLowerCase().contains(q), // Added design order search
       )
           .toList();
     }
@@ -1969,6 +1968,7 @@ class _OrdersPageState extends State<OrdersPage> {
     _applySorting(result);
     return result;
   }
+
 
   bool get _hasActiveFilters =>
       _filterStatus != null ||
@@ -2110,16 +2110,6 @@ class _OrdersPageState extends State<OrdersPage> {
       context,
       MaterialPageRoute(builder: (_) => const EmployeeManagementPage()),
     ).then((_) => _loadAllDataOnce());
-  }
-
-  void _showOrderDetails(SAPMainOrder order) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) =>
-            OrderDetailPage(order: order, sapService: widget.sapService),
-      ),
-    );
   }
 
   // Navigate to OrderTrackingPage (admin only)
@@ -2616,33 +2606,7 @@ class _OrdersPageState extends State<OrdersPage> {
           _buildMyWorkButton(),
           const SizedBox(width: 8),
           // Edit Mode checkbox - beside My Work button
-          Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              SizedBox(
-                width: 20,
-                height: 20,
-                child: Checkbox(
-                  value: _editMode,
-                  onChanged: (v) => setState(() => _editMode = v ?? false),
-                  activeColor: Colors.orange,
-                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-              ),
-              const SizedBox(width: 4),
-              GestureDetector(
-                onTap: () => setState(() => _editMode = !_editMode),
-                child: Text(
-                  'Edit Mode',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: _editMode ? Colors.orange : _secondaryTextColor,
-                  ),
-                ),
-              ),
-            ],
-          ),
+          _buildEditModeButton(),
 
           const SizedBox(width: 8),
 
@@ -2657,8 +2621,8 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
             style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFF059669),
-              side: const BorderSide(color: Color(0xFF059669)),
+              foregroundColor: const Color(0xFFDD4BFF),
+              side: const BorderSide(color: Color(0xFFDD4BFF)),
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(6),
@@ -2666,12 +2630,6 @@ class _OrdersPageState extends State<OrdersPage> {
               backgroundColor: _surfaceColor,
             ),
           ),
-
-          const SizedBox(width: 8),
-
-          // Only show people icon for admin/head users
-          if (isAdmin)
-            _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
 
           const SizedBox(width: 8),
 
@@ -2690,7 +2648,11 @@ class _OrdersPageState extends State<OrdersPage> {
               backgroundColor: _surfaceColor,
             ),
           ),
+          const SizedBox(width: 8),
 
+          // Only show people icon for admin/head users
+          if (isAdmin)
+            _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
           const SizedBox(width: 8),
         ],
       ),
@@ -2961,10 +2923,10 @@ class _OrdersPageState extends State<OrdersPage> {
         },
         style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
         decoration: InputDecoration(
-          hintText: 'Search...',
+          hintText: 'Search by contract, name, design order..', // Updated hint
           hintStyle: GoogleFonts.cairo(
             color: _secondaryTextColor,
-            fontSize: 14,
+            fontSize: 10,
           ),
           prefixIcon: Icon(Icons.search, color: _secondaryTextColor, size: 20),
           suffixIcon: _searchQuery.isNotEmpty
@@ -3565,6 +3527,35 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  Widget _buildEditModeButton() {
+    return OutlinedButton.icon(
+      onPressed: () => setState(() => _editMode = !_editMode),
+      icon: Icon(
+        _editMode ? Icons.edit : Icons.edit_outlined,
+        size: 16,
+        color: _editMode ? Colors.white : const Color(0xFFE69D00),
+      ),
+      label: Text(
+        _editMode ? 'Edit Mode (ON)' : 'Edit Mode',
+        style: GoogleFonts.cairo(
+          fontSize: 11,
+          fontWeight: FontWeight.w600,
+          color: _editMode ? Colors.white : const Color(0xFFE69D00),
+        ),
+      ),
+      style: OutlinedButton.styleFrom(
+        foregroundColor: const Color(0xFFE69D00),
+        side: BorderSide(
+          color: const Color(0xFFE69D00),
+        ),
+        backgroundColor: _editMode ? const Color(0xFFE69D00) : _surfaceColor,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+      ),
+    );
+  }
+
+
   Widget _buildMyWorkButton() {
     final hasMyWork = _filterMyWork;
     final myName = widget.loggedInEmployee?.fullName ?? '';
@@ -3762,7 +3753,6 @@ class _OrdersPageState extends State<OrdersPage> {
   Widget _buildDataRow(SAPMainOrder order, int index) {
     final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
-      onTap: () => _showOrderDetails(order),
       child: Container(
         height: 48,
         decoration: BoxDecoration(

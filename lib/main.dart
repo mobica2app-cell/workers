@@ -474,7 +474,6 @@ class EmployeeAuthService {
   }
 }
 
-
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
