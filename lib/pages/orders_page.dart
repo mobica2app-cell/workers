@@ -119,6 +119,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'modifications submitted',
     'Manufacturing Drawing',
     'Done',
+    'Task Done',
     'مطلوب اكوادها الاسترشاديه',
     'تحت المراجعة',
     'Review',
@@ -132,9 +133,6 @@ class _OrdersPageState extends State<OrdersPage> {
     'design studio',
     'imported',
     'ادارة تصميم المنتجات',
-    'Unknown',
-    'completed',
-    'on_hold',
   ];
 
   static const List<String> _allTeamStatuses = [
@@ -305,6 +303,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update the _isOrderEditable method
   bool _isOrderEditable(SAPMainOrder order) {
+    // Locked orders cannot be edited by anyone
+    if (_isOrderLocked(order)) return false;
+
     // Data Entry users can edit any row
     if (_isDataEntry) return true;
 
@@ -1204,6 +1205,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
     final autoStatus = getAutoStatus(newValue);
 
+    if (_isOrderLocked(order)) {
+      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
+      return;
+    }
+
     // If multiple rows selected, apply to all
     if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
@@ -1455,6 +1461,11 @@ class _OrdersPageState extends State<OrdersPage> {
       ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
+    if (_isOrderLocked(order)) {
+      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
+      return;
+    }
+
     // If multiple rows selected, apply to all
     if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
@@ -1629,6 +1640,12 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // Add this method near _isOrderEditable
+  bool _isOrderLocked(SAPMainOrder order) {
+    final lockedStatuses = ['task done', 'done', 'planning'];
+    return lockedStatuses.contains(order.status.toLowerCase());
+  }
+
   // Add this method to _OrdersPageState class
   Future<void> _deleteSelectedOrders() async {
     if (_selectedRowsIds.isEmpty) {
@@ -1640,6 +1657,14 @@ class _OrdersPageState extends State<OrdersPage> {
     final selectedOrders = _allOrders
         .where((o) => _selectedRowsIds.contains(o.id))
         .toList();
+
+    // Check if any selected order is locked
+    final hasLockedOrders = selectedOrders.any((o) => _isOrderLocked(o));
+
+    if (hasLockedOrders) {
+      _showSnackBar('⚠️ Cannot delete orders with status "Done", "Task Done", or "Planning"');
+      return;
+    }
 
     // Check if user can delete these orders
     bool canDeleteAll = _isAdmin || _isDataEntry;
@@ -1656,6 +1681,7 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
+    // Rest of the delete logic remains the same...
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -1704,6 +1730,12 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       if (order != null) {
+        // Skip locked orders during deletion
+        if (_isOrderLocked(order)) {
+          failed++;
+          continue;
+        }
+
         try {
           await _auditService.logChange(
             orderId: order.id,
@@ -1773,6 +1805,11 @@ class _OrdersPageState extends State<OrdersPage> {
   // Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
     final oldStatus = order.status;
+
+    if (_isOrderLocked(order)) {
+      _showSnackBar('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
+      return;
+    }
 
     // If multiple rows selected, apply to all
     if (_selectedRowsIds.length > 1) {
@@ -2923,7 +2960,7 @@ class _OrdersPageState extends State<OrdersPage> {
         },
         style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
         decoration: InputDecoration(
-          hintText: 'Search by contract, name, design order..', // Updated hint
+          hintText: 'Search by contract, name, design order', // Updated hint
           hintStyle: GoogleFonts.cairo(
             color: _secondaryTextColor,
             fontSize: 10,
@@ -3899,8 +3936,10 @@ class _OrdersPageState extends State<OrdersPage> {
             field == 'delivery_date' ||
             field == 'end_date';
 
+    
+
     // Only make editable when Edit Mode is ON AND user can edit this order
-    if (_editMode && canEdit) {
+    if (_editMode && canEdit && !_isOrderLocked(order)) {
       if (isDateField) {
         return SizedBox(
           width: w,

@@ -26,20 +26,27 @@ class _DashboardPageState extends State<DashboardPage> {
   int _totalEmployees = 0;
   int _totalFactories = 0;
 
+// Add these fields near the other fields
+  Map<String, double> _statusValues = {};
+  Map<String, double> _statusQuantities = {};
+
   // Status distribution
   Map<String, int> _statusDistribution = {};
 
-  // Top engineers (by order count)
-  List<Map<String, dynamic>> _topEngineers = [];
-
-  // Factory distribution
-  Map<String, int> _factoryDistribution = {};
 
   // Recent orders
   List<SAPMainOrder> _recentOrders = [];
 
   // Orders this month
   int _ordersThisMonth = 0;
+
+  // Approach and Manufacturing data
+  List<SAPMainOrder> _approachOrders = [];
+  List<SAPMainOrder> _manufacturingOrders = [];
+  double _approachValue = 0;
+  double _manufacturingValue = 0;
+  double _approachQuantity = 0;
+  double _manufacturingQuantity = 0;
 
   // Employee auth service
   final EmployeeAuthService _authService = EmployeeAuthService(
@@ -55,6 +62,25 @@ class _DashboardPageState extends State<DashboardPage> {
   Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
 
+  // Status lists
+  static const List<String> _approachStatuses = [
+    'Drawing Submittal',
+    'modifications submitted',
+    'Approval',
+    'Sales',
+    'As Built',
+    'ادارة تصميم المنتجات',
+    'الادارة الهندسه',
+    'design studio',
+  ];
+
+  static const List<String> _manufacturingStatuses = [
+    'Manufacturing Drawing',
+    'Review',
+    'Master Data',
+    'partation  master data',
+  ];
+
   @override
   void initState() {
     super.initState();
@@ -69,6 +95,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
       // Calculate stats
       final statusDist = <String, int>{};
+      final statusValues = <String, double>{};
+      final statusQuantities = <String, double>{};
       final factoryDist = <String, int>{};
       final engineerCount = <String, int>{};
       double totalVal = 0;
@@ -79,10 +107,20 @@ class _DashboardPageState extends State<DashboardPage> {
       final currentMonth =
           '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
+      // Approach and Manufacturing
+      final approachOrders = <SAPMainOrder>[];
+      final manufacturingOrders = <SAPMainOrder>[];
+      double approachVal = 0;
+      double manufacturingVal = 0;
+      double approachQty = 0;
+      double manufacturingQty = 0;
+
       for (var order in orders) {
         // Status
         final status = order.status.isEmpty ? 'Unknown' : order.status;
         statusDist[status] = (statusDist[status] ?? 0) + 1;
+        statusValues[status] = (statusValues[status] ?? 0) + order.value;
+        statusQuantities[status] = (statusQuantities[status] ?? 0) + order.quantity;
 
         // Factory
         if (order.factory != null && order.factory!.isNotEmpty) {
@@ -104,6 +142,20 @@ class _DashboardPageState extends State<DashboardPage> {
         if (order.orderDate != null &&
             order.orderDate!.startsWith(currentMonth)) {
           thisMonth++;
+        }
+
+        // Approach statuses
+        if (_approachStatuses.contains(order.status)) {
+          approachOrders.add(order);
+          approachVal += order.value;
+          approachQty += order.quantity;
+        }
+
+        // Manufacturing statuses
+        if (_manufacturingStatuses.contains(order.status)) {
+          manufacturingOrders.add(order);
+          manufacturingVal += order.value;
+          manufacturingQty += order.quantity;
         }
       }
 
@@ -129,10 +181,16 @@ class _DashboardPageState extends State<DashboardPage> {
         _totalEmployees = employees.length;
         _totalFactories = factories.length;
         _statusDistribution = statusDist;
-        _factoryDistribution = factoryDist;
-        _topEngineers = topEngineers.take(5).toList();
+        _statusValues = statusValues;
+        _statusQuantities = statusQuantities;
         _recentOrders = recent.take(8).toList();
         _ordersThisMonth = thisMonth;
+        _approachOrders = approachOrders;
+        _manufacturingOrders = manufacturingOrders;
+        _approachValue = approachVal;
+        _manufacturingValue = manufacturingVal;
+        _approachQuantity = approachQty;
+        _manufacturingQuantity = manufacturingQty;
         _isLoading = false;
       });
     } catch (e) {
@@ -166,6 +224,20 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.amber;
       case 'Sales':
         return Colors.deepOrange;
+      case 'As Built':
+        return Colors.brown;
+      case 'Master Data':
+        return Colors.cyan;
+      case 'partation  master data':
+        return Colors.deepPurple;
+      case 'ادارة تصميم المنتجات':
+        return Colors.teal;
+      case 'الادارة الهندسه':
+        return Colors.blueGrey;
+      case 'design studio':
+        return Colors.pink;
+      case 'modifications submitted':
+        return Colors.lightBlue;
       case 'Unknown':
         return _isDark ? Colors.grey.shade400 : Colors.grey;
       default:
@@ -217,158 +289,269 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
             const SizedBox(height: 24),
 
-            // Stats Cards
-            Row(
-              children: [
-                _buildStatCard(
-                  'Total Orders',
-                  '$_totalOrders',
-                  Icons.receipt_long,
-                  Colors.blue,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'Total Value',
-                  '\$${_formatNumber(_totalValue)}',
-                  Icons.attach_money,
-                  Colors.green,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'Employees',
-                  '$_totalEmployees',
-                  Icons.people,
-                  Colors.orange,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'Factories',
-                  '$_totalFactories',
-                  Icons.factory,
-                  Colors.purple,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                _buildStatCard(
-                  'Total QTY',
-                  _totalQuantity.toStringAsFixed(0),
-                  Icons.inventory_2,
-                  Colors.teal,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'This Month',
-                  '$_ordersThisMonth',
-                  Icons.calendar_today,
-                  Colors.indigo,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'Avg Value',
-                  '\$${_formatNumber(_totalOrders > 0 ? _totalValue / _totalOrders : 0)}',
-                  Icons.trending_up,
-                  Colors.amber,
-                ),
-                const SizedBox(width: 16),
-                _buildStatCard(
-                  'Products',
-                  '${_statusDistribution.values.fold(0, (a, b) => a + b)}',
-                  Icons.category,
-                  Colors.pink,
-                ),
-              ],
-            ),
+            // Comparison Section
+            _buildComparisonSection(),
             const SizedBox(height: 24),
 
             // Charts Row
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 2, child: _buildStatusDistributionCard()),
-                const SizedBox(width: 16),
-                Expanded(child: _buildTopEngineersCard()),
-              ],
-            ),
+            _buildStatusDistributionCard(),
             const SizedBox(height: 24),
-
-            // Recent Orders
-            _buildRecentOrdersCard(),
           ],
         ),
       ),
     );
   }
 
-  Widget _buildStatCard(
-      String title,
-      String value,
-      IconData icon,
-      Color color,
-      ) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
+  Widget _buildComparisonSection() {
+    return Container(
+      padding: const EdgeInsets.all(24),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Order Breakdown',
+            style: GoogleFonts.cairo(
+              fontSize: 20,
+              fontWeight: FontWeight.w700,
+              color: _textColor,
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+          ),
+          const SizedBox(height: 20),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Total Column
+              Expanded(
+                child: _buildComparisonColumn(
+                  title: 'Total',
+                  icon: Icons.all_inclusive,
+                  color: Colors.blue,
+                  orderCount: _totalOrders,
+                  totalValue: _totalValue,
+                  totalQuantity: _totalQuantity,
+                  statuses: null, // Show all statuses
+                ),
               ),
-              child: Icon(icon, color: color, size: 24),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              value,
-              style: GoogleFonts.cairo(
-                fontSize: 28,
-                fontWeight: FontWeight.bold,
-                color: _textColor,
+              const SizedBox(width: 16),
+              // Approach Column
+              Expanded(
+                child: _buildComparisonColumn(
+                  title: 'Approach',
+                  icon: Icons.design_services,
+                  color: Colors.purple,
+                  orderCount: _approachOrders.length,
+                  totalValue: _approachValue,
+                  totalQuantity: _approachQuantity,
+                  statuses: _approachStatuses,
+                ),
               ),
-            ),
-            const SizedBox(height: 4),
+              const SizedBox(width: 16),
+              // Manufacturing Column
+              Expanded(
+                child: _buildComparisonColumn(
+                  title: 'Manufacturing',
+                  icon: Icons.precision_manufacturing,
+                  color: Colors.orange,
+                  orderCount: _manufacturingOrders.length,
+                  totalValue: _manufacturingValue,
+                  totalQuantity: _manufacturingQuantity,
+                  statuses: _manufacturingStatuses,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildComparisonColumn({
+    required String title,
+    required IconData icon,
+    required Color color,
+    required int orderCount,
+    required double totalValue,
+    required double totalQuantity,
+    required List<String>? statuses,
+  })
+  {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: color.withOpacity(0.05),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: color, size: 20),
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: GoogleFonts.cairo(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          _buildComparisonRow('Orders', '$orderCount', color),
+          const SizedBox(height: 8),
+          _buildComparisonRow('Value', '\$${_formatNumber(totalValue)}', color),
+          const SizedBox(height: 8),
+          _buildComparisonRow('QTY', totalQuantity.toStringAsFixed(0), color),
+          const SizedBox(height: 16),
+          if (statuses != null && statuses.isNotEmpty) ...[
+            Divider(color: color.withOpacity(0.3)),
+            const SizedBox(height: 8),
             Text(
-              title,
+              'Statuses (${statuses.length})',
               style: GoogleFonts.cairo(
-                fontSize: 13,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
                 color: _secondaryTextColor,
               ),
             ),
+            const SizedBox(height: 8),
+            ...statuses.map((status) {
+              final count = _statusDistribution[status] ?? 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: _getStatusColor(status),
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 6),
+                    Expanded(
+                      child: Text(
+                        status,
+                        style: GoogleFonts.cairo(
+                          fontSize: 10,
+                          color: _secondaryTextColor,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    Text(
+                      '$count',
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w600,
+                        color: _textColor,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
           ],
-        ),
+        ],
       ),
     );
   }
 
+  Widget _buildComparisonRow(String label, String value, Color color) {
+    return Row(
+      children: [
+        Text(
+          label,
+          style: GoogleFonts.cairo(
+            fontSize: 12,
+            color: _secondaryTextColor,
+          ),
+        ),
+        const Spacer(),
+        Text(
+          value,
+          style: GoogleFonts.cairo(
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: _textColor,
+          ),
+        ),
+      ],
+    );
+  }
+
+
   Widget _buildStatusDistributionCard() {
-    final colors = [
-      Colors.blue,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.green,
-      Colors.indigo,
-      Colors.amber,
-      Colors.cyan,
+    // Define all statuses
+    final allStatuses = [
+      'Drawing Submittal',
+      'Approval',
+      'modifications submitted',
+      'Manufacturing Drawing',
+      'Done',
+      'Task Done',
+      'مطلوب اكوادها الاسترشاديه',
+      'تحت المراجعة',
+      'Review',
+      'Master Data',
+      'Sales',
+      'As Built',
+      'Tasks',
+      'planning',
+      'partation  master data',
+      'الادارة الهندسه',
+      'design studio',
+      'imported',
+      'ادارة تصميم المنتجات',
     ];
-    final entries = _statusDistribution.entries.take(8).toList();
+
+    // Colors for each status
+    final statusColors = <String, Color>{
+      'Drawing Submittal': Colors.purple,
+      'Approval': Colors.green,
+      'modifications submitted': Colors.lightBlue,
+      'Manufacturing Drawing': Colors.indigo,
+      'Done': Colors.green.shade700,
+      'Task Done': Colors.teal,
+      'مطلوب اكوادها الاسترشاديه': Colors.blue,
+      'تحت المراجعة': Colors.orange,
+      'Review': Colors.amber,
+      'Master Data': Colors.cyan,
+      'Sales': Colors.deepOrange,
+      'As Built': Colors.brown,
+      'Tasks': Colors.lime,
+      'planning': Colors.pink,
+      'partation  master data': Colors.deepPurple,
+      'الادارة الهندسه': Colors.blueGrey,
+      'design studio': Colors.red,
+      'imported': Colors.grey,
+      'ادارة تصميم المنتجات': Colors.teal,
+    };
+
+    // Calculate total value per status
+    final statusValues = <String, double>{};
+    for (var order in _recentOrders.isEmpty ? [] : _recentOrders) {
+      // This won't work correctly as _recentOrders only has 8 items
+    }
+
+    // Better approach: store all orders with their status and value
+    // For now, we'll calculate from _statusDistribution
 
     return Container(
       padding: const EdgeInsets.all(24),
@@ -396,295 +579,177 @@ class _DashboardPageState extends State<DashboardPage> {
             ),
           ),
           const SizedBox(height: 20),
-          if (entries.isEmpty)
-            Center(
-              child: Text(
-                'No data',
-                style: GoogleFonts.cairo(color: _secondaryTextColor),
-              ),
-            )
-          else
-            ...entries.asMap().entries.map((e) {
-              final i = e.key;
-              final entry = e.value;
-              final total = _totalOrders;
-              final pct = total > 0 ? (entry.value / total * 100).round() : 0;
-              final color = colors[i % colors.length];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 12),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 12,
-                          height: 12,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            entry.key.length > 25
-                                ? '${entry.key.substring(0, 23)}...'
-                                : entry.key,
-                            style: GoogleFonts.cairo(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w500,
-                              color: _textColor,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        ),
-                        Text(
-                          '$pct%',
-                          style: GoogleFonts.cairo(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w600,
-                            color: color,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
-                      child: LinearProgressIndicator(
-                        value: pct / 100,
-                        backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
-                        valueColor: AlwaysStoppedAnimation<Color>(color),
-                        minHeight: 6,
-                      ),
-                    ),
-                  ],
-                ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildTopEngineersCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Top Sales Engineers',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
+          // Table Header
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+            decoration: BoxDecoration(
+              color: _isDark ? const Color(0xFF334155).withOpacity(0.3) : Colors.grey.withOpacity(0.05),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Row(
+              children: [
+                Expanded(flex: 3, child: Text('Status', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor))),
+                Expanded(flex: 2, child: Text('Count', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor), textAlign: TextAlign.center)),
+                Expanded(flex: 2, child: Text('Value', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor), textAlign: TextAlign.right)),
+                Expanded(flex: 2, child: Text('%', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor), textAlign: TextAlign.right)),
+              ],
             ),
           ),
-          const SizedBox(height: 20),
-          if (_topEngineers.isEmpty)
-            Center(
-              child: Text(
-                'No data',
-                style: GoogleFonts.cairo(color: _secondaryTextColor),
-              ),
-            )
-          else
-            ..._topEngineers.asMap().entries.map((entry) {
-              final i = entry.key;
-              final eng = entry.value;
-              final medals = ['🥇', '🥈', '🥉', '4', '5'];
-              return Padding(
-                padding: const EdgeInsets.only(bottom: 16),
+          const SizedBox(height: 8),
+          // Status Rows
+          ...allStatuses.map((status) {
+            final count = _statusDistribution[status] ?? 0;
+            if (count == 0) return const SizedBox.shrink();
+
+            final color = statusColors[status] ?? Colors.grey;
+            final pct = _totalOrders > 0 ? (count / _totalOrders * 100) : 0.0;
+            final pctFormatted = pct.toStringAsFixed(2);
+
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.05),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: color.withOpacity(0.2)),
+                ),
                 child: Row(
                   children: [
-                    Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: i < 3
-                            ? Colors.amber.withOpacity(0.2)
-                            : Colors.grey.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Center(
-                        child: Text(
-                          medals[i],
-                          style: GoogleFonts.cairo(fontSize: 16),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 12),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                      flex: 3,
+                      child: Row(
                         children: [
-                          Text(
-                            eng['name'] ?? '',
-                            style: GoogleFonts.cairo(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _textColor,
+                          Container(
+                            width: 10,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
                             ),
-                            overflow: TextOverflow.ellipsis,
                           ),
-                          Text(
-                            '${eng['count']} orders',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              color: _secondaryTextColor,
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              status,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w500,
+                                color: _textColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
                             ),
                           ),
                         ],
                       ),
                     ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '$count',
+                        style: GoogleFonts.cairo(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: _textColor,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '\$${_formatNumber(_statusValues[status] ?? 0)}',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                          color: const Color(0xFF059669),
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
+                    Expanded(
+                      flex: 2,
+                      child: Text(
+                        '$pctFormatted%',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: color,
+                        ),
+                        textAlign: TextAlign.right,
+                      ),
+                    ),
                   ],
                 ),
-              );
-            }),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildRecentOrdersCard() {
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            children: [
-              Text(
-                'Recent Orders',
-                style: GoogleFonts.cairo(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: _textColor,
-                ),
               ),
-              const Spacer(),
-              Text(
-                '${_recentOrders.length} orders',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  color: _secondaryTextColor,
-                ),
-              ),
-            ],
-          ),
+            );
+          }),
           const SizedBox(height: 16),
-          if (_recentOrders.isEmpty)
-            Center(
-              child: Padding(
-                padding: const EdgeInsets.all(40),
-                child: Text(
-                  'No orders yet',
-                  style: GoogleFonts.cairo(color: _secondaryTextColor),
-                ),
-              ),
-            )
-          else
-            ..._recentOrders.map(
-                  (order) => Container(
-                padding: const EdgeInsets.symmetric(vertical: 12),
-                decoration: BoxDecoration(
-                  border: Border(
-                    bottom: BorderSide(color: _borderColor.withOpacity(0.5)),
+          // Total Row
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 12),
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(8),
+              border: Border.all(color: Theme.of(context).colorScheme.primary.withOpacity(0.3)),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Text(
+                    'Total',
+                    style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _textColor,
+                    ),
                   ),
                 ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 40,
-                      height: 40,
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(order.status).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        Icons.receipt,
-                        color: _getStatusColor(order.status),
-                        size: 20,
-                      ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    '$_totalOrders',
+                    style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: _textColor,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            order.description.isNotEmpty
-                                ? order.description
-                                : 'No description',
-                            style: GoogleFonts.cairo(
-                              fontSize: 13,
-                              fontWeight: FontWeight.w600,
-                              color: _textColor,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          Text(
-                            '${order.customerName} • ${order.designOrder}',
-                            style: GoogleFonts.cairo(
-                              fontSize: 11,
-                              color: _secondaryTextColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: _getStatusColor(order.status).withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Text(
-                        order.status.length > 15
-                            ? '${order.status.substring(0, 13)}...'
-                            : order.status,
-                        style: GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w600,
-                          color: _getStatusColor(order.status),
-                        ),
-                      ),
-                    ),
-                  ],
+                    textAlign: TextAlign.center,
+                  ),
                 ),
-              ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    '\$${_formatNumber(_totalValue)}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: const Color(0xFF059669),
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+                Expanded(
+                  flex: 2,
+                  child: Text(
+                    '100.00%',
+                    style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    textAlign: TextAlign.right,
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
+
+
 }
+

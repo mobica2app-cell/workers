@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../main.dart';
 import '../services/audit_service.dart';
 import '../services/sap_service.dart';
 
@@ -19,6 +20,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   final AuditService _auditService = AuditService(Supabase.instance.client);
   List<Map<String, dynamic>> _auditLogs = [];
   bool _isLoading = true;
+  bool _isRestoring = false;
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -29,6 +31,15 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   Color get _tertiaryTextColor => _isDark ? const Color(0xFF64748B) : const Color(0xFF45464D);
   Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+
+  // Get current user info
+  String get _currentUserName {
+    // You can get this from a global state or pass it to the page
+    // For now, we'll use a placeholder
+    return 'Admin';
+  }
+
+  String get _currentUserId => '';
 
   @override
   void initState() {
@@ -49,10 +60,74 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     }
   }
 
+  // Restore a field to its previous value
+  Future<void> _restoreField(Map<String, dynamic> log) async {
+    final fieldName = log['field_name']?.toString();
+    final oldValue = log['old_value'];
+    final newValue = log['new_value'];
+
+    if (fieldName == null || oldValue == null) {
+      _showSnackBar('Cannot restore this change', isError: true);
+      return;
+    }
+
+    // Don't restore if it's a delete action
+    if (log['action_type'] == 'delete') {
+      _showSnackBar('Cannot restore deleted orders', isError: true);
+      return;
+    }
+
+    setState(() => _isRestoring = true);
+
+    try {
+      final supabase = Supabase.instance.client;
+
+      // Update the order field back to old value
+      await supabase
+          .from('sap_main_orders')
+          .update({fieldName: oldValue})
+          .eq('id', widget.order.id);
+
+      // Log the restoration in audit
+      await _auditService.logChange(
+        orderId: widget.order.id,
+        designOrder: widget.order.designOrder,
+        fieldName: fieldName,
+        oldValue: newValue?.toString(),
+        newValue: oldValue.toString(),
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+        actionType: 'restore',
+        notes: 'Restored from audit log: ${_formatDateTime(log['changed_at'])}',
+      );
+
+      _showSnackBar('✅ Restored ${_formatFieldName(fieldName)} to previous value');
+
+      // Reload audit logs
+      await _loadAuditLogs();
+    } catch (e) {
+      print('Error restoring: $e');
+      _showSnackBar('Error restoring: $e', isError: true);
+    } finally {
+      setState(() => _isRestoring = false);
+    }
+  }
+
+  void _showSnackBar(String message, {bool isError = false}) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.cairo()),
+        backgroundColor: isError ? Colors.red : Colors.green,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   // Get only status changes from audit logs (sorted by date - oldest first)
   List<Map<String, dynamic>> get _statusChanges {
     final changes = _auditLogs
-        .where((log) => log['field_name'] == 'status')
+        .where((log) => log['field_name'] == 'status' && log['action_type'] != 'restore')
         .toList();
     changes.sort((a, b) {
       final aDate = DateTime.tryParse(a['changed_at'] ?? '') ?? DateTime(2000);
@@ -73,6 +148,13 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         ),
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh),
+            onPressed: _loadAuditLogs,
+            tooltip: 'Refresh',
+          ),
+        ],
       ),
       body: _isLoading
           ? Center(
@@ -478,7 +560,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
             ],
           ),
           const SizedBox(height: 16),
-          ..._auditLogs.take(20).map((log) => _buildAuditLogItem(log)),
+          ..._auditLogs.map((log) => _buildAuditLogItem(log)),
         ],
       ),
     );
@@ -486,77 +568,125 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
 
   Widget _buildAuditLogItem(Map<String, dynamic> log) {
     final isDelete = log['action_type'] == 'delete';
+    final isRestore = log['action_type'] == 'restore';
     final isStatus = log['field_name'] == 'status';
+
     IconData icon = isDelete
         ? Icons.delete
+        : isRestore
+        ? Icons.restore
         : (isStatus ? Icons.swap_horiz : Icons.edit);
+
     Color color = isDelete
         ? Colors.red
+        : isRestore
+        ? Colors.purple
         : (isStatus ? const Color(0xFF6366F1) : Colors.blue);
+
+    // Check if this log can be restored (not a delete or restore action)
+    final canRestore = !isDelete && !isRestore && log['old_value'] != null;
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(8),
+      child: Container(
+        padding: const EdgeInsets.all(8),
+        decoration: BoxDecoration(
+          border: Border.all(color: _borderColor.withOpacity(0.5)),
+          borderRadius: BorderRadius.circular(8),
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Icon(icon, size: 16, color: color),
             ),
-            child: Icon(icon, size: 16, color: color),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                RichText(
-                  text: TextSpan(
-                    style: GoogleFonts.cairo(
-                      fontSize: 13,
-                      color: _textColor,
-                    ),
-                    children: [
-                      TextSpan(
-                        text: _formatFieldName(log['field_name']),
-                        style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  RichText(
+                    text: TextSpan(
+                      style: GoogleFonts.cairo(
+                        fontSize: 13,
+                        color: _textColor,
                       ),
-                      const TextSpan(text: ': '),
-                      if (log['old_value'] != null)
+                      children: [
                         TextSpan(
-                          text: '${log['old_value']}',
-                          style: GoogleFonts.cairo(
-                            color: _isDark ? Colors.red.shade300 : Colors.red.shade700,
-                            decoration: TextDecoration.lineThrough,
-                          ),
+                          text: _formatFieldName(log['field_name']),
+                          style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
                         ),
-                      if (log['old_value'] != null && log['new_value'] != null)
-                        const TextSpan(text: ' → '),
-                      if (log['new_value'] != null)
-                        TextSpan(
-                          text: '${log['new_value']}',
-                          style: GoogleFonts.cairo(
-                            color: const Color(0xFF059669),
-                            fontWeight: FontWeight.w600,
+                        if (isRestore) ...[
+                          TextSpan(
+                            text: ' (Restored)',
+                            style: GoogleFonts.cairo(
+                              color: Colors.purple,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                    ],
+                        ],
+                        const TextSpan(text: ': '),
+                        if (log['old_value'] != null)
+                          TextSpan(
+                            text: '${log['old_value']}',
+                            style: GoogleFonts.cairo(
+                              color: _isDark ? Colors.red.shade300 : Colors.red.shade700,
+                              decoration: isRestore ? null : TextDecoration.lineThrough,
+                            ),
+                          ),
+                        if (log['old_value'] != null && log['new_value'] != null)
+                          const TextSpan(text: ' → '),
+                        if (log['new_value'] != null)
+                          TextSpan(
+                            text: '${log['new_value']}',
+                            style: GoogleFonts.cairo(
+                              color: const Color(0xFF059669),
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                      ],
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'By ${log['changed_by']} • ${_formatDateTime(log['changed_at'])}',
-                  style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    color: _secondaryTextColor,
+                  const SizedBox(height: 2),
+                  Text(
+                    'By ${log['changed_by']} • ${_formatDateTime(log['changed_at'])}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: _secondaryTextColor,
+                    ),
                   ),
-                ),
-              ],
+                  if (log['notes'] != null && log['notes'].toString().isNotEmpty)
+                    Text(
+                      log['notes'].toString(),
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        color: _secondaryTextColor,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                ],
+              ),
             ),
-          ),
-        ],
+            if (canRestore)
+              TextButton.icon(
+                onPressed: _isRestoring ? null : () => _restoreField(log),
+                icon: const Icon(Icons.restore, size: 16),
+                label: Text(
+                  'Restore',
+                  style: GoogleFonts.cairo(fontSize: 11),
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: Colors.purple,
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }
@@ -642,3 +772,4 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return '${buffer.toString()}.${parts[1]}';
   }
 }
+

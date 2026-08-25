@@ -1,4 +1,5 @@
 // lib/pages/analytics_page.dart
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:fl_chart/fl_chart.dart';
@@ -116,6 +117,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return '${buffer.toString()}.${parts[1]}';
   }
 
+  // Helper to get first 2 words of a name
+  String _getShortName(String fullName) {
+    final words = fullName.trim().split(RegExp(r'\s+'));
+    if (words.length <= 2) return fullName;
+    return '${words[0]} ${words[1]}';
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -142,15 +150,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     color: _textColor,
                   ),
                 ),
-                const Spacer(),
-                IconButton(
-                  onPressed: _loadAnalytics,
-                  icon: Icon(Icons.refresh, color: _secondaryTextColor),
-                  tooltip: 'Refresh',
-                ),
               ],
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 18),
 
             // KPI Row
             Row(
@@ -178,35 +180,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ],
             ),
             const SizedBox(height: 24),
-
-            // Charts Row 1
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 3, child: _buildStatusPieChart()),
-                const SizedBox(width: 16),
-                Expanded(flex: 2, child: _buildStatusSummary()),
-              ],
-            ),
+            _buildFactoryChart(),
             const SizedBox(height: 24),
-
-            // Charts Row 2
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(flex: 1, child: _buildFactoryChart()),
-                const SizedBox(width: 16),
-                Expanded(flex: 1, child: _buildEngineerWorkloadChart()),
-              ],
-            ),
+            _buildEngineerWorkloadChart(),
             const SizedBox(height: 24),
-
-            // Monthly Trends
             _buildMonthlyTrendsChart(),
             const SizedBox(height: 24),
-
-            // Status Distribution Table
-            _buildStatusTable(),
           ],
         ),
       ),
@@ -266,210 +245,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
-  Widget _buildStatusPieChart() {
-    final colors = [
-      Colors.blue,
-      Colors.orange,
-      Colors.purple,
-      Colors.teal,
-      Colors.green,
-      Colors.indigo,
-      Colors.amber,
-      Colors.cyan,
-      Colors.deepOrange,
-      Colors.brown,
-      Colors.pink,
-      Colors.lime,
-    ];
-    final entries = _statusDistribution.entries.take(10).toList();
-    final total = entries.fold(0, (a, b) => a + b.value);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Status Distribution',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
-            ),
-          ),
-          const SizedBox(height: 20),
-          SizedBox(
-            height: 300,
-            child: Row(
-              children: [
-                Expanded(
-                  flex: 3,
-                  child: PieChart(
-                    PieChartData(
-                      sections: entries.asMap().entries.map((e) {
-                        final i = e.key;
-                        final entry = e.value;
-                        return PieChartSectionData(
-                          color: colors[i % colors.length],
-                          value: entry.value.toDouble(),
-                          title: '${(entry.value / total * 100).round()}%',
-                          radius: 100,
-                          titleStyle: GoogleFonts.cairo(
-                            fontSize: 11,
-                            fontWeight: FontWeight.w600,
-                            color: Colors.white,
-                          ),
-                        );
-                      }).toList(),
-                      centerSpaceRadius: 40,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  flex: 2,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: entries.asMap().entries.map((e) {
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 8),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 10,
-                              height: 10,
-                              decoration: BoxDecoration(
-                                color: colors[e.key % colors.length],
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 6),
-                            Expanded(
-                              child: Text(
-                                e.value.key.length > 18
-                                    ? '${e.value.key.substring(0, 16)}...'
-                                    : e.value.key,
-                                style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(
-                              '${e.value.value}',
-                              style: GoogleFonts.cairo(
-                                fontSize: 11,
-                                fontWeight: FontWeight.w600,
-                                color: _textColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatusSummary() {
-    final entries = _statusDistribution.entries.take(5).toList();
-    final maxVal = entries.isEmpty ? 1 : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Top Statuses',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
-            ),
-          ),
-          const SizedBox(height: 24),
-          ...entries.map((e) {
-            final pct = _totalOrders > 0
-                ? (e.value / _totalOrders * 100).round()
-                : 0;
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          e.key,
-                          style: GoogleFonts.cairo(
-                            fontSize: 12,
-                            fontWeight: FontWeight.w500,
-                            color: _textColor,
-                          ),
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      Text(
-                        '${e.value} ($pct%)',
-                        style: GoogleFonts.cairo(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(4),
-                    child: LinearProgressIndicator(
-                      value: e.value / maxVal,
-                      backgroundColor: _isDark ? Colors.grey.withOpacity(0.2) : Colors.grey.withOpacity(0.1),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        Colors.blue,
-                      ),
-                      minHeight: 8,
-                    ),
-                  ),
-                ],
-              ),
-            );
-          }),
-        ],
-      ),
-    );
-  }
-
   Widget _buildFactoryChart() {
     final entries = _factoryDistribution.entries.toList();
     final maxVal = entries.isEmpty
@@ -503,7 +278,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 250,
+            height: 300,
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
@@ -533,15 +308,25 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 60,
                       getTitlesWidget: (value, meta) {
-                        if (value.toInt() < entries.length)
+                        if (value.toInt() < entries.length) {
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              entries[value.toInt()].key,
-                              style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
+                            child: Transform.rotate(
+                              angle: -math.pi / 4,
+                              child: Text(
+                                entries[value.toInt()].key,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 9,
+                                  color: _secondaryTextColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                                maxLines: 1,
+                              ),
                             ),
                           );
+                        }
                         return const SizedBox();
                       },
                     ),
@@ -607,7 +392,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Engineer Workloads',
+            'Sales Engineer Workloads',
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -627,7 +412,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             )
           else
             SizedBox(
-              height: 250,
+              height: 300,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
@@ -657,17 +442,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
+                        reservedSize: 60,
                         getTitlesWidget: (value, meta) {
-                          if (value.toInt() < entries.length)
+                          if (value.toInt() < entries.length) {
+                            // Get first 2 words of engineer name
+                            final shortName = _getShortName(entries[value.toInt()].key);
                             return Padding(
                               padding: const EdgeInsets.only(top: 8),
-                              child: Text(
-                                entries[value.toInt()].key.length > 10
-                                    ? '${entries[value.toInt()].key.substring(0, 8)}..'
-                                    : entries[value.toInt()].key,
-                                style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
+                              child: Transform.rotate(
+                                angle: -math.pi / 4,
+                                child: Text(
+                                  shortName,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 9,
+                                    color: _secondaryTextColor,
+                                  ),
+                                  overflow: TextOverflow.ellipsis,
+                                  maxLines: 1,
+                                ),
                               ),
                             );
+                          }
                           return const SizedBox();
                         },
                       ),
@@ -730,7 +525,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Monthly Trends',
+            'Order Dates Load',
             style: GoogleFonts.cairo(
               fontSize: 18,
               fontWeight: FontWeight.w600,
@@ -739,7 +534,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 200,
+            height: 250,
             child: LineChart(
               LineChartData(
                 minY: 0,
@@ -770,13 +565,17 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
+                      reservedSize: 50,
                       getTitlesWidget: (value, meta) {
                         if (value.toInt() < entries.length)
                           return Padding(
                             padding: const EdgeInsets.only(top: 8),
-                            child: Text(
-                              entries[value.toInt()].key,
-                              style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
+                            child: Transform.rotate(
+                              angle: -math.pi / 4,
+                              child: Text(
+                                entries[value.toInt()].key,
+                                style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
+                              ),
                             ),
                           );
                         return const SizedBox();
@@ -819,91 +618,4 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       ),
     );
   }
-
-  Widget _buildStatusTable() {
-    final entries = _statusDistribution.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
-
-    return Container(
-      padding: const EdgeInsets.all(24),
-      decoration: BoxDecoration(
-        color: _cardColor,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: _borderColor),
-        boxShadow: [
-          BoxShadow(
-            color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-            blurRadius: 10,
-            offset: const Offset(0, 2),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            'Status Distribution Details',
-            style: GoogleFonts.cairo(
-              fontSize: 18,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
-            ),
-          ),
-          const SizedBox(height: 16),
-          Table(
-            columnWidths: const {
-              0: FlexColumnWidth(3),
-              1: FlexColumnWidth(1),
-              2: FlexColumnWidth(1),
-            },
-            children: [
-              TableRow(
-                decoration: BoxDecoration(color: _isDark ? const Color(0xFF334155).withOpacity(0.3) : Colors.grey.withOpacity(0.05)),
-                children: [
-                  _tableHeader('Status'),
-                  _tableHeader('Count'),
-                  _tableHeader('%'),
-                ],
-              ),
-              ...entries.map((e) {
-                final pct = _totalOrders > 0
-                    ? (e.value / _totalOrders * 100).toStringAsFixed(1)
-                    : '0';
-                return TableRow(
-                  children: [
-                    _tableCell(e.key),
-                    _tableCell('${e.value}'),
-                    _tableCell('$pct%'),
-                  ],
-                );
-              }),
-            ],
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _tableHeader(String text) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Text(
-      text,
-      style: GoogleFonts.cairo(
-        fontSize: 13,
-        fontWeight: FontWeight.w700,
-        color: _textColor,
-      ),
-    ),
-  );
-
-  Widget _tableCell(String text) => Padding(
-    padding: const EdgeInsets.all(12),
-    child: Text(
-      text,
-      style: GoogleFonts.cairo(
-        fontSize: 13,
-        color: _secondaryTextColor,
-      ),
-    ),
-  );
 }
