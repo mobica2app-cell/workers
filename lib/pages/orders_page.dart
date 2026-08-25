@@ -3860,7 +3860,7 @@ class _OrdersPageState extends State<OrdersPage> {
       children: [
         _hdr('Status', 140),
         _hdr('Item', 60),
-        _hdr('Product Code', 120),
+        _hdr('Product Code', 150),
         _hdr('Contract Num', 110),
         _hdr('Description', 200),
         _hdr('Design Order', 110),
@@ -3897,7 +3897,7 @@ class _OrdersPageState extends State<OrdersPage> {
             _editableCell(order.itemNumber, 60, order, 'item_number', 'Item'),
             _editableCell(
               order.productCode,
-              120,
+              150,
               order,
               'product_code',
               'Product Code',
