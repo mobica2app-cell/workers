@@ -1851,9 +1851,26 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Update order status with audit
+// Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
     final oldStatus = order.status;
 
+    // Check if trying to change to a locked status
+    final lockedStatuses = ['Done', 'Task Done', 'Planning'];
+    final isChangingToLocked = lockedStatuses.any((s) => s.toLowerCase() == newStatus.toLowerCase());
+
+    // If changing to locked status, check if responsible engineer is assigned
+    if (isChangingToLocked) {
+      final hasResponsibleEngineer = order.responsibleEngineer != null &&
+          order.responsibleEngineer!.isNotEmpty;
+
+      if (!hasResponsibleEngineer) {
+        _showSnackBar('⚠️ To change to "$newStatus", you must assign a Responsible Engineer first');
+        return;
+      }
+    }
+
+    // Check if current status is locked (cannot change FROM locked)
     if (_isOrderLocked(order)) {
       _showSnackBar('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
       return;
@@ -1865,6 +1882,7 @@ class _OrdersPageState extends State<OrdersPage> {
       final supabase = Supabase.instance.client;
       int updated = 0;
       int skipped = 0;
+      int missingEngineer = 0;
 
       for (var orderId in _selectedRowsIds) {
         final selectedOrder = _allOrders
@@ -1875,6 +1893,16 @@ class _OrdersPageState extends State<OrdersPage> {
           if (_isOrderLocked(selectedOrder)) {
             skipped++;
             continue;
+          }
+
+          // Check if changing to locked status without responsible engineer
+          if (isChangingToLocked) {
+            final hasRespEng = selectedOrder.responsibleEngineer != null &&
+                selectedOrder.responsibleEngineer!.isNotEmpty;
+            if (!hasRespEng) {
+              missingEngineer++;
+              continue;
+            }
           }
 
           try {
@@ -1901,7 +1929,10 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       setState(() => _isLoading = false);
-      if (skipped > 0) {
+
+      if (missingEngineer > 0) {
+        _showSnackBar('⚠️ $missingEngineer order(s) need Responsible Engineer assigned to change to "$newStatus". ✅ $updated updated, ⚠️ $skipped locked skipped');
+      } else if (skipped > 0) {
         _showSnackBar('✅ Status updated for $updated rows, ⚠️ $skipped locked rows skipped');
       } else {
         _showSnackBar('✅ Status updated for $updated rows!');
@@ -2797,7 +2828,7 @@ class _OrdersPageState extends State<OrdersPage> {
               children: [
                 Flexible(
                   child: Text(
-                    hasValue ? displayName : '-',
+                    hasValue ? displayName : '',
                     style: GoogleFonts.cairo(
                       fontSize: 10,
                       fontWeight: FontWeight.w500,

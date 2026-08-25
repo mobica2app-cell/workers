@@ -29,6 +29,12 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   String _dateFilter = 'all';
   List<Map<String, dynamic>> _filteredAuditLogs = [];
 
+  // Store completed order IDs with their completion date from audit logs
+  Map<String, DateTime> _completedOrderDates = {};
+
+  // Store orders with no audit log (for "All" filter)
+  Set<String> _ordersWithoutAudit = {};
+
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8F9FA);
@@ -49,7 +55,28 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     try {
       final employees = await _authService.getAllEmployees();
       final orders = await _sapService.getAllOrders();
-      final auditLogs = await _auditService.getRecentChanges(limit: 5000);
+
+      // Fetch only status changes to Done/Task Done/planning from audit logs
+      final supabase = Supabase.instance.client;
+      final doneAuditLogs = await supabase
+          .from('order_audit_log')
+          .select('*')
+          .eq('field_name', 'status')
+          .or('new_value.eq.Done,new_value.eq.Task Done,new_value.eq.planning')
+          .order('changed_at', ascending: false)
+          .limit(10000);
+
+      print('Total orders: ${orders.length}');
+      print('Done audit logs: ${doneAuditLogs.length}');
+
+      // Count locked orders in SAP
+      int lockedOrders = 0;
+      for (var order in orders) {
+        if (order.status == 'Done' || order.status == 'Task Done' || order.status == 'planning') {
+          lockedOrders++;
+        }
+      }
+      print('Locked orders in SAP: $lockedOrders');
 
       final deptMap = <String, List<EmployeeAuth>>{};
       for (var emp in employees) {
@@ -57,11 +84,35 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         deptMap.putIfAbsent(dept, () => []).add(emp);
       }
 
+      // Build completed order dates from audit logs
+      final completedDates = <String, DateTime>{};
+
+      for (var log in doneAuditLogs) {
+        final orderId = log['order_id']?.toString() ?? '';
+
+        if (orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch') {
+          continue;
+        }
+
+        final changedAtStr = log['changed_at']?.toString() ?? '';
+        final changedAt = _parseTimestamp(changedAtStr);
+        if (changedAt != null) {
+          // Keep the latest completion date for each order
+          if (!completedDates.containsKey(orderId) ||
+              (completedDates[orderId]!.isBefore(changedAt))) {
+            completedDates[orderId] = changedAt;
+          }
+        }
+      }
+
+      print('Orders with completed dates: ${completedDates.length}');
+
       setState(() {
         _allEmployees = employees;
         _allOrders = orders;
-        _auditLogs = auditLogs;
+        _auditLogs = doneAuditLogs;
         _departmentsMap = deptMap;
+        _completedOrderDates = completedDates;
         _isLoading = false;
       });
 
@@ -72,11 +123,55 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     }
   }
 
+  // Add this helper method
+  DateTime? _parseTimestamp(String timestampStr) {
+    if (timestampStr.isEmpty) return null;
+
+    try {
+      // Try parsing with milliseconds and timezone
+      return DateTime.parse(timestampStr);
+    } catch (e) {
+      // Try without timezone
+      try {
+        return DateTime.parse(timestampStr.replaceAll('+00', ''));
+      } catch (e2) {
+        // Try with manual parsing for format: 2026-08-16 08:56:36.332+00
+        try {
+          final parts = timestampStr.split(' ');
+          if (parts.length >= 2) {
+            final datePart = parts[0];
+            final timePart = parts[1].split('+')[0].split('.')[0]; // Remove milliseconds and timezone
+            final dateTimeStr = '$datePart $timePart';
+            return DateTime.parse(dateTimeStr);
+          }
+        } catch (e3) {
+          print('Failed to parse timestamp: $timestampStr');
+        }
+      }
+    }
+    return null;
+  }
+
   void _applyFilters() {
     setState(() {
       _filteredAuditLogs = _auditLogs.where((log) {
+        final orderId = log['order_id']?.toString() ?? '';
+        final fieldName = log['field_name']?.toString() ?? '';
+        final newValue = log['new_value']?.toString() ?? '';
+
+        // Only include status changes to Done/Task Done/planning
+        if (fieldName != 'status' ||
+            (newValue != 'Done' && newValue != 'Task Done' && newValue != 'planning')) {
+          return false;
+        }
+
+        if (orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch') {
+          return false;
+        }
+
+        // Apply date filter
         if (_dateFilter != 'all') {
-          final changedAt = DateTime.tryParse(log['changed_at'] ?? '');
+          final changedAt = _parseTimestamp(log['changed_at']?.toString() ?? '');
           if (changedAt == null) return false;
 
           final now = DateTime.now();
@@ -111,10 +206,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
     for (var order in _allOrders) {
       if (order.correspondenceEngineer == employee.fullName) {
-        // If correspondence engineer, this is the primary assignment
         assignedOrders[order.id] = order;
       } else if (order.responsibleEngineer == employee.fullName) {
-        // Only assign if no correspondence engineer for this specific order (by id)
         if (!assignedOrders.containsKey(order.id)) {
           assignedOrders[order.id] = order;
         }
@@ -124,42 +217,63 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return assignedOrders.values.toList();
   }
 
-  // Get completed count for employee based on filtered audit logs
+  // Get completed count for employee
   int _getEmployeeCompleted(EmployeeAuth employee) {
-    // Get order IDs that were changed to "Done" in the filtered period
-    final completedOrderIds = <String>{};
-
-    for (var log in _filteredAuditLogs) {
-      final fieldName = log['field_name']?.toString() ?? '';
-      final newValue = log['new_value']?.toString() ?? '';
-
-      // Check if status changed to Done or completed
-      if (fieldName == 'status' && (newValue == 'Done' || newValue == 'completed')) {
-        final orderId = log['order_id']?.toString() ?? '';
-        if (orderId.isNotEmpty && orderId != 'bulk_delete' && orderId != 'import_batch') {
-          completedOrderIds.add(orderId);
-        }
-      }
-    }
-
-    // Count orders assigned to this employee that are in the completed set
     int count = 0;
+
     for (var order in _allOrders) {
-      // Check if this order belongs to this employee
+      // Check if order belongs to this employee
       bool belongsToEmployee = false;
 
-      // Priority: correspondence_engineer first
       if (order.correspondenceEngineer == employee.fullName) {
         belongsToEmployee = true;
-      }
-      // If no correspondence engineer, check responsible_engineer
-      else if (order.responsibleEngineer == employee.fullName) {
+      } else if (order.responsibleEngineer == employee.fullName) {
         belongsToEmployee = true;
       }
 
-      // Count only if belongs to employee AND order_id is in completed set
-      if (belongsToEmployee && completedOrderIds.contains(order.id)) {
+      if (!belongsToEmployee) continue;
+
+      // Check if order is Done/Task Done/planning
+      if (order.status != 'Done' && order.status != 'Task Done' && order.status != 'planning') {
+        continue;
+      }
+
+      // For "All" filter, count all locked orders
+      if (_dateFilter == 'all') {
         count++;
+        continue;
+      }
+
+      // For date filters, check if completion date is in range
+      final completionDate = _completedOrderDates[order.id];
+
+      if (completionDate == null) {
+        // No audit log for this order - only show in "All" filter
+        continue;
+      }
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final weekStart = today.subtract(Duration(days: today.weekday - 1));
+      final monthStart = DateTime(now.year, now.month, 1);
+
+      switch (_dateFilter) {
+        case 'today':
+          if (completionDate.isAfter(today) && completionDate.isBefore(tomorrow)) {
+            count++;
+          }
+          break;
+        case 'week':
+          if (completionDate.isAfter(weekStart) && completionDate.isBefore(tomorrow)) {
+            count++;
+          }
+          break;
+        case 'month':
+          if (completionDate.isAfter(monthStart) && completionDate.isBefore(tomorrow)) {
+            count++;
+          }
+          break;
       }
     }
 
@@ -251,7 +365,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${_filteredAuditLogs.length} changes in selected period',
+                    '${_filteredAuditLogs.length} status changes in selected period',
                     style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
                   ),
                 ),
@@ -405,22 +519,52 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
   // Show employee tasks as cards
   void _showEmployeeTasks(EmployeeAuth employee, Color deptColor) {
-    // Get completed order IDs from filtered audit logs
-    final completedOrderIds = <String>{};
-    for (var log in _filteredAuditLogs) {
-      final fieldName = log['field_name']?.toString() ?? '';
-      final newValue = log['new_value']?.toString() ?? '';
-      if (fieldName == 'status' && (newValue == 'Done' || newValue == 'completed')) {
-        final orderId = log['order_id']?.toString() ?? '';
-        if (orderId.isNotEmpty && orderId != 'bulk_delete' && orderId != 'import_batch') {
-          completedOrderIds.add(orderId);
-        }
+    final allTasks = _getEmployeeTasks(employee);
+    final completedTasks = <SAPMainOrder>[];
+
+    for (var task in allTasks) {
+      if (task.status != 'Done' && task.status != 'Task Done' && task.status != 'planning') {
+        continue;
+      }
+
+      // For "All" filter, include all locked orders
+      if (_dateFilter == 'all') {
+        completedTasks.add(task);
+        continue;
+      }
+
+      // For date filters, check completion date
+      final completionDate = _completedOrderDates[task.id];
+
+      if (completionDate == null) {
+        // No audit log - only show in "All" filter
+        continue;
+      }
+
+      final now = DateTime.now();
+      final today = DateTime(now.year, now.month, now.day);
+      final tomorrow = today.add(const Duration(days: 1));
+      final weekStart = today.subtract(Duration(days: today.weekday - 1));
+      final monthStart = DateTime(now.year, now.month, 1);
+
+      switch (_dateFilter) {
+        case 'today':
+          if (completionDate.isAfter(today) && completionDate.isBefore(tomorrow)) {
+            completedTasks.add(task);
+          }
+          break;
+        case 'week':
+          if (completionDate.isAfter(weekStart) && completionDate.isBefore(tomorrow)) {
+            completedTasks.add(task);
+          }
+          break;
+        case 'month':
+          if (completionDate.isAfter(monthStart) && completionDate.isBefore(tomorrow)) {
+            completedTasks.add(task);
+          }
+          break;
       }
     }
-
-    // Get employee's tasks that are COMPLETED in the filtered period
-    final allTasks = _getEmployeeTasks(employee);
-    final completedTasks = allTasks.where((task) => completedOrderIds.contains(task.id)).toList();
 
     showModalBottomSheet(
       context: context,
@@ -536,9 +680,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       ),
       child: InkWell(
         onTap: () {
-          // Close bottom sheet first
           Navigator.pop(context);
-          // Navigate to Order Tracking Page
           Navigator.push(
             context,
             MaterialPageRoute(
@@ -609,79 +751,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     );
   }
 
-  // Individual task card
-  Widget _buildTaskCard(SAPMainOrder task, bool isDone) {
-    return Card(
-      color: _cardColor,
-      margin: const EdgeInsets.only(bottom: 8),
-      elevation: 0,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(10),
-        side: BorderSide(color: isDone ? Colors.green.withOpacity(0.3) : _borderColor),
-      ),
-      child: Padding(
-        padding: const EdgeInsets.all(12),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              children: [
-                Expanded(
-                  child: Text(
-                    task.description.isNotEmpty ? task.description : 'No description',
-                    style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: isDone ? Colors.green.withOpacity(0.1) : Colors.orange.withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Text(
-                    task.status,
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      fontWeight: FontWeight.w600,
-                      color: isDone ? Colors.green : Colors.orange,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                _buildTaskInfo(Icons.receipt, task.designOrder),
-                const SizedBox(width: 12),
-                _buildTaskInfo(Icons.description, task.contractNumber),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildTaskInfo(Icons.inventory_2, 'QTY: ${task.quantity} ${task.unitOfMeasure}'),
-                const SizedBox(width: 12),
-                _buildTaskInfo(Icons.attach_money, '\$${_formatNumber(task.value)}'),
-              ],
-            ),
-            const SizedBox(height: 4),
-            Row(
-              children: [
-                _buildTaskInfo(Icons.factory, task.factory ?? 'N/A'),
-                const SizedBox(width: 12),
-                _buildTaskInfo(Icons.person, task.customerName),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
   Widget _buildTaskInfo(IconData icon, String text) {
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -723,3 +792,4 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     );
   }
 }
+
