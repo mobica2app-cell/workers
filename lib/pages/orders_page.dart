@@ -816,6 +816,16 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> _bulkEditField(String field, String currentValue) async {
+    // Check if any selected order is locked
+    final lockedOrders = _allOrders
+        .where((o) => _selectedRowsIds.contains(o.id) && _isOrderLocked(o))
+        .toList();
+
+    if (lockedOrders.isNotEmpty) {
+      _showSnackBar('⚠️ Cannot bulk edit: ${lockedOrders.length} locked order(s) selected (Done, Task Done, or Planning)');
+      return;
+    }
+
     final controller = TextEditingController();
 
     final newValue = await showDialog<String>(
@@ -873,6 +883,7 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
+      int skipped = 0;
 
       dynamic parsedValue = newValue;
       if (field == 'quantity') {
@@ -888,6 +899,12 @@ class _OrdersPageState extends State<OrdersPage> {
       for (var orderId in _selectedRowsIds) {
         final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
         if (order != null) {
+          // Skip locked orders
+          if (_isOrderLocked(order)) {
+            skipped++;
+            continue;
+          }
+
           try {
             await supabase
                 .from('sap_main_orders')
@@ -912,7 +929,11 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       setState(() => _isLoading = false);
-      _showSnackBar('✅ $updated rows updated!');
+      if (skipped > 0) {
+        _showSnackBar('✅ $updated rows updated, ⚠️ $skipped locked rows skipped');
+      } else {
+        _showSnackBar('✅ $updated rows updated!');
+      }
       _updateMultipleOrdersLocally(field, parsedValue);
     }
   }
@@ -1174,6 +1195,94 @@ class _OrdersPageState extends State<OrdersPage> {
     _rebuildGroups();
   }
 
+  Future<void> _updateOrderEngineer(
+      SAPMainOrder order,
+      String field,
+      String? newValue,
+      ) async {
+    final oldValue = _getCurrentFieldValue(order, field);
+
+    if (_isOrderLocked(order)) {
+      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
+      return;
+    }
+
+    // If multiple rows selected, apply to all
+    if (_selectedRowsIds.length > 1) {
+      setState(() => _isLoading = true);
+      final supabase = Supabase.instance.client;
+      int updated = 0;
+      int skipped = 0;
+
+      for (var orderId in _selectedRowsIds) {
+        final selectedOrder = _allOrders
+            .where((o) => o.id == orderId)
+            .firstOrNull;
+        if (selectedOrder != null) {
+          // Skip locked orders
+          if (_isOrderLocked(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
+          try {
+            await supabase
+                .from('sap_main_orders')
+                .update({field: newValue})
+                .eq('id', selectedOrder.id);
+
+            await _auditService.logChange(
+              orderId: selectedOrder.id,
+              designOrder: selectedOrder.designOrder,
+              fieldName: field,
+              oldValue: _getCurrentFieldValue(selectedOrder, field),
+              newValue: newValue,
+              changedBy: _currentUserName,
+              changedById: _currentUserId,
+              actionType: 'bulk_update',
+            );
+            updated++;
+          } catch (e) {
+            print('Failed: $e');
+          }
+        }
+      }
+
+      setState(() => _isLoading = false);
+      if (skipped > 0) {
+        _showSnackBar('✅ ${_formatFieldName(field)} updated for $updated rows, ⚠️ $skipped locked rows skipped');
+      } else {
+        _showSnackBar('✅ ${_formatFieldName(field)} updated for $updated rows!');
+      }
+      _updateMultipleOrdersLocally(field, newValue);
+      return;
+    }
+
+    // Single row update
+    try {
+      final supabase = Supabase.instance.client;
+      await supabase
+          .from('sap_main_orders')
+          .update({field: newValue})
+          .eq('id', order.id);
+
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: field,
+        oldValue: oldValue,
+        newValue: newValue,
+        changedBy: _currentUserName,
+        changedById: _currentUserId,
+      );
+
+      _showSnackBar('Updated successfully!');
+      _updateOrderLocally(order.id, field, newValue);
+    } catch (e) {
+      _showSnackBar('Error updating: $e');
+    }
+  }
+
   Future<void> _updateOrderDesignTeam(
       SAPMainOrder order,
       String newValue,
@@ -1199,7 +1308,7 @@ class _OrdersPageState extends State<OrdersPage> {
         case 'planning':
           return 'planning';
         default:
-          return order.status; // Keep current status for unknown teams
+          return order.status;
       }
     }
 
@@ -1215,12 +1324,19 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
+      int skipped = 0;
 
       for (var orderId in _selectedRowsIds) {
         final selectedOrder = _allOrders
             .where((o) => o.id == orderId)
             .firstOrNull;
         if (selectedOrder != null) {
+          // Skip locked orders
+          if (_isOrderLocked(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
           try {
             final selectedAutoStatus = getAutoStatus(newValue);
 
@@ -1259,7 +1375,11 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       setState(() => _isLoading = false);
-      _showSnackBar('✅ Design Team & Status updated for $updated rows!');
+      if (skipped > 0) {
+        _showSnackBar('✅ Design Team updated for $updated rows, ⚠️ $skipped locked rows skipped');
+      } else {
+        _showSnackBar('✅ Design Team & Status updated for $updated rows!');
+      }
       _updateMultipleOrdersLocally('design_team', newValue);
       _updateMultipleOrdersLocally('status', autoStatus);
       return;
@@ -1346,6 +1466,12 @@ class _OrdersPageState extends State<OrdersPage> {
         final index = _allOrders.indexWhere((o) => o.id == orderId);
         if (index != -1) {
           final oldOrder = _allOrders[index];
+
+          // Skip locked orders
+          if (_isOrderLocked(oldOrder)) {
+            continue;
+          }
+
           final updatedOrder = SAPMainOrder(
             id: oldOrder.id,
             status: field == 'status' ? newValue.toString() : oldOrder.status,
@@ -1383,7 +1509,6 @@ class _OrdersPageState extends State<OrdersPage> {
             endDate: field == 'end_date'
                 ? newValue.toString()
                 : oldOrder.endDate,
-            // ✅ ADD THIS
             deliveryDate: field == 'delivery_date'
                 ? newValue.toString()
                 : oldOrder.deliveryDate,
@@ -1453,83 +1578,6 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  // Update engineer assignment in database
-  Future<void> _updateOrderEngineer(
-      SAPMainOrder order,
-      String field,
-      String? newValue,
-      ) async {
-    final oldValue = _getCurrentFieldValue(order, field);
-
-    if (_isOrderLocked(order)) {
-      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
-      return;
-    }
-
-    // If multiple rows selected, apply to all
-    if (_selectedRowsIds.length > 1) {
-      setState(() => _isLoading = true);
-      final supabase = Supabase.instance.client;
-      int updated = 0;
-
-      for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders
-            .where((o) => o.id == orderId)
-            .firstOrNull;
-        if (selectedOrder != null) {
-          try {
-            await supabase
-                .from('sap_main_orders')
-                .update({field: newValue})
-                .eq('id', selectedOrder.id);
-
-            await _auditService.logChange(
-              orderId: selectedOrder.id,
-              designOrder: selectedOrder.designOrder,
-              fieldName: field,
-              oldValue: _getCurrentFieldValue(selectedOrder, field),
-              newValue: newValue,
-              changedBy: _currentUserName,
-              changedById: _currentUserId,
-              actionType: 'bulk_update',
-            );
-            updated++;
-          } catch (e) {
-            print('Failed: $e');
-          }
-        }
-      }
-
-      setState(() => _isLoading = false);
-      _showSnackBar('✅ ${_formatFieldName(field)} updated for $updated rows!');
-      _updateMultipleOrdersLocally(field, newValue);
-      return;
-    }
-
-    // Single row update
-    try {
-      final supabase = Supabase.instance.client;
-      await supabase
-          .from('sap_main_orders')
-          .update({field: newValue})
-          .eq('id', order.id);
-
-      await _auditService.logChange(
-        orderId: order.id,
-        designOrder: order.designOrder,
-        fieldName: field,
-        oldValue: oldValue,
-        newValue: newValue,
-        changedBy: _currentUserName,
-        changedById: _currentUserId,
-      );
-
-      _showSnackBar('Updated successfully!');
-      _updateOrderLocally(order.id, field, newValue);
-    } catch (e) {
-      _showSnackBar('Error updating: $e');
-    }
-  }
 
   bool _initialLoadDone = false;
 
@@ -1816,12 +1864,19 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
+      int skipped = 0;
 
       for (var orderId in _selectedRowsIds) {
         final selectedOrder = _allOrders
             .where((o) => o.id == orderId)
             .firstOrNull;
         if (selectedOrder != null) {
+          // Skip locked orders
+          if (_isOrderLocked(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
           try {
             await supabase
                 .from('sap_main_orders')
@@ -1846,7 +1901,11 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       setState(() => _isLoading = false);
-      _showSnackBar('✅ Status updated for $updated rows!');
+      if (skipped > 0) {
+        _showSnackBar('✅ Status updated for $updated rows, ⚠️ $skipped locked rows skipped');
+      } else {
+        _showSnackBar('✅ Status updated for $updated rows!');
+      }
       _updateMultipleOrdersLocally('status', newStatus);
       return;
     }
@@ -2155,7 +2214,10 @@ class _OrdersPageState extends State<OrdersPage> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
-      );
+      ).then((_) {
+        // Reload data when returning from tracking page
+        _loadAllDataOnce();
+      });
     }
   }
 
@@ -4131,9 +4193,20 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Apply bulk edit to all selected rows (inline)
   Future<void> _applyBulkEditToSelected(String field, String newValue) async {
+    // Check if any selected order is locked
+    final lockedOrders = _allOrders
+        .where((o) => _selectedRowsIds.contains(o.id) && _isOrderLocked(o))
+        .toList();
+
+    if (lockedOrders.isNotEmpty) {
+      _showSnackBar('⚠️ Cannot bulk edit: ${lockedOrders.length} locked order(s) selected (Done, Task Done, or Planning)');
+      return;
+    }
+
     setState(() => _isLoading = true);
     final supabase = Supabase.instance.client;
     int updated = 0;
+    int skipped = 0;
 
     dynamic parsedValue = newValue;
     if (field == 'quantity') {
@@ -4147,6 +4220,12 @@ class _OrdersPageState extends State<OrdersPage> {
     for (var orderId in _selectedRowsIds) {
       final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
       if (order != null) {
+        // Skip locked orders
+        if (_isOrderLocked(order)) {
+          skipped++;
+          continue;
+        }
+
         try {
           await supabase
               .from('sap_main_orders')
@@ -4171,7 +4250,11 @@ class _OrdersPageState extends State<OrdersPage> {
     }
 
     setState(() => _isLoading = false);
-    _showSnackBar('✅ $updated rows updated!');
+    if (skipped > 0) {
+      _showSnackBar('✅ $updated rows updated, ⚠️ $skipped locked rows skipped');
+    } else {
+      _showSnackBar('✅ $updated rows updated!');
+    }
     _updateMultipleOrdersLocally(field, parsedValue);
   }
 
