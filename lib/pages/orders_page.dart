@@ -63,8 +63,7 @@ class _OrdersPageState extends State<OrdersPage> {
   // Selection
   final Set<String> _selectedRowsIds = {};
 
-  bool _isOrderSelected(SAPMainOrder order) =>
-      _selectedRowsIds.contains(order.id);
+  bool _isOrderSelected(SAPMainOrder order) => _selectedRowsIds.contains(order.id);
 
   // Services
   final EmployeeService _employeeService = EmployeeService();
@@ -91,7 +90,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   int? _lastSelectedIndex;
 
-  // Expandable sections
+  // Expandable sections+
   final Set<String> _expandedSections = {};
   Map<String, List<SAPMainOrder>> _groupedOrders = {};
 
@@ -1928,6 +1927,7 @@ class _OrdersPageState extends State<OrdersPage> {
         }
       }
 
+
       setState(() => _isLoading = false);
 
       if (missingEngineer > 0) {
@@ -1938,6 +1938,9 @@ class _OrdersPageState extends State<OrdersPage> {
         _showSnackBar('✅ Status updated for $updated rows!');
       }
       _updateMultipleOrdersLocally('status', newStatus);
+      setState(() {
+        _clearSelection();
+      });
       return;
     }
 
