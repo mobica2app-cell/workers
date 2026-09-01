@@ -47,8 +47,8 @@ class _MainShellState extends State<MainShell> {
     _NavItem(icon: Icons.list_alt, activeIcon: Icons.list_alt, label: 'Orders'),
     _NavItem(icon: Icons.dashboard_outlined, activeIcon: Icons.dashboard, label: 'Dashboard'),
     _NavItem(icon: Icons.analytics_outlined, activeIcon: Icons.analytics, label: 'Analytics'),
-    _NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile'),
     _NavItem(icon: Icons.business_outlined, activeIcon: Icons.business, label: 'Departments'),
+    _NavItem(icon: Icons.person_outline, activeIcon: Icons.person, label: 'Profile'),
   ];
 
   // Limited nav items for non-head users (Orders + Profile only)
@@ -419,13 +419,13 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildPage() {
     if (_isHead) {
-      // Head users: 5 tabs (Orders, Dashboard, Analytics, Profile, Departments)
+      // Head users: 5 tabs (Orders, Dashboard, Analytics, Departments, Profile)
       switch (_selectedIndex) {
         case 0: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
         case 1: return DashboardPage(sapService: widget.sapService);
         case 2: return AnalyticsPage(sapService: widget.sapService);
-        case 3: return ProfilePage(employee: widget.loggedInEmployee);
         case 4: return const DepartmentTrackingPage();
+        case 3: return ProfilePage(employee: widget.loggedInEmployee);
         default: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
       }
     } else {
