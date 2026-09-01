@@ -25,8 +25,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   List<Map<String, dynamic>> _auditLogs = [];
   Map<String, List<EmployeeAuth>> _departmentsMap = {};
   bool _isLoading = true;
-  String _searchQuery = '';
   String _dateFilter = 'all';
+  DateTime? _startDate;
+  DateTime? _endDate;
   List<Map<String, dynamic>> _filteredAuditLogs = [];
 
   // Store completed order IDs with their completion date from audit logs
@@ -44,10 +45,107 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   Color get _borderColor => _isDark ? const Color(0xFF334155) : Colors.grey.shade200;
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
 
+  void _showSnackBar(String message) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(
+          message,
+          style: GoogleFonts.cairo(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: Colors.white,
+          ),
+        ),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
   @override
   void initState() {
     super.initState();
     _loadData();
+  }
+
+  int _getEmployeeStatusCount(
+      EmployeeAuth employee,
+      String targetStatus,
+      ) {
+    int count = 0;
+
+    for (final order in _allOrders) {
+      // Employee assignment
+      bool belongsToEmployee = false;
+
+      if (order.correspondenceEngineer == employee.fullName) {
+        belongsToEmployee = true;
+      } else if (order.responsibleEngineer == employee.fullName) {
+        belongsToEmployee = true;
+      }
+
+      if (!belongsToEmployee) continue;
+
+      // CURRENT SAP STATUS must be exactly this status
+      if (order.status.trim() != targetStatus) {
+        continue;
+      }
+
+      // No date filter = count current status
+      if (!_hasDateRange) {
+        count++;
+        continue;
+      }
+
+      // Find audit date for THIS order and THIS status
+      DateTime? matchingDate;
+
+      for (final log in _auditLogs) {
+        final orderId = log['order_id']?.toString().trim() ?? '';
+        final fieldName = log['field_name']?.toString().trim() ?? '';
+        final newValue = log['new_value']?.toString().trim() ?? '';
+
+        if (orderId != order.id.toString().trim()) continue;
+        if (fieldName != 'status') continue;
+        if (newValue != targetStatus) continue;
+
+        final changedAt = _parseTimestamp(
+          log['changed_at']?.toString() ?? '',
+        );
+
+        if (changedAt == null) continue;
+
+        if (matchingDate == null ||
+            matchingDate.isBefore(changedAt)) {
+          matchingDate = changedAt;
+        }
+      }
+
+      if (matchingDate == null) continue;
+
+      final dateOnly = _dateOnly(matchingDate);
+
+      if (_startDate != null &&
+          dateOnly.isBefore(_dateOnly(_startDate!))) {
+        continue;
+      }
+
+      if (_endDate != null &&
+          dateOnly.isAfter(_dateOnly(_endDate!))) {
+        continue;
+      }
+
+      count++;
+    }
+
+    return count;
   }
 
   Future<void> _loadData() async {
@@ -84,24 +182,57 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         deptMap.putIfAbsent(dept, () => []).add(emp);
       }
 
-      // Build completed order dates from audit logs
+      // Build completion dates using the SAME logic as the dashboard:
+      //
+      // 1. The audit log says the order entered Done / Task Done / planning.
+      // 2. The order must still exist in sap_main_orders.
+      // 3. Its CURRENT SAP status must still equal the audit new_value.
+      //
+      // This prevents an order that went:
+      //   Done -> Review
+      // from still appearing as Done.
       final completedDates = <String, DateTime>{};
 
       for (var log in doneAuditLogs) {
-        final orderId = log['order_id']?.toString() ?? '';
+        final orderId = log['order_id']?.toString().trim() ?? '';
+        final fieldName = log['field_name']?.toString().trim() ?? '';
+        final newValue = log['new_value']?.toString().trim() ?? '';
 
-        if (orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch') {
+        if (fieldName != 'status' ||
+            (newValue != 'Done' &&
+                newValue != 'Task Done' &&
+                newValue != 'planning') ||
+            orderId.isEmpty ||
+            orderId == 'bulk_delete' ||
+            orderId == 'import_batch') {
           continue;
         }
 
-        final changedAtStr = log['changed_at']?.toString() ?? '';
-        final changedAt = _parseTimestamp(changedAtStr);
-        if (changedAt != null) {
-          // Keep the latest completion date for each order
-          if (!completedDates.containsKey(orderId) ||
-              (completedDates[orderId]!.isBefore(changedAt))) {
-            completedDates[orderId] = changedAt;
+        // Find the real SAP order. Do not construct a fake SAPMainOrder.
+        SAPMainOrder? currentOrder;
+        for (final order in orders) {
+          if (order.id.toString().trim() == orderId) {
+            currentOrder = order;
+            break;
           }
+        }
+
+        if (currentOrder == null) continue;
+
+        // EXACTLY like the dashboard/Supabase logic:
+        // only keep it if the CURRENT status is still the status
+        // recorded by this audit event.
+        if (currentOrder.status.trim() != newValue) continue;
+
+        final changedAt = _parseTimestamp(
+          log['changed_at']?.toString() ?? '',
+        );
+        if (changedAt == null) continue;
+
+        // Keep the latest matching audit date for this currently-completed order.
+        if (!completedDates.containsKey(orderId) ||
+            completedDates[orderId]!.isBefore(changedAt)) {
+          completedDates[orderId] = changedAt;
         }
       }
 
@@ -155,50 +286,138 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   void _applyFilters() {
     setState(() {
       _filteredAuditLogs = _auditLogs.where((log) {
-        final orderId = log['order_id']?.toString() ?? '';
-        final fieldName = log['field_name']?.toString() ?? '';
-        final newValue = log['new_value']?.toString() ?? '';
+        final orderId = log['order_id']?.toString().trim() ?? '';
+        final fieldName = log['field_name']?.toString().trim() ?? '';
+        final newValue = log['new_value']?.toString().trim() ?? '';
 
-        // Only include status changes to Done/Task Done/planning
+        // Only Done / Task Done / planning status changes.
         if (fieldName != 'status' ||
-            (newValue != 'Done' && newValue != 'Task Done' && newValue != 'planning')) {
+            (newValue != 'Done' &&
+                newValue != 'Task Done' &&
+                newValue != 'planning')) {
           return false;
         }
 
-        if (orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch') {
+        if (orderId.isEmpty ||
+            orderId == 'bulk_delete' ||
+            orderId == 'import_batch') {
           return false;
         }
 
-        // Apply date filter
-        if (_dateFilter != 'all') {
-          final changedAt = _parseTimestamp(log['changed_at']?.toString() ?? '');
-          if (changedAt == null) return false;
-
-          final now = DateTime.now();
-          final today = DateTime(now.year, now.month, now.day);
-          final tomorrow = today.add(const Duration(days: 1));
-          final weekStart = today.subtract(Duration(days: today.weekday - 1));
-          final monthStart = DateTime(now.year, now.month, 1);
-
-          switch (_dateFilter) {
-            case 'today':
-              return changedAt.isAfter(today) && changedAt.isBefore(tomorrow);
-            case 'week':
-              return changedAt.isAfter(weekStart) && changedAt.isBefore(tomorrow);
-            case 'month':
-              return changedAt.isAfter(monthStart) && changedAt.isBefore(tomorrow);
+        // Find the existing order in SAP.
+        SAPMainOrder? currentOrder;
+        for (final order in _allOrders) {
+          if (order.id.toString().trim() == orderId) {
+            currentOrder = order;
+            break;
           }
         }
-        return true;
-      }).where((log) {
-        if (_searchQuery.isNotEmpty) {
-          final designOrder = log['design_order']?.toString() ?? '';
-          return designOrder.toLowerCase().contains(_searchQuery.toLowerCase());
+
+        // Must exist in sap_main_orders.
+        if (currentOrder == null) return false;
+
+        // IMPORTANT:
+        // The audit row must match the CURRENT SAP status.
+        //
+        // Example:
+        //   20 Aug -> Done
+        //   25 Aug -> Review
+        //
+        // This order is NOT a Done order anymore.
+        if (currentOrder.status.trim() != newValue) {
+          return false;
         }
+
+        // Inclusive custom date range based on changed_at.
+        if (_startDate != null || _endDate != null) {
+          final changedAt = _parseTimestamp(
+            log['changed_at']?.toString() ?? '',
+          );
+          if (changedAt == null) return false;
+
+          final dateOnly = DateTime(
+            changedAt.year,
+            changedAt.month,
+            changedAt.day,
+          );
+
+          if (_startDate != null &&
+              dateOnly.isBefore(_dateOnly(_startDate!))) {
+            return false;
+          }
+
+          if (_endDate != null &&
+              dateOnly.isAfter(_dateOnly(_endDate!))) {
+            return false;
+          }
+        }
+
+        // No search filter here.
         return true;
       }).toList();
     });
   }
+
+  DateTime _dateOnly(DateTime date) {
+    return DateTime(date.year, date.month, date.day);
+  }
+
+  Future<void> _pickStartDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _startDate ?? _endDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'SELECT START DATE',
+    );
+
+    if (picked == null) return;
+
+    if (_endDate != null && picked.isAfter(_endDate!)) {
+      _showSnackBar('Start date cannot be after end date');
+      return;
+    }
+
+    setState(() {
+      _startDate = DateTime(picked.year, picked.month, picked.day);
+      _dateFilter = 'custom';
+    });
+    _applyFilters();
+  }
+
+  Future<void> _pickEndDate() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _endDate ?? _startDate ?? DateTime.now(),
+      firstDate: _startDate ?? DateTime(2000),
+      lastDate: DateTime(2100),
+      helpText: 'SELECT END DATE',
+    );
+
+    if (picked == null) return;
+
+    setState(() {
+      _endDate = DateTime(picked.year, picked.month, picked.day);
+      _dateFilter = 'custom';
+    });
+    _applyFilters();
+  }
+
+  void _clearDateRange() {
+    setState(() {
+      _startDate = null;
+      _endDate = null;
+      _dateFilter = 'all';
+    });
+    _applyFilters();
+  }
+
+  String _formatFilterDate(DateTime? date) {
+    if (date == null) return 'Select date';
+    return DateFormat('dd MMM yyyy').format(date);
+  }
+
+  bool get _hasDateRange => _startDate != null || _endDate != null;
 
   // Get employee's tasks with priority logic (correspondence > responsible)
   List<SAPMainOrder> _getEmployeeTasks(EmployeeAuth employee) {
@@ -222,7 +441,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     int count = 0;
 
     for (var order in _allOrders) {
-      // Check if order belongs to this employee
       bool belongsToEmployee = false;
 
       if (order.correspondenceEngineer == employee.fullName) {
@@ -233,48 +451,33 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
       if (!belongsToEmployee) continue;
 
-      // Check if order is Done/Task Done/planning
-      if (order.status != 'Done' && order.status != 'Task Done' && order.status != 'planning') {
+      if (order.status != 'Done' &&
+          order.status != 'Task Done' &&
+          order.status != 'planning') {
         continue;
       }
 
-      // For "All" filter, count all locked orders
-      if (_dateFilter == 'all') {
+      if (!_hasDateRange) {
         count++;
         continue;
       }
 
-      // For date filters, check if completion date is in range
       final completionDate = _completedOrderDates[order.id];
+      if (completionDate == null) continue;
 
-      if (completionDate == null) {
-        // No audit log for this order - only show in "All" filter
+      final dateOnly = _dateOnly(completionDate);
+
+      if (_startDate != null &&
+          dateOnly.isBefore(_dateOnly(_startDate!))) {
         continue;
       }
 
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final tomorrow = today.add(const Duration(days: 1));
-      final weekStart = today.subtract(Duration(days: today.weekday - 1));
-      final monthStart = DateTime(now.year, now.month, 1);
-
-      switch (_dateFilter) {
-        case 'today':
-          if (completionDate.isAfter(today) && completionDate.isBefore(tomorrow)) {
-            count++;
-          }
-          break;
-        case 'week':
-          if (completionDate.isAfter(weekStart) && completionDate.isBefore(tomorrow)) {
-            count++;
-          }
-          break;
-        case 'month':
-          if (completionDate.isAfter(monthStart) && completionDate.isBefore(tomorrow)) {
-            count++;
-          }
-          break;
+      if (_endDate != null &&
+          dateOnly.isAfter(_dateOnly(_endDate!))) {
+        continue;
       }
+
+      count++;
     }
 
     return count;
@@ -331,42 +534,42 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                TextField(
-                  onChanged: (value) {
-                    setState(() => _searchQuery = value);
-                    _applyFilters();
-                  },
-                  style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
-                  decoration: InputDecoration(
-                    hintText: 'Search by Design Order ID...',
-                    hintStyle: GoogleFonts.cairo(color: _secondaryTextColor),
-                    prefixIcon: Icon(Icons.search, color: _secondaryTextColor),
-                    filled: true,
-                    fillColor: _cardColor,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                      borderSide: BorderSide.none,
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
                 Row(
                   children: [
-                    _buildDateFilterChip('All', 'all'),
-                    const SizedBox(width: 8),
-                    _buildDateFilterChip('Today', 'today'),
-                    const SizedBox(width: 8),
-                    _buildDateFilterChip('This Week', 'week'),
-                    const SizedBox(width: 8),
-                    _buildDateFilterChip('This Month', 'month'),
+                    Expanded(child: _buildDateField(
+                      label: 'Start Date',
+                      date: _startDate,
+                      icon: Icons.calendar_month,
+                      onTap: _pickStartDate,
+                    )),
+                    const SizedBox(width: 10),
+                    Expanded(child: _buildDateField(
+                      label: 'End Date',
+                      date: _endDate,
+                      icon: Icons.event,
+                      onTap: _pickEndDate,
+                    )),
+                    if (_hasDateRange) ...[
+                      const SizedBox(width: 6),
+                      IconButton(
+                        tooltip: 'Clear dates',
+                        onPressed: _clearDateRange,
+                        icon: Icon(Icons.clear, color: _secondaryTextColor),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 8),
                 Align(
                   alignment: Alignment.centerLeft,
                   child: Text(
-                    '${_filteredAuditLogs.length} status changes in selected period',
-                    style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
+                    _hasDateRange
+                        ? '${_filteredAuditLogs.length} status changes from ${_formatFilterDate(_startDate)} to ${_formatFilterDate(_endDate)}'
+                        : '${_filteredAuditLogs.length} status changes • All Time',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: _secondaryTextColor,
+                    ),
                   ),
                 ),
               ],
@@ -380,11 +583,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 final dept = _departmentsMap.keys.elementAt(index);
                 final employees = _departmentsMap[dept] ?? [];
 
-                if (_searchQuery.isNotEmpty &&
-                    !dept.toLowerCase().contains(_searchQuery.toLowerCase())) {
-                  return const SizedBox.shrink();
-                }
-
                 return _buildDepartmentCard(dept, employees);
               },
             ),
@@ -394,26 +592,68 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     );
   }
 
-  Widget _buildDateFilterChip(String label, String value) {
-    final isSelected = _dateFilter == value;
-    return FilterChip(
-      selected: isSelected,
-      label: Text(
-        label,
-        style: GoogleFonts.cairo(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
-          color: isSelected ? Colors.white : _textColor,
+  Widget _buildDateField({
+    required String label,
+    required DateTime? date,
+    required IconData icon,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(10),
+      child: Container(
+        height: 52,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        decoration: BoxDecoration(
+          color: _cardColor,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(
+            color: date != null ? const Color(0xFF6366F1) : _borderColor,
+          ),
+        ),
+        child: Row(
+          children: [
+            Icon(
+              icon,
+              size: 19,
+              color: date != null
+                  ? const Color(0xFF6366F1)
+                  : _secondaryTextColor,
+            ),
+            const SizedBox(width: 9),
+            Expanded(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: GoogleFonts.cairo(
+                      fontSize: 9,
+                      color: _secondaryTextColor,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                  Text(
+                    _formatFilterDate(date),
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      color: date != null ? _textColor : _secondaryTextColor,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              Icons.keyboard_arrow_down,
+              size: 18,
+              color: _secondaryTextColor,
+            ),
+          ],
         ),
       ),
-      onSelected: (selected) {
-        setState(() => _dateFilter = value);
-        _applyFilters();
-      },
-      selectedColor: const Color(0xFF6366F1),
-      checkmarkColor: Colors.white,
-      backgroundColor: _cardColor,
-      side: BorderSide(color: isSelected ? const Color(0xFF6366F1) : _borderColor),
     );
   }
 
@@ -457,7 +697,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
   Widget _buildEmployeeTile(EmployeeAuth employee, Color deptColor) {
     final tasks = _getEmployeeTasks(employee);
-    final completed = _getEmployeeCompleted(employee);
+    final doneCount = _getEmployeeStatusCount(employee, 'Done');
+    final taskDoneCount = _getEmployeeStatusCount(employee, 'Task Done');
+    final planningCount = _getEmployeeStatusCount(employee, 'planning');
+
+    final completed = doneCount + taskDoneCount + planningCount;
     final progress = tasks.isNotEmpty ? (completed / tasks.length * 100).round() : 0;
 
     return GestureDetector(
@@ -507,7 +751,29 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
               crossAxisAlignment: CrossAxisAlignment.end,
               children: [
                 Text('${tasks.length} tasks', style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: _textColor)),
-                Text('$completed done', style: GoogleFonts.cairo(fontSize: 10, color: Colors.green)),
+                Text(
+                  'Done: $doneCount',
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: Colors.green,
+                  ),
+                ),
+
+                Text(
+                  'Task Done: $taskDoneCount',
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: Colors.blue,
+                  ),
+                ),
+
+                Text(
+                  'Planning: $planningCount',
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: Colors.orange,
+                  ),
+                ),
                 Icon(Icons.chevron_right, size: 16, color: _secondaryTextColor),
               ],
             ),
@@ -523,47 +789,33 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     final completedTasks = <SAPMainOrder>[];
 
     for (var task in allTasks) {
-      if (task.status != 'Done' && task.status != 'Task Done' && task.status != 'planning') {
+      if (task.status != 'Done' &&
+          task.status != 'Task Done' &&
+          task.status != 'planning') {
         continue;
       }
 
-      // For "All" filter, include all locked orders
-      if (_dateFilter == 'all') {
+      if (!_hasDateRange) {
         completedTasks.add(task);
         continue;
       }
 
-      // For date filters, check completion date
       final completionDate = _completedOrderDates[task.id];
+      if (completionDate == null) continue;
 
-      if (completionDate == null) {
-        // No audit log - only show in "All" filter
+      final dateOnly = _dateOnly(completionDate);
+
+      if (_startDate != null &&
+          dateOnly.isBefore(_dateOnly(_startDate!))) {
         continue;
       }
 
-      final now = DateTime.now();
-      final today = DateTime(now.year, now.month, now.day);
-      final tomorrow = today.add(const Duration(days: 1));
-      final weekStart = today.subtract(Duration(days: today.weekday - 1));
-      final monthStart = DateTime(now.year, now.month, 1);
-
-      switch (_dateFilter) {
-        case 'today':
-          if (completionDate.isAfter(today) && completionDate.isBefore(tomorrow)) {
-            completedTasks.add(task);
-          }
-          break;
-        case 'week':
-          if (completionDate.isAfter(weekStart) && completionDate.isBefore(tomorrow)) {
-            completedTasks.add(task);
-          }
-          break;
-        case 'month':
-          if (completionDate.isAfter(monthStart) && completionDate.isBefore(tomorrow)) {
-            completedTasks.add(task);
-          }
-          break;
+      if (_endDate != null &&
+          dateOnly.isAfter(_dateOnly(_endDate!))) {
+        continue;
       }
+
+      completedTasks.add(task);
     }
 
     showModalBottomSheet(
@@ -574,31 +826,56 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         height: MediaQuery.of(context).size.height * 0.85,
         decoration: BoxDecoration(
           color: _backgroundColor,
-          borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+          borderRadius: const BorderRadius.only(
+            topLeft: Radius.circular(20),
+            topRight: Radius.circular(20),
+          ),
         ),
         child: Column(
           children: [
-            // Header
             Container(
               padding: const EdgeInsets.all(20),
               decoration: BoxDecoration(
                 color: deptColor.withOpacity(0.1),
-                borderRadius: const BorderRadius.only(topLeft: Radius.circular(20), topRight: Radius.circular(20)),
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(20),
+                  topRight: Radius.circular(20),
+                ),
               ),
               child: Row(
                 children: [
                   CircleAvatar(
                     radius: 24,
                     backgroundColor: deptColor.withOpacity(0.2),
-                    child: Text(employee.initials, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w600, color: deptColor)),
+                    child: Text(
+                      employee.initials,
+                      style: GoogleFonts.cairo(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w600,
+                        color: deptColor,
+                      ),
+                    ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w700, color: _textColor)),
-                        Text(employee.role ?? 'Employee', style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor)),
+                        Text(
+                          employee.fullName,
+                          style: GoogleFonts.cairo(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w700,
+                            color: _textColor,
+                          ),
+                        ),
+                        Text(
+                          employee.role ?? 'Employee',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: _secondaryTextColor,
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -609,7 +886,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 ],
               ),
             ),
-            // Filter label
             Container(
               width: double.infinity,
               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
@@ -619,36 +895,59 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   const Icon(Icons.check_circle, size: 16, color: Colors.green),
                   const SizedBox(width: 8),
                   Text(
-                    'Completed orders in ${_getDateFilterLabel()}',
-                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600, color: Colors.green),
+                    'Completed orders ${_getDateFilterLabel()}',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.green,
+                    ),
                   ),
                   const Spacer(),
                   Text(
                     '${completedTasks.length} orders',
-                    style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: Colors.green),
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: Colors.green,
+                    ),
                   ),
                 ],
               ),
             ),
-            // Completed task cards
             Expanded(
               child: completedTasks.isEmpty
                   ? Center(
                 child: Column(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Icon(Icons.check_circle_outline, size: 60, color: _secondaryTextColor),
+                    Icon(
+                      Icons.check_circle_outline,
+                      size: 60,
+                      color: _secondaryTextColor,
+                    ),
                     const SizedBox(height: 12),
-                    Text('No completed orders in this period', style: GoogleFonts.cairo(color: _secondaryTextColor)),
+                    Text(
+                      'No completed orders in this period',
+                      style: GoogleFonts.cairo(
+                        color: _secondaryTextColor,
+                      ),
+                    ),
                   ],
                 ),
               )
                   : ListView.builder(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 16,
+                  vertical: 8,
+                ),
                 itemCount: completedTasks.length,
                 itemBuilder: (context, index) {
                   final task = completedTasks[index];
-                  return _buildCompletedTaskCard(task, deptColor, employee);
+                  return _buildCompletedTaskCard(
+                    task,
+                    deptColor,
+                    employee,
+                  );
                 },
               ),
             ),
@@ -660,12 +959,17 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
   // Helper to get date filter label
   String _getDateFilterLabel() {
-    switch (_dateFilter) {
-      case 'today': return 'Today';
-      case 'week': return 'This Week';
-      case 'month': return 'This Month';
-      default: return 'All Time';
+    if (!_hasDateRange) return 'in All Time';
+
+    if (_startDate != null && _endDate != null) {
+      return 'from ${_formatFilterDate(_startDate)} to ${_formatFilterDate(_endDate)}';
     }
+
+    if (_startDate != null) {
+      return 'from ${_formatFilterDate(_startDate)} onward';
+    }
+
+    return 'up to ${_formatFilterDate(_endDate)}';
   }
 
   // Completed task card - opens OrderTrackingPage on tap

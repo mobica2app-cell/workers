@@ -96,6 +96,24 @@ class _OrdersPageState extends State<OrdersPage> {
 
   List<String> _allStatuses = [];
 
+  // Columns pinned beside the Name column.
+  // Name itself is always pinned and is not included here.
+  final Set<String> _pinnedColumns = <String>{};
+
+  bool _isColumnPinned(String column) {
+    return _pinnedColumns.contains(column);
+  }
+
+  void _toggleColumnPin(String column) {
+    setState(() {
+      if (_pinnedColumns.contains(column)) {
+        _pinnedColumns.remove(column);
+      } else {
+        _pinnedColumns.add(column);
+      }
+    });
+  }
+
   // Theme helper getters
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
@@ -110,6 +128,107 @@ class _OrdersPageState extends State<OrdersPage> {
   String get _userStatusKey {
     final userId = widget.loggedInEmployee?.id ?? 'default';
     return 'status_order_$userId';
+  }
+
+  List<Map<String, dynamic>> get _tableColumns => [
+    {
+      'key': 'status',
+      'label': 'Status',
+      'width': 140.0,
+    },
+    {
+      'key': 'item',
+      'label': 'Item',
+      'width': 70.0,
+    },
+    {
+      'key': 'product_code',
+      'label': 'Product Code',
+      'width': 150.0,
+    },
+    {
+      'key': 'contract_number',
+      'label': 'Contract Num',
+      'width': 110.0,
+    },
+    {
+      'key': 'description',
+      'label': 'Description',
+      'width': 200.0,
+    },
+    {
+      'key': 'design_order',
+      'label': 'Design Order',
+      'width': 110.0,
+    },
+    {
+      'key': 'quantity',
+      'label': 'QTY',
+      'width': 70.0,
+    },
+    {
+      'key': 'unit',
+      'label': 'Unit',
+      'width': 70.0,
+    },
+    {
+      'key': 'value',
+      'label': 'Value',
+      'width': 110.0,
+    },
+    {
+      'key': 'sales_engineer',
+      'label': 'Sales Engineer',
+      'width': 150.0,
+    },
+    {
+      'key': 'order_date',
+      'label': 'O-Date',
+      'width': 100.0,
+    },
+    {
+      'key': 'end_date',
+      'label': 'E-Date',
+      'width': 100.0,
+    },
+    {
+      'key': 'delivery_date',
+      'label': 'Del. Date',
+      'width': 100.0,
+    },
+    {
+      'key': 'factory',
+      'label': 'Factory',
+      'width': 100.0,
+    },
+    {
+      'key': 'design_team',
+      'label': 'Design Team',
+      'width': 130.0,
+    },
+    {
+      'key': 'responsible_engineer',
+      'label': 'Resp. Eng.',
+      'width': 130.0,
+    },
+    {
+      'key': 'reviewer',
+      'label': 'Reviewer',
+      'width': 120.0,
+    },
+    {
+      'key': 'correspondence_engineer',
+      'label': 'Alternative Eng.',
+      'width': 120.0,
+    },
+  ];
+
+  double _columnWidth(String key) {
+    final column = _tableColumns.firstWhere(
+          (c) => c['key'] == key,
+    );
+
+    return column['width'] as double;
   }
 
   static const List<String> _defaultStatuses = [
@@ -458,6 +577,13 @@ class _OrdersPageState extends State<OrdersPage> {
     _rightVerticalScrollController.dispose();
     _searchController.dispose();
     super.dispose();
+  }
+
+  bool get _canSendToPlanning {
+    final role = widget.loggedInEmployee?.role?.trim().toLowerCase() ?? '';
+
+    return role == 'head' ||
+        role == 'manager';
   }
 
   void _showBulkEditDialog() {
@@ -1202,7 +1328,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final oldValue = _getCurrentFieldValue(order, field);
 
     if (_isOrderLocked(order)) {
-      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
+      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
       return;
     }
 
@@ -1282,10 +1408,49 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  void _showYellowWarning(String warning) {
+    if (!mounted) return;
+
+    ScaffoldMessenger.of(context).hideCurrentSnackBar();
+
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            const Icon(
+              Icons.warning_amber_rounded,
+              color: Colors.white,
+              size: 22,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                warning,
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.amber.shade700,
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 3),
+        margin: const EdgeInsets.all(16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(10),
+        ),
+      ),
+    );
+  }
+
   Future<void> _updateOrderDesignTeam(
       SAPMainOrder order,
       String newValue,
       ) async {
+
     final oldValue = order.designTeam;
 
     // Auto-map status based on design team
@@ -1314,7 +1479,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final autoStatus = getAutoStatus(newValue);
 
     if (_isOrderLocked(order)) {
-      _showSnackBar('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
+      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
       return;
     }
 
@@ -1852,6 +2017,13 @@ class _OrdersPageState extends State<OrdersPage> {
   // Update order status with audit
 // Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
+
+    if (newStatus.trim().toLowerCase() == 'planning' &&
+        !_canSendToPlanning) {
+      _showYellowWarning('Sorry, only Head and Team Leader can send orders to Planning.');
+      return;
+    }
+
     final oldStatus = order.status;
 
     // Check if trying to change to a locked status
@@ -1864,14 +2036,14 @@ class _OrdersPageState extends State<OrdersPage> {
           order.responsibleEngineer!.isNotEmpty;
 
       if (!hasResponsibleEngineer) {
-        _showSnackBar('⚠️ To change to "$newStatus", you must assign a Responsible Engineer first');
+        _showYellowWarning('⚠️ To change to "$newStatus", you must assign a Responsible Engineer first');
         return;
       }
     }
 
     // Check if current status is locked (cannot change FROM locked)
     if (_isOrderLocked(order)) {
-      _showSnackBar('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
+      _showYellowWarning('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
       return;
     }
 
@@ -3487,6 +3659,26 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildExpandableSections() {
+    final pinnedColumns = _tableColumns
+        .where((column) => _pinnedColumns.contains(column['key']))
+        .toList();
+
+    final unpinnedColumns = _tableColumns
+        .where((column) => !_pinnedColumns.contains(column['key']))
+        .toList();
+
+    final pinnedWidth =
+        260 +
+            pinnedColumns.fold<double>(
+              0,
+                  (sum, column) => sum + (column['width'] as double),
+            );
+
+    final scrollingWidth = unpinnedColumns.fold<double>(
+      0,
+          (sum, column) => sum + (column['width'] as double),
+    );
+
     return Container(
       decoration: BoxDecoration(
         color: _surfaceColor,
@@ -3496,11 +3688,34 @@ class _OrdersPageState extends State<OrdersPage> {
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // ============================================================
+          // PINNED AREA
+          // Name + user-pinned columns
+          // ============================================================
           SizedBox(
-            width: 260,
+            width: pinnedWidth,
             child: Column(
               children: [
-                _buildNameHeader(),
+                SizedBox(
+                  height: 48,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 260,
+                        child: _buildNameHeader(),
+                      ),
+
+                      ...pinnedColumns.map(
+                            (column) => _buildPinnedHeader(
+                          column['key'] as String,
+                          column['label'] as String,
+                          column['width'] as double,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
                 Expanded(
                   child: NotificationListener<ScrollNotification>(
                     onNotification: _onLeftScrollNotification,
@@ -3513,15 +3728,55 @@ class _OrdersPageState extends State<OrdersPage> {
                       _flatList[index] is String ? 44.0 : 48.0,
                       itemBuilder: (_, i) {
                         final item = _flatList[i];
-                        if (item is String)
-                          return _buildSectionHeader(
-                            item,
-                            _groupedOrders[item]!,
+
+                        // Section header
+                        if (item is String) {
+                          return SizedBox(
+                            height: 44,
+                            child: Row(
+                              children: [
+                                SizedBox(
+                                  width: 260,
+                                  child: _buildSectionHeader(
+                                    item,
+                                    _groupedOrders[item]!,
+                                  ),
+                                ),
+
+                                ...pinnedColumns.map(
+                                      (column) => SizedBox(
+                                    width: column['width'] as double,
+                                    child: _buildPinnedSectionPlaceholder(
+                                      item,
+                                      _groupedOrders[item]!,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
                           );
+                        }
+
                         final order = item as SAPMainOrder;
-                        return _buildNameCell(
-                          order,
-                          _orderIndexMap[order] ?? 0,
+
+                        return Row(
+                          children: [
+                            SizedBox(
+                              width: 260,
+                              child: _buildNameCell(
+                                order,
+                                _orderIndexMap[order] ?? 0,
+                              ),
+                            ),
+
+                            ...pinnedColumns.map(
+                                  (column) => _buildPinnedDataCell(
+                                order,
+                                column['key'] as String,
+                                column['width'] as double,
+                              ),
+                            ),
+                          ],
                         );
                       },
                     ),
@@ -3530,6 +3785,10 @@ class _OrdersPageState extends State<OrdersPage> {
               ],
             ),
           ),
+
+          // ============================================================
+          // SCROLLING AREA
+          // ============================================================
           Expanded(
             child: NotificationListener<ScrollNotification>(
               onNotification: (n) =>
@@ -3542,10 +3801,13 @@ class _OrdersPageState extends State<OrdersPage> {
                   scrollDirection: Axis.horizontal,
                   controller: _horizontalScrollController,
                   child: SizedBox(
-                    width: 2130,
+                    width: scrollingWidth,
                     child: Column(
                       children: [
-                        _buildColumnHeaders(),
+                        _buildColumnHeaders(
+                          columns: unpinnedColumns,
+                        ),
+
                         Expanded(
                           child: NotificationListener<ScrollNotification>(
                             onNotification: _onRightScrollNotification,
@@ -3558,15 +3820,20 @@ class _OrdersPageState extends State<OrdersPage> {
                               _flatList[index] is String ? 44.0 : 48.0,
                               itemBuilder: (_, i) {
                                 final item = _flatList[i];
-                                if (item is String)
+
+                                if (item is String) {
                                   return _buildSectionHeaderPlaceholder(
                                     item,
                                     _groupedOrders[item]!,
                                   );
+                                }
+
                                 final order = item as SAPMainOrder;
+
                                 return _buildDataRow(
                                   order,
                                   _orderIndexMap[order] ?? 0,
+                                  columns: unpinnedColumns,
                                 );
                               },
                             ),
@@ -3574,6 +3841,73 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                       ],
                     ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildPinnedHeader(
+      String key,
+      String label,
+      double width,
+      ) {
+    final isPinned = _isColumnPinned(key);
+
+    return Container(
+      width: width,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: _headerBgColor,
+        border: Border(
+          bottom: BorderSide(color: _borderColor),
+          right: BorderSide(
+            color: _borderColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Column title
+          Positioned.fill(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 18),
+                child: Text(
+                  label,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+
+          // Pin icon overlay
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: InkWell(
+              onTap: () => _toggleColumnPin(key),
+              borderRadius: BorderRadius.circular(4),
+              child: Opacity(
+                opacity: 0.5,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(
+                    Icons.push_pin,
+                    size: 15,
+                    color: Theme.of(context).colorScheme.primary,
                   ),
                 ),
               ),
@@ -3753,24 +4087,38 @@ class _OrdersPageState extends State<OrdersPage> {
       color: _headerBgColor,
       border: Border(
         bottom: BorderSide(color: _borderColor),
-        right: BorderSide(color: _borderColor, width: 2),
+        right: BorderSide(
+          color: _borderColor,
+          width: 2,
+        ),
       ),
     ),
     child: Row(
       children: [
         const SizedBox(width: 24, height: 24),
         const SizedBox(width: 8),
+
         Expanded(
-          child: Text(
-            'Name',
-            style: GoogleFonts.cairo(
-              fontSize: 13,
-              fontWeight: FontWeight.w700,
-              color: _textColor,
-            ),
+          child: Row(
+            children: [
+              Icon(
+                Icons.push_pin,
+                size: 14,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 5),
+              Text(
+                'Name',
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: _textColor,
+                ),
+              ),
+            ],
           ),
         ),
-        // Add tracking icon in header
+
         if (_isAdmin)
           SizedBox(
             width: 36,
@@ -3783,6 +4131,8 @@ class _OrdersPageState extends State<OrdersPage> {
       ],
     ),
   );
+
+
 
   Widget _buildNameCell(SAPMainOrder order, int index) {
     final isSelected = _selectedRowsIds.contains(order.id);
@@ -3853,163 +4203,384 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildColumnHeaders() => Container(
-    height: 48,
-    decoration: BoxDecoration(
-      color: _headerBgColor,
-      border: Border(bottom: BorderSide(color: _borderColor)),
-    ),
-    child: Row(
-      children: [
-        _hdr('Status', 140),
-        _hdr('Item', 60),
-        _hdr('Product Code', 150),
-        _hdr('Contract Num', 110),
-        _hdr('Description', 200),
-        _hdr('Design Order', 110),
-        _hdr('QTY', 70, TextAlign.right),
-        _hdr('Unit', 50),
-        _hdr('Value', 110, TextAlign.right),
-        _hdr('Sales Engineer', 150),
-        _hdr('O-Date', 100),
-        _hdr('E-Date', 100),
-        _hdr('Del. Date', 100),
-        _hdr('Factory', 70),
-        _hdr('Design Team', 130),
-        _hdr('Resp. Eng.', 130),
-        _hdr('Reviewer', 120),
-        _hdr('Alternative Eng.', 120),
-      ],
-    ),
-  );
+  Widget _buildScrollableHeader(
+      String key,
+      String label,
+      double width,
+      ) {
+    final isPinned = _isColumnPinned(key);
 
-  Widget _buildDataRow(SAPMainOrder order, int index) {
+    return Container(
+      width: width,
+      height: 48,
+      padding: const EdgeInsets.symmetric(horizontal: 8),
+      decoration: BoxDecoration(
+        color: _headerBgColor,
+        border: Border(
+          right: BorderSide(
+            color: _borderColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: Stack(
+        children: [
+          // Text stays centered
+          Positioned.fill(
+            child: Center(
+              child: Padding(
+                padding: const EdgeInsets.only(right: 18),
+                child: Text(
+                  label,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+            ),
+          ),
+
+          // Pin icon overlay
+          Positioned(
+            right: 0,
+            top: 0,
+            bottom: 0,
+            child: InkWell(
+              onTap: () => _toggleColumnPin(key),
+              borderRadius: BorderRadius.circular(4),
+              child: Opacity(
+                opacity: isPinned ? 0.5 : 0.25,
+                child: Padding(
+                  padding: const EdgeInsets.all(3),
+                  child: Icon(
+                    isPinned
+                        ? Icons.push_pin
+                        : Icons.push_pin_outlined,
+                    size: 15,
+                    color: Theme.of(context).colorScheme.primary,
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+
+  Widget _buildColumnHeaders({
+    required List<Map<String, dynamic>> columns,
+  }) {
+    return Container(
+      height: 48,
+      decoration: BoxDecoration(
+        color: _headerBgColor,
+        border: Border(
+          bottom: BorderSide(color: _borderColor),
+        ),
+      ),
+      child: Row(
+        children: columns.map((column) {
+          final key = column['key'] as String;
+          final label = column['label'] as String;
+          final width = column['width'] as double;
+
+          return _buildScrollableHeader(
+            key,
+            label,
+            width,
+          );
+        }).toList(),
+      ),
+    );
+  }
+
+  Widget _buildColumnCell(
+      SAPMainOrder order,
+      String key,
+      double width,
+      ) {
+    switch (key) {
+      case 'status':
+        return SizedBox(
+          width: width,
+          child: _statusCell(
+            order.status,
+            order,
+          ),
+        );
+
+      case 'item':
+        return _editableCell(
+          order.itemNumber,
+          width,
+          order,
+          'item_number',
+          'Item',
+        );
+
+      case 'product_code':
+        return _editableCell(
+          order.productCode,
+          width,
+          order,
+          'product_code',
+          'Product Code',
+          style: GoogleFonts.cairo(
+            fontSize: 11,
+            color: _textColor,
+          ),
+        );
+
+      case 'contract_number':
+        return _editableCell(
+          order.contractNumber,
+          width,
+          order,
+          'contract_number',
+          'Contract Number',
+        );
+
+      case 'description':
+        return _editableCell(
+          order.description,
+          width,
+          order,
+          'description',
+          'Description',
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        );
+
+      case 'design_order':
+        return _editableCell(
+          order.designOrder,
+          width,
+          order,
+          'design_order',
+          'Design Order',
+          style: GoogleFonts.cairo(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF6366F1),
+          ),
+        );
+
+      case 'quantity':
+        return _editableCell(
+          '${order.quantity}',
+          width,
+          order,
+          'quantity',
+          'QTY',
+          align: TextAlign.right,
+        );
+
+      case 'unit':
+        return _editableCell(
+          order.unitOfMeasure,
+          width,
+          order,
+          'unit_of_measure',
+          'Unit',
+        );
+
+      case 'value':
+        return _editableCell(
+          _formatNumber(order.value),
+          width,
+          order,
+          'value',
+          'Value',
+          align: TextAlign.right,
+          style: GoogleFonts.cairo(
+            fontSize: 12,
+            fontWeight: FontWeight.w600,
+            color: const Color(0xFF059669),
+          ),
+        );
+
+      case 'sales_engineer':
+        return _editableCell(
+          order.salesEngineer,
+          width,
+          order,
+          'sales_engineer',
+          'Sales Engineer',
+        );
+
+      case 'order_date':
+        return _editableCell(
+          order.orderDate ?? '-',
+          width,
+          order,
+          'order_date',
+          'Order Date',
+        );
+
+      case 'end_date':
+        return _editableCell(
+          order.endDate ?? '-',
+          width,
+          order,
+          'end_date',
+          'End Date',
+        );
+
+      case 'delivery_date':
+        return _editableCell(
+          order.deliveryDate ?? '-',
+          width,
+          order,
+          'delivery_date',
+          'Delivery Date',
+        );
+
+      case 'factory':
+        return _editableCell(
+          order.factory ?? '-',
+          width,
+          order,
+          'factory',
+          'Factory',
+        );
+
+      case 'design_team':
+        return SizedBox(
+          width: width,
+          child: _designTeamDropdownCell(
+            order.designTeam,
+            order,
+          ),
+        );
+
+      case 'responsible_engineer':
+        return SizedBox(
+          width: width,
+          child: _employeeDropdownCell(
+            order.responsibleEngineer,
+            order,
+            'responsible_engineer',
+          ),
+        );
+
+      case 'reviewer':
+        return SizedBox(
+          width: width,
+          child: _employeeDropdownCell(
+            order.reviewer,
+            order,
+            'reviewer',
+          ),
+        );
+
+      case 'correspondence_engineer':
+        return SizedBox(
+          width: width,
+          child: _employeeDropdownCell(
+            order.correspondenceEngineer,
+            order,
+            'correspondence_engineer',
+          ),
+        );
+
+      default:
+        return SizedBox(
+          width: width,
+        );
+    }
+  }
+
+  Widget _buildPinnedDataCell(
+      SAPMainOrder order,
+      String key,
+      double width,
+      ) {
+    return Container(
+      width: width,
+      height: 48,
+      decoration: BoxDecoration(
+        color: _selectedRowsIds.contains(order.id)
+            ? const Color(0xFF001761).withOpacity(
+          _isDarkMode ? 0.3 : 0.15,
+        )
+            : _surfaceColor,
+        border: Border(
+          bottom: BorderSide(
+            color: _borderColor.withOpacity(0.3),
+          ),
+          right: BorderSide(
+            color: _borderColor,
+            width: 1,
+          ),
+        ),
+      ),
+      child: _buildColumnCell(
+        order,
+        key,
+        width,
+      ),
+    );
+  }
+
+  Widget _buildPinnedSectionPlaceholder(
+      String status,
+      List<SAPMainOrder> orders,
+      ) {
+    return Container(
+      height: 44,
+      decoration: BoxDecoration(
+        color: _getStatusColor(status).withOpacity(0.08),
+        border: Border(
+          bottom: BorderSide(
+            color: _borderColor,
+          ),
+          right: BorderSide(
+            color: _borderColor,
+            width: 1,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDataRow(
+      SAPMainOrder order,
+      int index, {
+        required List<Map<String, dynamic>> columns,
+      }) {
     final isSelected = _selectedRowsIds.contains(order.id);
+
     return GestureDetector(
       child: Container(
         height: 48,
         decoration: BoxDecoration(
           color: isSelected
-              ? const Color(0xFF001761).withOpacity(_isDarkMode ? 0.3 : 0.15)
+              ? const Color(0xFF001761).withOpacity(
+            _isDarkMode ? 0.3 : 0.15,
+          )
               : _surfaceColor,
-          border: Border(bottom: BorderSide(color: _borderColor.withOpacity(0.3))),
+          border: Border(
+            bottom: BorderSide(
+              color: _borderColor.withOpacity(0.3),
+            ),
+          ),
         ),
         child: Row(
-          children: [
-            _statusCell(order.status, order),
-            _editableCell(order.itemNumber, 60, order, 'item_number', 'Item'),
-            _editableCell(
-              order.productCode,
-              150,
+          children: columns.map((column) {
+            final key = column['key'] as String;
+            final width = column['width'] as double;
+
+            return _buildColumnCell(
               order,
-              'product_code',
-              'Product Code',
-              style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
-            ),
-            _editableCell(
-              order.contractNumber,
-              110,
-              order,
-              'contract_number',
-              'Contract Number',
-            ),
-            _editableCell(
-              order.description,
-              200,
-              order,
-              'description',
-              'Description',
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-            ),
-            _editableCell(
-              order.designOrder,
-              110,
-              order,
-              'design_order',
-              'Design Order',
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF6366F1),
-              ),
-            ),
-            _editableCell(
-              '${order.quantity}',
-              70,
-              order,
-              'quantity',
-              'QTY',
-              align: TextAlign.right,
-            ),
-            _editableCell(
-              order.unitOfMeasure,
-              50,
-              order,
-              'unit_of_measure',
-              'Unit',
-            ),
-            _editableCell(
-              _formatNumber(order.value),
-              110,
-              order,
-              'value',
-              'Value',
-              align: TextAlign.right,
-              style: GoogleFonts.cairo(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: const Color(0xFF059669),
-              ),
-            ),
-            _editableCell(
-              order.salesEngineer,
-              150,
-              order,
-              'sales_engineer',
-              'Sales Engineer',
-            ),
-            _editableCell(
-              order.orderDate ?? '-',
-              100,
-              order,
-              'order_date',
-              'Order Date',
-            ),
-            _editableCell(
-              order.endDate ?? '-',
-              100,
-              order,
-              'end_date',
-              'End Date',
-            ),
-            _editableCell(
-              order.deliveryDate ?? '-',
-              100,
-              order,
-              'delivery_date',
-              'Delivery Date',
-            ),
-            _editableCell(
-              order.factory ?? '-',
-              70,
-              order,
-              'factory',
-              'Factory',
-            ),
-            _designTeamDropdownCell(order.designTeam, order),
-            _employeeDropdownCell(
-              order.responsibleEngineer,
-              order,
-              'responsible_engineer',
-            ),
-            _employeeDropdownCell(order.reviewer, order, 'reviewer'),
-            _employeeDropdownCell(
-              order.correspondenceEngineer,
-              order,
-              'correspondence_engineer',
-            ),
-          ],
+              key,
+              width,
+            );
+          }).toList(),
         ),
       ),
     );
@@ -4025,14 +4596,15 @@ class _OrdersPageState extends State<OrdersPage> {
         TextStyle? style,
         TextOverflow overflow = TextOverflow.ellipsis,
         int maxLines = 1,
-      }) {
+      })
+  {
     final canEdit = _isOrderEditable(order);
     final isDateField =
         field == 'order_date' ||
             field == 'delivery_date' ||
             field == 'end_date';
 
-    
+
 
     // Only make editable when Edit Mode is ON AND user can edit this order
     if (_editMode && canEdit && !_isOrderLocked(order)) {
