@@ -1129,19 +1129,7 @@ class _DashboardPageState extends State<DashboardPage> {
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Total Column
-              Expanded(
-                child: _buildComparisonColumn(
-                  title: 'Total',
-                  icon: Icons.all_inclusive,
-                  color: Colors.blue,
-                  orderCount: _totalOrders,
-                  totalValue: _totalValue,
-                  totalQuantity: _totalQuantity,
-                  statuses: null, // Show all statuses
-                ),
-              ),
-              const SizedBox(width: 16),
+
               // Approach Column
               Expanded(
                 child: _buildComparisonColumn(

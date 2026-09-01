@@ -424,8 +424,8 @@ class _MainShellState extends State<MainShell> {
         case 0: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
         case 1: return DashboardPage(sapService: widget.sapService);
         case 2: return AnalyticsPage(sapService: widget.sapService);
-        case 4: return const DepartmentTrackingPage();
-        case 3: return ProfilePage(employee: widget.loggedInEmployee);
+        case 3: return const DepartmentTrackingPage();
+        case 4: return ProfilePage(employee: widget.loggedInEmployee);
         default: return OrdersPage(sapService: widget.sapService, loggedInEmployee: widget.loggedInEmployee);
       }
     } else {
