@@ -2870,7 +2870,7 @@ class _OrdersPageState extends State<OrdersPage> {
       ),
       child: Row(
         children: [
-          Text(
+          SelectableText(
             'Orders',
             style: GoogleFonts.cairo(
               fontSize: 24,
@@ -4596,114 +4596,148 @@ class _OrdersPageState extends State<OrdersPage> {
         TextStyle? style,
         TextOverflow overflow = TextOverflow.ellipsis,
         int maxLines = 1,
-      })
-  {
+      }) {
     final canEdit = _isOrderEditable(order);
     final isDateField =
         field == 'order_date' ||
             field == 'delivery_date' ||
             field == 'end_date';
 
-
-
-    // Only make editable when Edit Mode is ON AND user can edit this order
+    // ============================================
+    // EDIT MODE
+    // ============================================
     if (_editMode && canEdit && !_isOrderLocked(order)) {
+      final editKey = '${order.id}_$field';
+
+      // Create controller only once for this cell
+      final controller = _editControllers.putIfAbsent(
+        editKey,
+            () => TextEditingController(
+          text: text == '-' ? '' : text,
+        ),
+      );
+
       if (isDateField) {
         return SizedBox(
           width: w,
           child: Padding(
             padding: const EdgeInsets.symmetric(horizontal: 2),
             child: InkWell(
-              onTap: () => _pickDateForEdit(order, field, text),
-              onLongPress: () {
-                final copyValue = text == '-' ? '' : text;
-                _copyFieldToClipboard(fieldLabel, copyValue);
-              },
-              borderRadius: BorderRadius.circular(4),
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
-                decoration: BoxDecoration(
-                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
-                  borderRadius: BorderRadius.circular(4),
-                  color: Colors.orange.withOpacity(0.05),
-                ),
-                child: Align(
-                  alignment: align == TextAlign.right
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(
-                        Icons.calendar_today,
-                        size: 10,
-                        color: Colors.orange,
-                      ),
-                      const SizedBox(width: 2),
-                      Flexible(
-                        child: Text(
-                          text,
-                          style:
-                          (style ??
-                              GoogleFonts.cairo(
-                                fontSize: 12,
-                                color: _textColor,
-                              )),
-                          overflow: overflow,
-                          maxLines: maxLines,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              onTap: () => _pickDateForEdit(
+                order,
+                field,
+                text,
               ),
-            ),
-          ),
-        );
-      } else {
-        return SizedBox(
-          width: w,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: InkWell(
-              onTap: () =>
-                  _editOrderField(order, field, text == '-' ? '' : text),
               onLongPress: () {
                 final copyValue = text == '-' ? '' : text;
-                _copyFieldToClipboard(fieldLabel, copyValue);
+                _copyFieldToClipboard(
+                  fieldLabel,
+                  copyValue,
+                );
               },
-              borderRadius: BorderRadius.circular(4),
               child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 2, vertical: 3),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 4,
+                  vertical: 3,
+                ),
                 decoration: BoxDecoration(
-                  border: Border.all(color: Colors.orange.withOpacity(0.5)),
+                  border: Border.all(
+                    color: Colors.orange.withOpacity(0.5),
+                  ),
                   borderRadius: BorderRadius.circular(4),
                   color: Colors.orange.withOpacity(0.05),
                 ),
-                child: Align(
-                  alignment: align == TextAlign.right
-                      ? Alignment.centerRight
-                      : Alignment.centerLeft,
-                  child: Text(
-                    text,
-                    style:
-                    (style ??
-                        GoogleFonts.cairo(
-                          fontSize: 12,
-                          color: _textColor,
-                        )),
-                    overflow: overflow,
-                    maxLines: maxLines,
-                  ),
+                child: Row(
+                  children: [
+                    const Icon(
+                      Icons.calendar_today,
+                      size: 10,
+                      color: Colors.orange,
+                    ),
+                    const SizedBox(width: 3),
+                    Expanded(
+                      child: Text(
+                        text,
+                        style: style ??
+                            GoogleFonts.cairo(
+                              fontSize: 12,
+                              color: _textColor,
+                            ),
+                        overflow: overflow,
+                        maxLines: maxLines,
+                      ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
         );
       }
+
+      // ============================================
+      // NORMAL TEXT FIELD INSIDE THE CELL
+      // ============================================
+      return SizedBox(
+        width: w,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: SizedBox(
+            width: w,
+            height: 32,
+            child: TextField(
+              controller: controller,
+              textAlign: align,
+              maxLines: 1,
+              keyboardType:
+              field == 'quantity' || field == 'value'
+                  ? TextInputType.number
+                  : TextInputType.text,
+              style: style ??
+                  GoogleFonts.cairo(
+                    fontSize: 12,
+                    color: _textColor,
+                  ),
+              decoration: InputDecoration(
+                isDense: true,
+                contentPadding: const EdgeInsets.symmetric(
+                  horizontal: 6,
+                  vertical: 7,
+                ),
+                filled: true,
+                fillColor: Colors.orange.withOpacity(0.05),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: BorderSide(
+                    color: Colors.orange.withOpacity(0.5),
+                  ),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(4),
+                  borderSide: const BorderSide(
+                    color: Colors.orange,
+                    width: 1.2,
+                  ),
+                ),
+              ),
+              onSubmitted: (value) async {
+                await _saveInlineEdit(
+                  order,
+                  field,
+                  value,
+                  text,
+                  editKey,
+                );
+              },
+            ),
+          )
+        ),
+      );
     }
 
-    // Normal cell with long press to copy
+    // ============================================
+    // NORMAL NON-EDIT MODE
+    // ============================================
     return SizedBox(
       width: w,
       child: Padding(
@@ -4711,7 +4745,10 @@ class _OrdersPageState extends State<OrdersPage> {
         child: GestureDetector(
           onLongPress: () {
             final copyValue = text == '-' ? '' : text;
-            _copyFieldToClipboard(fieldLabel, copyValue);
+            _copyFieldToClipboard(
+              fieldLabel,
+              copyValue,
+            );
           },
           child: Align(
             alignment: align == TextAlign.right
@@ -4719,8 +4756,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 : Alignment.centerLeft,
             child: Text(
               text,
-              style:
-              style ??
+              style: style ??
                   GoogleFonts.cairo(
                     fontSize: 12,
                     color: _textColor,
@@ -4739,45 +4775,42 @@ class _OrdersPageState extends State<OrdersPage> {
       SAPMainOrder order,
       String field,
       String newValue,
-      String editKey,
       String oldValue,
+      String editKey,
       ) async {
-    // Clean up controller
-    _editControllers.remove(editKey);
+    newValue = newValue.trim();
 
-    setState(() {
-      _editingField = null;
-    });
-
-    if (newValue.isEmpty ||
-        newValue == oldValue ||
-        newValue == (oldValue == '-' ? '' : oldValue))
-      return;
-
-    // If multiple rows selected, apply to all
-    if (_editMode && _selectedRowsIds.length > 1) {
-      await _applyBulkEditToSelected(field, newValue);
+    if (newValue == oldValue ||
+        (oldValue == '-' && newValue.isEmpty)) {
       return;
     }
 
-    // Single row update
     try {
       final supabase = Supabase.instance.client;
+
       dynamic parsedValue = newValue;
 
       if (field == 'quantity') {
-        parsedValue = double.tryParse(newValue.replaceAll(',', '')) ?? 0;
+        parsedValue =
+            double.tryParse(
+              newValue.replaceAll(',', ''),
+            ) ??
+                0;
       } else if (field == 'value') {
         parsedValue =
             double.tryParse(
-              newValue.replaceAll(',', '').replaceAll('\$', ''),
+              newValue
+                  .replaceAll(',', '')
+                  .replaceAll('\$', ''),
             ) ??
                 0;
       }
 
       await supabase
           .from('sap_main_orders')
-          .update({field: parsedValue})
+          .update({
+        field: parsedValue,
+      })
           .eq('id', order.id);
 
       await _auditService.logChange(
@@ -4790,10 +4823,19 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
       );
 
-      _showSnackBar('${_formatFieldName(field)} updated!');
-      _updateOrderLocally(order.id, field, parsedValue);
+      _updateOrderLocally(
+        order.id,
+        field,
+        parsedValue,
+      );
+
+      _showSnackBar(
+        '${_formatFieldName(field)} updated!',
+      );
     } catch (e) {
-      _showSnackBar('Error updating: $e');
+      _showSnackBar(
+        'Error updating: $e',
+      );
     }
   }
 

@@ -304,7 +304,7 @@ class SmartZoomWrapper extends StatefulWidget {
 
 class _SmartZoomWrapperState extends State<SmartZoomWrapper> {
   final FocusNode _focusNode = FocusNode();
-  bool _isZPressed = false;
+  bool _isCtrlPressed = false;
   bool _isTouchDevice = false;
 
   @override
@@ -315,16 +315,22 @@ class _SmartZoomWrapperState extends State<SmartZoomWrapper> {
 
   @override
   Widget build(BuildContext context) {
-    final bool canZoom = _isTouchDevice || _isZPressed;
+    final bool canZoom = _isTouchDevice || _isCtrlPressed;
 
     return KeyboardListener(
       focusNode: _focusNode,
       autofocus: true,
       onKeyEvent: (event) {
-        final isZDown = HardwareKeyboard.instance.isLogicalKeyPressed(LogicalKeyboardKey.keyZ);
-        if (isZDown != _isZPressed) {
+        final isCtrlDown =
+            HardwareKeyboard.instance.isLogicalKeyPressed(
+              LogicalKeyboardKey.controlLeft,
+            ) ||
+                HardwareKeyboard.instance.isLogicalKeyPressed(
+                  LogicalKeyboardKey.controlRight,
+                );
+        if (isCtrlDown != _isCtrlPressed) {
           setState(() {
-            _isZPressed = isZDown;
+            _isCtrlPressed = isCtrlDown;
           });
         }
       },
