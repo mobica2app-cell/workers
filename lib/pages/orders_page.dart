@@ -233,7 +233,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   static const List<String> _defaultStatuses = [
     "automated"
-    'Drawing Submittal',
+        'Drawing Submittal',
     'Approval',
     'modifications submitted',
     'Manufacturing Drawing',
@@ -3125,8 +3125,6 @@ class _OrdersPageState extends State<OrdersPage> {
                 const SizedBox(width: 8),
                 _buildImportButton(),
               ],
-              const SizedBox(width: 8),
-              _buildRefreshButton(),
             ],
           );
         } else {
@@ -3152,7 +3150,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   }),
                   // Only show Import for admin or abd.elmoen
                   if (_canImportDelete) _buildImportButton(),
-                  _buildRefreshButton(),
                 ],
               ),
             ],
@@ -3444,24 +3441,6 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  // Refresh button
-  Widget _buildRefreshButton() {
-    return ElevatedButton.icon(
-      onPressed: _loadAllDataOnce,
-      icon: const Icon(Icons.refresh, size: 18),
-      label: Text(
-        'Refresh',
-        style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
-      ),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: Theme.of(context).colorScheme.primary,
-        foregroundColor: Theme.of(context).colorScheme.onPrimary,
-        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-      ),
-    );
-  }
-
   Widget _designTeamDropdownCell(String? currentValue, SAPMainOrder order) {
     final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
@@ -3656,7 +3635,9 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
       );
-    return _buildExpandableSections();
+    return SelectionArea(
+      child: _buildExpandableSections(),
+    );
   }
 
   Widget _buildExpandableSections() {
@@ -4191,6 +4172,17 @@ class _OrdersPageState extends State<OrdersPage> {
                     size: 16,
                     color: Color(0xFF6366F1),
                   ),
+                  onLongPress: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => OrderDetailPage(
+                          order: order,
+                          sapService: widget.sapService,
+                        ),
+                      ),
+                    );
+                  },
                   onPressed: () => _navigateToOrderTracking(order),
                   tooltip: 'Track Order',
                   padding: EdgeInsets.zero,
@@ -4557,6 +4549,8 @@ class _OrdersPageState extends State<OrdersPage> {
     final isSelected = _selectedRowsIds.contains(order.id);
 
     return GestureDetector(
+
+
       child: Container(
         height: 48,
         decoration: BoxDecoration(
@@ -4682,56 +4676,56 @@ class _OrdersPageState extends State<OrdersPage> {
       return SizedBox(
         width: w,
         child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 2),
-          child: SizedBox(
-            width: w,
-            height: 32,
-            child: TextField(
-              controller: controller,
-              textAlign: align,
-              maxLines: 1,
-              keyboardType:
-              field == 'quantity' || field == 'value'
-                  ? TextInputType.number
-                  : TextInputType.text,
-              style: style ??
-                  GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: _textColor,
+            padding: const EdgeInsets.symmetric(horizontal: 2),
+            child: SizedBox(
+              width: w,
+              height: 32,
+              child: TextField(
+                controller: controller,
+                textAlign: align,
+                maxLines: 1,
+                keyboardType:
+                field == 'quantity' || field == 'value'
+                    ? TextInputType.number
+                    : TextInputType.text,
+                style: style ??
+                    GoogleFonts.cairo(
+                      fontSize: 12,
+                      color: _textColor,
+                    ),
+                decoration: InputDecoration(
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 7,
                   ),
-              decoration: InputDecoration(
-                isDense: true,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 6,
-                  vertical: 7,
-                ),
-                filled: true,
-                fillColor: Colors.orange.withOpacity(0.05),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: BorderSide(
-                    color: Colors.orange.withOpacity(0.5),
+                  filled: true,
+                  fillColor: Colors.orange.withOpacity(0.05),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: BorderSide(
+                      color: Colors.orange.withOpacity(0.5),
+                    ),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(4),
+                    borderSide: const BorderSide(
+                      color: Colors.orange,
+                      width: 1.2,
+                    ),
                   ),
                 ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(4),
-                  borderSide: const BorderSide(
-                    color: Colors.orange,
-                    width: 1.2,
-                  ),
-                ),
+                onSubmitted: (value) async {
+                  await _saveInlineEdit(
+                    order,
+                    field,
+                    value,
+                    text,
+                    editKey,
+                  );
+                },
               ),
-              onSubmitted: (value) async {
-                await _saveInlineEdit(
-                  order,
-                  field,
-                  value,
-                  text,
-                  editKey,
-                );
-              },
-            ),
-          )
+            )
         ),
       );
     }
