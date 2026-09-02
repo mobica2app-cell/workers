@@ -35,6 +35,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
   Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  double get _pageWidth => MediaQuery.sizeOf(context).width;
+  bool get _isMobile => _pageWidth < 600;
 
   @override
   void initState() {
@@ -134,113 +136,153 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           color: Theme.of(context).colorScheme.primary,
         ),
       )
-          : SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+          : LayoutBuilder(
+        builder: (context, constraints) {
+          final width = constraints.maxWidth;
+          final isMobile = width < 600;
+          final horizontalPadding = isMobile
+              ? 12.0
+              : width < 900
+              ? 18.0
+              : 24.0;
+
+          return SingleChildScrollView(
+            padding: EdgeInsets.fromLTRB(
+              horizontalPadding,
+              isMobile ? 16 : 24,
+              horizontalPadding,
+              24,
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                   'Analytics',
                   style: GoogleFonts.cairo(
-                    fontSize: 28,
+                    fontSize: isMobile ? 22 : width < 900 ? 25 : 28,
                     fontWeight: FontWeight.bold,
                     color: _textColor,
                   ),
                 ),
-              ],
-            ),
-            const SizedBox(height: 18),
+                SizedBox(height: isMobile ? 14 : 18),
+                LayoutBuilder(
+                  builder: (context, kpiConstraints) {
+                    final spacing = isMobile ? 10.0 : 16.0;
+                    final columns = isMobile ? 2 : 3;
+                    final cardWidth =
+                        (kpiConstraints.maxWidth -
+                            spacing * (columns - 1)) /
+                            columns;
 
-            // KPI Row
-            Row(
-              children: [
-                _buildKpiCard(
-                  'Total Orders',
-                  '$_totalOrders',
-                  Icons.receipt_long,
-                  Colors.blue,
+                    return Wrap(
+                      spacing: spacing,
+                      runSpacing: spacing,
+                      children: [
+                        SizedBox(
+                          width: cardWidth,
+                          child: _buildKpiCard(
+                            'Total Orders',
+                            '$_totalOrders',
+                            Icons.receipt_long,
+                            Colors.blue,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _buildKpiCard(
+                            'Total Value',
+                            '\$${_formatNumber(_totalValue)}',
+                            Icons.attach_money,
+                            Colors.green,
+                          ),
+                        ),
+                        SizedBox(
+                          width: cardWidth,
+                          child: _buildKpiCard(
+                            'Total QTY',
+                            _totalQuantity.toStringAsFixed(0),
+                            Icons.inventory_2,
+                            Colors.orange,
+                          ),
+                        ),
+                      ],
+                    );
+                  },
                 ),
-                const SizedBox(width: 16),
-                _buildKpiCard(
-                  'Total Value',
-                  '\$${_formatNumber(_totalValue)}',
-                  Icons.attach_money,
-                  Colors.green,
-                ),
-                const SizedBox(width: 16),
-                _buildKpiCard(
-                  'Total QTY',
-                  _totalQuantity.toStringAsFixed(0),
-                  Icons.inventory_2,
-                  Colors.orange,
-                ),
+                SizedBox(height: isMobile ? 16 : 24),
+                _buildFactoryChart(),
+                SizedBox(height: isMobile ? 16 : 24),
+                _buildEngineerWorkloadChart(),
+                SizedBox(height: isMobile ? 16 : 24),
+                _buildMonthlyTrendsChart(),
               ],
             ),
-            const SizedBox(height: 24),
-            _buildFactoryChart(),
-            const SizedBox(height: 24),
-            _buildEngineerWorkloadChart(),
-            const SizedBox(height: 24),
-            _buildMonthlyTrendsChart(),
-            const SizedBox(height: 24),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
   Widget _buildKpiCard(String title, String value, IconData icon, Color color) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          color: _cardColor,
-          borderRadius: BorderRadius.circular(16),
-          border: Border.all(color: _borderColor),
-          boxShadow: [
-            BoxShadow(
-              color: _isDark ? Colors.black.withOpacity(0.3) : Colors.black.withOpacity(0.04),
-              blurRadius: 10,
-              offset: const Offset(0, 2),
-            ),
-          ],
-        ),
-        child: Row(
-          children: [
-            Container(
-              padding: const EdgeInsets.all(10),
-              decoration: BoxDecoration(
-                color: color.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(12),
+    return Container(
+      padding: EdgeInsets.all(_isMobile ? 12 : 20),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: [
+          BoxShadow(
+            color: _isDark
+                ? Colors.black.withOpacity(0.3)
+                : Colors.black.withOpacity(0.04),
+            blurRadius: 10,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final compact = constraints.maxWidth < 180;
+          return Row(
+            children: [
+              Container(
+                padding: EdgeInsets.all(compact ? 7 : 10),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, color: color, size: compact ? 22 : 28),
               ),
-              child: Icon(icon, color: color, size: 28),
-            ),
-            const SizedBox(width: 16),
-            Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  value,
-                  style: GoogleFonts.cairo(
-                    fontSize: 24,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
+              SizedBox(width: compact ? 8 : 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      value,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: compact ? 17 : 24,
+                        fontWeight: FontWeight.bold,
+                        color: _textColor,
+                      ),
+                    ),
+                    Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: compact ? 10 : 12,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  ],
                 ),
-                Text(
-                  title,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: _secondaryTextColor,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
+              ),
+            ],
+          );
+        },
       ),
     );
   }
@@ -252,7 +294,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(_isMobile ? 14 : 24),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -278,7 +320,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 300,
+            height: _isMobile ? 270 : 300,
             child: BarChart(
               BarChartData(
                 alignment: BarChartAlignment.spaceAround,
@@ -293,7 +335,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       BarChartRodData(
                         toY: e.value.value.toDouble(),
                         color: Colors.blue,
-                        width: 20,
+                        width: _isMobile ? 14 : 20,
                         borderRadius: const BorderRadius.only(
                           topLeft: Radius.circular(6),
                           topRight: Radius.circular(6),
@@ -308,7 +350,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 60,
+                      reservedSize: _isMobile ? 52 : 60,
                       getTitlesWidget: (value, meta) {
                         if (value.toInt() < entries.length) {
                           return Padding(
@@ -375,7 +417,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         : entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(_isMobile ? 14 : 24),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -412,7 +454,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             )
           else
             SizedBox(
-              height: 300,
+              height: _isMobile ? 270 : 300,
               child: BarChart(
                 BarChartData(
                   alignment: BarChartAlignment.spaceAround,
@@ -427,7 +469,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                         BarChartRodData(
                           toY: e.value.value.toDouble(),
                           color: Colors.orange,
-                          width: 18,
+                          width: _isMobile ? 13 : 18,
                           borderRadius: const BorderRadius.only(
                             topLeft: Radius.circular(6),
                             topRight: Radius.circular(6),
@@ -442,7 +484,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                     bottomTitles: AxisTitles(
                       sideTitles: SideTitles(
                         showTitles: true,
-                        reservedSize: 60,
+                        reservedSize: _isMobile ? 52 : 60,
                         getTitlesWidget: (value, meta) {
                           if (value.toInt() < entries.length) {
                             // Get first 2 words of engineer name
@@ -508,7 +550,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     final maxVal = entries.map((e) => e.value).reduce((a, b) => a > b ? a : b);
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(_isMobile ? 14 : 24),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -534,7 +576,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ),
           const SizedBox(height: 20),
           SizedBox(
-            height: 250,
+            height: _isMobile ? 230 : 250,
             child: LineChart(
               LineChartData(
                 minY: 0,
@@ -565,7 +607,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: 50,
+                      reservedSize: _isMobile ? 42 : 50,
                       getTitlesWidget: (value, meta) {
                         if (value.toInt() < entries.length)
                           return Padding(
