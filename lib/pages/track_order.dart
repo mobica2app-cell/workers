@@ -293,66 +293,58 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
           )
         else
         // Show real status changes from audit log
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(statusChanges.length + 1, (index) {
-                final isLast = index == statusChanges.length;
+          Scrollbar(
+            thumbVisibility: true,
+            trackVisibility: true,
+            notificationPredicate: (notification) => notification.depth == 0,
+            child: SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: List.generate(statusChanges.length + 1, (index) {
+                  final isLast = index == statusChanges.length;
 
-                if (isLast) {
-                  // Current status (the final destination)
-                  return Row(children: [
-                    if (statusChanges.isNotEmpty)
+                  if (isLast) {
+                    // Current status (the final destination)
+                    return Row(children: [
+                      if (statusChanges.isNotEmpty)
+                        _buildConnector(isCompleted: true),
+                      _buildStepCircle(
+                        status: widget.order.status,
+                        isCompleted: false,
+                        isCurrent: true,
+                        auditLog: null,
+                      ),
+                    ]);
+                  } else {
+                    // Completed status - show the OLD value (what was completed)
+                    final audit = statusChanges[index];
+                    final completedStatus = audit['old_value']?.toString() ?? 'Unknown';
+                    return Row(children: [
+                      _buildStepCircle(
+                        status: completedStatus,
+                        isCompleted: true,
+                        isCurrent: false,
+                        auditLog: audit,
+                      ),
                       _buildConnector(isCompleted: true),
-                    _buildStepCircle(
-                      status: widget.order.status,
-                      isCompleted: false,
-                      isCurrent: true,
-                      auditLog: null,
-                    ),
-                  ]);
-                } else {
-                  // Completed status - show the OLD value (what was completed)
-                  final audit = statusChanges[index];
-                  final completedStatus = audit['old_value']?.toString() ?? 'Unknown';
-                  return Row(children: [
-                    _buildStepCircle(
-                      status: completedStatus,
-                      isCompleted: true,
-                      isCurrent: false,
-                      auditLog: audit,
-                    ),
-                    _buildConnector(isCompleted: true),
-                  ]);
-                }
-              }),
+                    ]);
+                  }
+                }),
+              ),
             ),
           ),
       ]),
     );
   }
 
-  Widget _buildSingleStep(
-      String status,
-      Map<String, dynamic>? auditLog,
-      bool isCurrent,
-      ) {
-    return Center(
-      child: _buildStepCircle(
-        status: status,
-        isCompleted: false,
-        isCurrent: isCurrent,
-        auditLog: auditLog,
-      ),
-    );
-  }
 
   Widget _buildStepCircle({
     required String status,
     required bool isCompleted,
     required bool isCurrent,
     Map<String, dynamic>? auditLog,
-  }) {
+  })
+  {
     Color circleColor;
     Color textColor;
     IconData icon;

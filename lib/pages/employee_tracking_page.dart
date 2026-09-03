@@ -7,6 +7,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
 import '../services/sap_service.dart';
+import 'track_order.dart';
 
 class EmployeeTrackingPage extends StatefulWidget {
   const EmployeeTrackingPage({Key? key}) : super(key: key);
@@ -28,6 +29,13 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   List<EmployeeAuth> _employees = [];
   List<SAPMainOrder> _orders = [];
   List<Map<String, dynamic>> _auditLogs = [];
+
+  // Fast lookup for audit-log order IDs. This avoids scanning every order for
+  // every movement and keeps the tracking page responsive with large history.
+  final Map<String, SAPMainOrder> _ordersById = {};
+
+  // Cached employee movements. Invalidated whenever data or filters change.
+  final Map<String, List<Map<String, dynamic>>> _changesCache = {};
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -83,23 +91,58 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
       // Load ALL audit changes. Employee tracking is based on every
       // change made by the employee, not only Done/final status changes.
-      final auditRows = await _supabase
-          .from('order_audit_log')
-          .select(
-        'id, order_id, field_name, old_value, new_value, '
-            'changed_at, changed_by, changed_by_id',
-      )
-          .order('changed_at', ascending: true)
-          .limit(100000);
+      // Supabase/PostgREST commonly caps a single response at 1,000 rows.
+      // Load the complete audit history in pages so Employee Tracking does
+      // not silently lose older employee movements.
+      const pageSize = 1000;
+      final allAuditRows = <Map<String, dynamic>>[];
+      var pageStart = 0;
+
+      while (true) {
+        final pageRows = await _supabase
+            .from('order_audit_log')
+            .select(
+          'id, order_id, field_name, old_value, new_value, '
+              'changed_at, changed_by, changed_by_id',
+        )
+            .order('changed_at', ascending: true)
+            .order('id', ascending: true)
+            .range(pageStart, pageStart + pageSize - 1);
+
+        final page = (pageRows as List)
+            .map((e) => Map<String, dynamic>.from(e))
+            .toList();
+
+        allAuditRows.addAll(page);
+
+        debugPrint(
+          '[AUDIT DEBUG] Loaded audit page: '
+              'range=$pageStart-${pageStart + pageSize - 1}, '
+              'rows=${page.length}, total=${allAuditRows.length}',
+        );
+
+        if (page.length < pageSize) {
+          break;
+        }
+
+        pageStart += pageSize;
+      }
+
 
       if (!mounted) return;
+
+      final ordersById = <String, SAPMainOrder>{
+        for (final order in orders) order.id.trim(): order,
+      };
 
       setState(() {
         _employees = employees;
         _orders = orders;
-        _auditLogs = (auditRows as List)
-            .map((e) => Map<String, dynamic>.from(e))
-            .toList();
+        _ordersById
+          ..clear()
+          ..addAll(ordersById);
+        _auditLogs = allAuditRows;
+        _changesCache.clear();
         _isLoading = false;
       });
     } catch (e) {
@@ -243,10 +286,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   }
 
   SAPMainOrder? _findOrder(String orderId) {
-    for (final order in _orders) {
-      if (order.id.trim() == orderId.trim()) return order;
-    }
-    return null;
+    return _ordersById[orderId.trim()];
   }
 
   // Every audit-log change made by the employee.
@@ -255,6 +295,13 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   List<Map<String, dynamic>> _changesForEmployee(
       EmployeeAuth employee,
       ) {
+    final cacheKey =
+        '${employee.id}|${_selectedRole}|${_startDate?.millisecondsSinceEpoch ?? ''}|'
+        '${_endDate?.millisecondsSinceEpoch ?? ''}';
+
+    final cached = _changesCache[cacheKey];
+    if (cached != null) return cached;
+
     final result = <Map<String, dynamic>>[];
 
     for (final log in _auditLogs) {
@@ -264,8 +311,15 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       if (!_inDateRange(changedAt)) continue;
 
       final orderId = log['order_id']?.toString().trim() ?? '';
+      if (orderId.isEmpty) continue;
+
       final order = _findOrder(orderId);
-      if (order == null) continue;
+      if (order == null) {
+        // The order may have been deleted after this audit entry was created.
+        // Keep the audit record in the database; it simply cannot be rendered
+        // by the current order-based card until a deleted-order view is added.
+        continue;
+      }
 
       if (!_matchesRole(order, employee.fullName)) continue;
 
@@ -284,10 +338,10 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       if (ad == null && bd == null) return 0;
       if (ad == null) return 1;
       if (bd == null) return -1;
-
       return bd.compareTo(ad);
     });
 
+    _changesCache[cacheKey] = result;
     return result;
   }
 
@@ -335,129 +389,216 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return '$field: $oldValue → $newValue';
   }
 
+  void _openOrderTracking(SAPMainOrder order) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (_) => OrderTrackingPage(order: order),
+      ),
+    ).then((_) {
+      if (mounted) _loadData();
+    });
+  }
+
+  Widget _buildAssignmentLine({
+    required String label,
+    required String? name,
+    required IconData icon,
+    required Color color,
+  }) {
+    final value = name?.trim() ?? '';
+    if (value.isEmpty) return const SizedBox.shrink();
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 3),
+      child: Row(
+        children: [
+          Icon(icon, size: 12, color: color),
+          const SizedBox(width: 5),
+          Text(
+            '$label: ',
+            style: GoogleFonts.cairo(
+              fontSize: 9,
+              fontWeight: FontWeight.w600,
+              color: _secondaryTextColor,
+            ),
+          ),
+          Expanded(
+            child: Text(
+              value,
+              overflow: TextOverflow.ellipsis,
+              style: GoogleFonts.cairo(
+                fontSize: 9,
+                fontWeight: FontWeight.w600,
+                color: _textColor,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildChangeRow(Map<String, dynamic> change) {
     final log = Map<String, dynamic>.from(change['log'] as Map);
     final order = change['order'] as SAPMainOrder;
     final role = change['role']?.toString() ?? '';
     final changedAt = change['changedAt'] as DateTime?;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: _mutedColor,
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openOrderTracking(order),
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderColor),
-      ),
-      child: LayoutBuilder(
-        builder: (context, constraints) {
-          final narrow = constraints.maxWidth < 720;
-          final roleColor = _roleColor(role);
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _mutedColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _borderColor),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 720;
+              final roleColor = _roleColor(role);
 
-          final orderInfo = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                order.designOrder.isNotEmpty
-                    ? order.designOrder
-                    : order.id,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w700,
-                  color: _textColor,
-                ),
-              ),
-              const SizedBox(height: 3),
-              Text(
-                '${order.contractNumber} • ${order.customerName}',
-                maxLines: 2,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.cairo(
-                  fontSize: 10,
-                  color: _secondaryTextColor,
-                ),
-              ),
-            ],
-          );
+              final orderInfo = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          order.designOrder.isNotEmpty
+                              ? order.designOrder
+                              : order.id,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.cairo(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _textColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 13,
+                        color: _secondaryTextColor,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${order.contractNumber} • ${order.customerName}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Engineer',
+                    name: order.responsibleEngineer,
+                    icon: Icons.engineering,
+                    color: Colors.orange,
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Reviewer',
+                    name: order.reviewer,
+                    icon: Icons.rate_review,
+                    color: Colors.purple,
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Alternative',
+                    name: order.correspondenceEngineer,
+                    icon: Icons.alt_route,
+                    color: Colors.teal,
+                  ),
+                ],
+              );
 
-          final changeInfo = Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                _changeDescription(log),
-                maxLines: 3,
-                overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.cairo(
-                  fontSize: 11,
-                  fontWeight: FontWeight.w600,
-                  color: _textColor,
+              final changeInfo = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    _changeDescription(log),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor,
+                    ),
+                  ),
+                  if (changedAt != null) ...[
+                    const SizedBox(height: 3),
+                    Text(
+                      _formatDateTime(changedAt),
+                      style: GoogleFonts.cairo(
+                        fontSize: 9,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ],
+              );
+
+              final roleBadge = Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 8,
+                  vertical: 4,
                 ),
-              ),
-              if (changedAt != null) ...[
-                const SizedBox(height: 3),
-                Text(
-                  _formatDateTime(changedAt),
+                decoration: BoxDecoration(
+                  color: roleColor.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(20),
+                ),
+                child: Text(
+                  role.isEmpty ? 'Other' : role,
+                  overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.cairo(
                     fontSize: 9,
-                    color: _secondaryTextColor,
+                    fontWeight: FontWeight.w600,
+                    color: roleColor,
                   ),
                 ),
-              ],
-            ],
-          );
+              );
 
-          final roleBadge = Container(
-            padding: const EdgeInsets.symmetric(
-              horizontal: 8,
-              vertical: 4,
-            ),
-            decoration: BoxDecoration(
-              color: roleColor.withOpacity(0.1),
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Text(
-              role,
-              overflow: TextOverflow.ellipsis,
-              style: GoogleFonts.cairo(
-                fontSize: 9,
-                fontWeight: FontWeight.w600,
-                color: roleColor,
-              ),
-            ),
-          );
-
-          if (narrow) {
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(child: orderInfo),
-                    const SizedBox(width: 8),
-                    roleBadge,
+                    Row(
+                      children: [
+                        Expanded(child: orderInfo),
+                        const SizedBox(width: 8),
+                        roleBadge,
+                      ],
+                    ),
+                    const SizedBox(height: 9),
+                    changeInfo,
+                    const SizedBox(height: 7),
+                    _buildStatusBadge(order.status),
                   ],
-                ),
-                const SizedBox(height: 9),
-                changeInfo,
-                const SizedBox(height: 7),
-                _buildStatusBadge(order.status),
-              ],
-            );
-          }
+                );
+              }
 
-          return Row(
-            children: [
-              Expanded(flex: 2, child: orderInfo),
-              const SizedBox(width: 14),
-              Expanded(flex: 3, child: changeInfo),
-              const SizedBox(width: 14),
-              roleBadge,
-              const SizedBox(width: 12),
-              _buildStatusBadge(order.status),
-            ],
-          );
-        },
+              return Row(
+                children: [
+                  Expanded(flex: 3, child: orderInfo),
+                  const SizedBox(width: 14),
+                  Expanded(flex: 3, child: changeInfo),
+                  const SizedBox(width: 14),
+                  roleBadge,
+                  const SizedBox(width: 12),
+                  _buildStatusBadge(order.status),
+                ],
+              );
+            },
+          ),
+        ),
       ),
     );
   }
@@ -701,6 +842,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
             onChanged: (value) {
               setState(() {
                 _selectedRole = value ?? 'All';
+                _changesCache.clear();
               });
             },
           );
@@ -751,6 +893,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
             onChanged: (value) {
               setState(() {
                 _selectedEmployeeId = value;
+                _changesCache.clear();
               });
             },
           );
@@ -1549,4 +1692,5 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     );
   }
 }
+
 
