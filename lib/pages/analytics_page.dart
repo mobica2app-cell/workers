@@ -231,112 +231,65 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   String _orderKey(SAPMainOrder order) => order.id.toString().trim();
 
   void _recalculate() {
-    final ordersById = <String, SAPMainOrder>{
-      for (final order in _orders) _orderKey(order): order,
-    };
-
+    final orders = _orders;
+    final ordersById = <String, SAPMainOrder>{for (final order in orders) _orderKey(order): order};
     final approvalIds = <String>{};
     final manufacturingIds = <String>{};
-
     final approvalFactories = <String, Set<String>>{};
     final manufacturingFactories = <String, Set<String>>{};
     final approvalSales = <String, Set<String>>{};
     final manufacturingSales = <String, Set<String>>{};
-
     final approvalDates = <String, Set<String>>{};
     final manufacturingDates = <String, Set<String>>{};
 
-    for (final log in _auditLogs) {
-      final orderId = log['order_id']?.toString().trim() ?? '';
-      final status = log['new_value']?.toString().trim() ?? '';
-      final changedAt = _parseDate(log['changed_at']);
-
-      if (orderId.isEmpty ||
-          orderId == 'bulk_delete' ||
-          orderId == 'import_batch' ||
-          status.isEmpty ||
-          changedAt == null ||
-          !_inDateRange(changedAt)) {
-        continue;
-      }
-
-      final approval = _isApproval(status);
-      final manufacturing = _isManufacturing(status);
-
-      if (!approval && !manufacturing) continue;
-
-      final order = ordersById[orderId];
-      if (order == null) continue;
-
-      final isSectionApproval = approval;
-      final ids = isSectionApproval ? approvalIds : manufacturingIds;
-      final factories =
-      isSectionApproval ? approvalFactories : manufacturingFactories;
-      final sales = isSectionApproval ? approvalSales : manufacturingSales;
-      final dates = isSectionApproval ? approvalDates : manufacturingDates;
-
-      // One order is counted once per section for KPI/factory/sales totals,
-      // even if it has multiple status changes inside that section.
-      ids.add(orderId);
-
+    void addOrder(String id, SAPMainOrder order, bool approval, [DateTime? date]) {
+      final ids = approval ? approvalIds : manufacturingIds;
+      final factories = approval ? approvalFactories : manufacturingFactories;
+      final sales = approval ? approvalSales : manufacturingSales;
+      final dates = approval ? approvalDates : manufacturingDates;
+      ids.add(id);
       final factory = (order.factory ?? '').trim();
-      if (factory.isNotEmpty) {
-        factories.putIfAbsent(factory, () => <String>{}).add(orderId);
-      }
-
+      if (factory.isNotEmpty) factories.putIfAbsent(factory, () => <String>{}).add(id);
       final salesEngineer = order.salesEngineer.trim();
-      if (salesEngineer.isNotEmpty) {
-        sales.putIfAbsent(salesEngineer, () => <String>{}).add(orderId);
+      if (salesEngineer.isNotEmpty) sales.putIfAbsent(salesEngineer, () => <String>{}).add(id);
+      if (date != null) {
+        final dayKey = DateFormat('yyyy-MM-dd').format(date);
+        dates.putIfAbsent(dayKey, () => <String>{}).add(id);
       }
-
-      // For the date graph, count each order once per day per section.
-      final dayKey = DateFormat('yyyy-MM-dd').format(changedAt);
-      dates.putIfAbsent(dayKey, () => <String>{}).add(orderId);
     }
 
-    final sumValue = (Set<String> ids) => ids.fold<double>(
-      0,
-          (sum, id) => sum + (ordersById[id]?.value ?? 0),
-    );
-
-    final sumQuantity = (Set<String> ids) => ids.fold<double>(
-      0,
-          (sum, id) => sum + (ordersById[id]?.quantity ?? 0),
-    );
-
-    Map<String, int> setMapToCounts(Map<String, Set<String>> source) {
-      final result = <String, int>{};
-      for (final entry in source.entries) {
-        result[entry.key] = entry.value.length;
+    if (_startDate == null && _endDate == null) {
+      // Same source and current-status logic as Dashboard.
+      for (final order in orders) {
+        final id = _orderKey(order);
+        if (_isApproval(order.status)) addOrder(id, order, true);
+        if (_isManufacturing(order.status)) addOrder(id, order, false);
       }
-      return result;
+    } else {
+      // Same date-filter logic as Dashboard.
+      for (final log in _auditLogs) {
+        final fieldName = log['field_name']?.toString().trim() ?? '';
+        final orderId = log['order_id']?.toString().trim() ?? '';
+        final status = log['new_value']?.toString().trim() ?? '';
+        final changedAt = _parseDate(log['changed_at']);
+        if (fieldName != 'status' || orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch' || status.isEmpty || changedAt == null || !_inDateRange(changedAt)) continue;
+        final order = ordersById[orderId];
+        if (order == null || order.status.trim() != status) continue;
+        if (_isApproval(status)) addOrder(orderId, order, true, changedAt);
+        if (_isManufacturing(status)) addOrder(orderId, order, false, changedAt);
+      }
     }
 
-    Map<String, int> dateSetToCounts(Map<String, Set<String>> source) {
-      final result = <String, int>{};
-      for (final entry in source.entries) {
-        result[entry.key] = entry.value.length;
-      }
-      return Map.fromEntries(
-        result.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
-      );
+    final sumValue = (Set<String> ids) => ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.value ?? 0));
+    final sumQuantity = (Set<String> ids) => ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.quantity ?? 0));
+    Map<String, int> counts(Map<String, Set<String>> source) => {for (final e in source.entries) e.key: e.value.length};
+    Map<String, int> dateCounts(Map<String, Set<String>> source) {
+      final result = counts(source);
+      return Map.fromEntries(result.entries.toList()..sort((a, b) => a.key.compareTo(b.key)));
     }
 
+    debugPrint('[ANALYTICS] SAP orders: ${orders.length} | Approval: ${approvalIds.length} | Manufacturing: ${manufacturingIds.length} | Range: ${_dateRangeLabel()}');
     if (!mounted) return;
-
-    debugPrint('');
-    debugPrint('========== [FACTORY DEBUG - ANALYTICS DATA] ==========');
-    debugPrint(
-      '[FACTORY DEBUG - ANALYTICS DATA] Approval factories: '
-          '${approvalFactories.map((k, v) => MapEntry(k, v.length))}',
-    );
-    debugPrint(
-      '[FACTORY DEBUG - ANALYTICS DATA] Manufacturing factories: '
-          '${manufacturingFactories.map((k, v) => MapEntry(k, v.length))}',
-    );
-    debugPrint('======================================================');
-    debugPrint('');
-
     setState(() {
       _approvalOrders = approvalIds.length;
       _manufacturingOrders = manufacturingIds.length;
@@ -344,15 +297,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       _manufacturingValue = sumValue(manufacturingIds);
       _approvalQuantity = sumQuantity(approvalIds);
       _manufacturingQuantity = sumQuantity(manufacturingIds);
-
-      _approvalFactories = setMapToCounts(approvalFactories);
-      _manufacturingFactories = setMapToCounts(manufacturingFactories);
-      _approvalSales = setMapToCounts(approvalSales);
-      _manufacturingSales = setMapToCounts(manufacturingSales);
-
-      _approvalByDate = dateSetToCounts(approvalDates);
-      _manufacturingByDate = dateSetToCounts(manufacturingDates);
-
+      _approvalFactories = counts(approvalFactories);
+      _manufacturingFactories = counts(manufacturingFactories);
+      _approvalSales = counts(approvalSales);
+      _manufacturingSales = counts(manufacturingSales);
+      _approvalByDate = dateCounts(approvalDates);
+      _manufacturingByDate = dateCounts(manufacturingDates);
       _isLoading = false;
     });
   }
