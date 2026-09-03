@@ -21,7 +21,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   List<Map<String, dynamic>> _auditLogs = [];
   bool _isLoading = true;
   bool _isRestoring = false;
-
+  final ScrollController _processFlowController = ScrollController();
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8F9FA);
@@ -45,6 +45,12 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   void initState() {
     super.initState();
     _loadAuditLogs();
+  }
+
+  @override
+  void dispose() {
+    _processFlowController.dispose();
+    super.dispose();
   }
 
   Future<void> _loadAuditLogs() async {
@@ -261,7 +267,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     final statusChanges = _statusChanges;
 
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.all(36),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(12),
@@ -294,42 +300,54 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         else
         // Show real status changes from audit log
           Scrollbar(
+            controller: _processFlowController,
             thumbVisibility: true,
             trackVisibility: true,
-            notificationPredicate: (notification) => notification.depth == 0,
+            interactive: true,
             child: SingleChildScrollView(
+              controller: _processFlowController,
               scrollDirection: Axis.horizontal,
               child: Row(
-                children: List.generate(statusChanges.length + 1, (index) {
-                  final isLast = index == statusChanges.length;
+                children: List.generate(
+                  statusChanges.length + 1,
+                      (index) {
+                    final isLast = index == statusChanges.length;
 
-                  if (isLast) {
-                    // Current status (the final destination)
-                    return Row(children: [
-                      if (statusChanges.isNotEmpty)
-                        _buildConnector(isCompleted: true),
-                      _buildStepCircle(
-                        status: widget.order.status,
-                        isCompleted: false,
-                        isCurrent: true,
-                        auditLog: null,
-                      ),
-                    ]);
-                  } else {
-                    // Completed status - show the OLD value (what was completed)
-                    final audit = statusChanges[index];
-                    final completedStatus = audit['old_value']?.toString() ?? 'Unknown';
-                    return Row(children: [
-                      _buildStepCircle(
-                        status: completedStatus,
-                        isCompleted: true,
-                        isCurrent: false,
-                        auditLog: audit,
-                      ),
-                      _buildConnector(isCompleted: true),
-                    ]);
-                  }
-                }),
+                    if (isLast) {
+                      return Row(
+                        children: [
+                          if (statusChanges.isNotEmpty)
+                            _buildConnector(isCompleted: true),
+
+                          _buildStepCircle(
+                            status: widget.order.status,
+                            isCompleted: false,
+                            isCurrent: true,
+                            auditLog: null,
+                          ),
+                        ],
+                      );
+                    } else {
+                      final audit = statusChanges[index];
+                      final completedStatus =
+                          audit['old_value']?.toString() ?? 'Unknown';
+
+                      return Row(
+                        children: [
+                          _buildStepCircle(
+                            status: completedStatus,
+                            isCompleted: true,
+                            isCurrent: false,
+                            auditLog: audit,
+                          ),
+                          _buildConnector(
+                            isCompleted: true,
+                          ),
+                        ],
+                      );
+                    }
+                  },
+                ),
               ),
             ),
           ),
