@@ -3,6 +3,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mobitem/pages/analytics_page.dart';
+import 'package:mobitem/pages/employee_tracking_page.dart';
 import 'package:mobitem/pages/profile_page.dart';
 import 'package:universal_html/html.dart' as html;
 
@@ -110,6 +111,11 @@ class _MainShellState extends State<MainShell> {
       icon: Icons.business_outlined,
       activeIcon: Icons.business,
       label: 'Departments',
+    ),
+    _NavItem(
+      icon: Icons.people_alt_outlined,
+      activeIcon: Icons.people_alt,
+      label: 'employees',
     ),
     _NavItem(
       icon: Icons.person_outline,
@@ -1188,6 +1194,9 @@ class _MainShellState extends State<MainShell> {
           return const DepartmentTrackingPage();
 
         case 4:
+          return const EmployeeTrackingPage();
+
+        case 5:
           return ProfilePage(
             employee:
             widget.loggedInEmployee,

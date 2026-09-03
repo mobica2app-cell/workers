@@ -60,6 +60,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
   List<EmployeeAuth> _allEmployees = [];
 
+  // Factory/SLoc descriptions loaded from Supabase `factory_names`.
+  // Key = SLoc/factory code, Value = description.
+  Map<String, String> _factoryDescriptions = {};
+
   // Selection
   final Set<String> _selectedRowsIds = {};
 
@@ -568,7 +572,12 @@ class _OrdersPageState extends State<OrdersPage> {
   void initState() {
     super.initState();
     _loadStatusesFromStorage();
-    _loadAllDataOnce();
+    _initializePageData();
+  }
+
+  Future<void> _initializePageData() async {
+    await _loadFactoryNames();
+    await _loadAllDataOnce();
   }
 
   @override
@@ -1328,6 +1337,17 @@ class _OrdersPageState extends State<OrdersPage> {
       ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
+    // Responsible Engineer cannot be cleared on a normal order.
+    // The exception is based on the order's CURRENT status.
+    if (field == 'responsible_engineer' &&
+        (newValue == null || newValue.trim().isEmpty) &&
+        _statusRequiresResponsibleEngineer(order.status)) {
+      _showYellowWarning(
+        '⚠️ Responsible Engineer cannot be empty for this order.',
+      );
+      return;
+    }
+
     if (_isOrderLocked(order)) {
       _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
       return;
@@ -2015,8 +2035,27 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // A Responsible Engineer is required for manual status changes
+  // UNLESS the order is ALREADY in Imported or Automated status.
+  //
+  // IMPORTANT:
+  // We check the CURRENT/OLD status of the order, not the new status.
+  // Therefore:
+  //   Imported -> Drawing Submittal    = allowed without Responsible Engineer
+  //   Automated -> Approval            = allowed without Responsible Engineer
+  //   Tasks -> Imported                = Responsible Engineer REQUIRED
+  //   Tasks -> Automated               = Responsible Engineer REQUIRED
+  bool _statusRequiresResponsibleEngineer(String currentStatus) {
+    final normalized = currentStatus.trim().toLowerCase();
+    return normalized != 'imported' && normalized != 'automated';
+  }
+
+  bool _hasResponsibleEngineer(SAPMainOrder order) {
+    return order.responsibleEngineer != null &&
+        order.responsibleEngineer!.trim().isNotEmpty;
+  }
+
   // Update order status with audit
-// Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
 
     if (newStatus.trim().toLowerCase() == 'planning' &&
@@ -2027,21 +2066,20 @@ class _OrdersPageState extends State<OrdersPage> {
 
     final oldStatus = order.status;
 
-    // Check if trying to change to a locked status
-    final lockedStatuses = ['Done', 'Task Done', 'Planning'];
-    final isChangingToLocked = lockedStatuses.any((s) => s.toLowerCase() == newStatus.toLowerCase());
+    // Responsible Engineer is required unless the order is ALREADY
+    // Imported or Automated. The exception is based on the CURRENT status,
+    // not on the status we are changing TO.
+    final requiresResponsibleEngineer =
+    _statusRequiresResponsibleEngineer(order.status);
 
-    // If changing to locked status, check if responsible engineer is assigned
-    if (isChangingToLocked) {
-      final hasResponsibleEngineer = order.responsibleEngineer != null &&
-          order.responsibleEngineer!.isNotEmpty;
-
-      if (!hasResponsibleEngineer) {
-        _showYellowWarning('⚠️ To change to "$newStatus", you must assign a Responsible Engineer first');
-        return;
-      }
+    if (requiresResponsibleEngineer && !_hasResponsibleEngineer(order)) {
+      _showYellowWarning(
+        '⚠️ To change status to "$newStatus", you must assign a Responsible Engineer first',
+      );
+      return;
     }
 
+    // Keep the old locked-status behavior for the current order.
     // Check if current status is locked (cannot change FROM locked)
     if (_isOrderLocked(order)) {
       _showYellowWarning('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
@@ -2067,14 +2105,16 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
-          // Check if changing to locked status without responsible engineer
-          if (isChangingToLocked) {
-            final hasRespEng = selectedOrder.responsibleEngineer != null &&
-                selectedOrder.responsibleEngineer!.isNotEmpty;
-            if (!hasRespEng) {
-              missingEngineer++;
-              continue;
-            }
+          // Check the CURRENT status of each selected order.
+          // Imported/Automated orders are exempt; changing TO Imported/Automated
+          // does not create an exemption.
+          final selectedRequiresResponsibleEngineer =
+          _statusRequiresResponsibleEngineer(selectedOrder.status);
+
+          if (selectedRequiresResponsibleEngineer &&
+              !_hasResponsibleEngineer(selectedOrder)) {
+            missingEngineer++;
+            continue;
           }
 
           try {
@@ -2104,7 +2144,7 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = false);
 
       if (missingEngineer > 0) {
-        _showSnackBar('⚠️ $missingEngineer order(s) need Responsible Engineer assigned to change to "$newStatus". ✅ $updated updated, ⚠️ $skipped locked skipped');
+        _showSnackBar('⚠️ $missingEngineer order(s) have no Responsible Engineer and were not changed to "$newStatus". ✅ $updated updated, ⚠️ $skipped locked skipped');
       } else if (skipped > 0) {
         _showSnackBar('✅ Status updated for $updated rows, ⚠️ $skipped locked rows skipped');
       } else {
@@ -2428,6 +2468,239 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
+  // Load factory/SLoc descriptions from Supabase.
+  Future<void> _loadFactoryNames() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('factory_names')
+          .select('s_loc, description');
+
+      final descriptions = <String, String>{};
+
+      for (final row in response) {
+        final code = row['s_loc']?.toString().trim() ?? '';
+        final description = row['description']?.toString().trim() ?? '';
+
+        if (code.isNotEmpty) {
+          // Keep the factory code even when its description is empty.
+          // Normalize whitespace/case so SAP values like " F001 " still match.
+          descriptions[code.trim().toLowerCase()] = description.trim();
+        }
+      }
+
+      if (mounted) {
+        setState(() {
+          _factoryDescriptions = descriptions;
+        });
+      } else {
+        _factoryDescriptions = descriptions;
+      }
+    } catch (e) {
+      print('Error loading factory names: $e');
+    }
+  }
+
+  // Display factory code with its description:
+  // F001 (Melamine Store.)
+  // If no description exists, display only:
+  // F001
+  String _formatFactoryLabel(String code) {
+    final trimmedCode = code.trim();
+    if (trimmedCode.isEmpty) return trimmedCode;
+
+    final normalizedCode = trimmedCode.toLowerCase();
+    final description = _factoryDescriptions[normalizedCode]?.trim() ?? '';
+
+    if (description.isEmpty) {
+      return trimmedCode;
+    }
+
+    return '$trimmedCode ($description)';
+  }
+
+  // Search for a factory/SLoc by its code and apply it as the factory filter.
+  Future<void> _showFactorySearchDialog() async {
+    final controller = TextEditingController();
+    List<Map<String, dynamic>> results = [];
+
+    Future<void> searchFactories(StateSetter setDlg, String query) async {
+      final q = query.trim().toLowerCase();
+
+      if (q.isEmpty) {
+        setDlg(() => results = []);
+        return;
+      }
+
+      // Search the already-loaded factory_names data first. This makes the
+      // factory search work immediately and avoids depending on a remote
+      // ilike query for every keystroke.
+      if (_factoryDescriptions.isEmpty) {
+        await _loadFactoryNames();
+      }
+
+      final localResults = <Map<String, dynamic>>[];
+      for (final entry in _factoryDescriptions.entries) {
+        final code = entry.key.trim();
+        final description = entry.value.trim();
+
+        if (code.contains(q)) {
+          localResults.add({
+            's_loc': code,
+            'description': description,
+          });
+        }
+      }
+
+      localResults.sort(
+            (a, b) => a['s_loc'].toString().compareTo(b['s_loc'].toString()),
+      );
+
+      setDlg(() {
+        results = localResults.take(100).toList();
+      });
+    }
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDlg) {
+          return AlertDialog(
+            title: Row(
+              children: [
+                Icon(
+                  Icons.factory_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 22,
+                ),
+                const SizedBox(width: 8),
+                Text(
+                  'Search Factory',
+                  style: GoogleFonts.cairo(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 18,
+                  ),
+                ),
+              ],
+            ),
+            content: SizedBox(
+              width: 480,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    style: GoogleFonts.cairo(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: 'Factory Code',
+                      hintText: 'e.g. F001, R001, SB01',
+                      prefixIcon: const Icon(Icons.search, size: 20),
+                      suffixIcon: controller.text.isNotEmpty
+                          ? IconButton(
+                        icon: const Icon(Icons.clear, size: 18),
+                        onPressed: () {
+                          controller.clear();
+                          setDlg(() => results = []);
+                        },
+                      )
+                          : null,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    onChanged: (value) {
+                      setDlg(() {});
+                      searchFactories(setDlg, value);
+                    },
+                    onSubmitted: (value) {
+                      searchFactories(setDlg, value);
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  if (results.isNotEmpty)
+                    ConstrainedBox(
+                      constraints: const BoxConstraints(maxHeight: 320),
+                      child: ListView.separated(
+                        shrinkWrap: true,
+                        itemCount: results.length,
+                        separatorBuilder: (_, __) =>
+                            Divider(color: _borderColor, height: 1),
+                        itemBuilder: (context, index) {
+                          final row = results[index];
+                          final code = row['s_loc']?.toString().trim() ?? '';
+                          final description =
+                              row['description']?.toString().trim() ?? '';
+
+                          return ListTile(
+                            dense: true,
+                            leading: Icon(
+                              Icons.factory_outlined,
+                              size: 19,
+                              color: _secondaryTextColor,
+                            ),
+                            title: Text(
+                              code,
+                              style: GoogleFonts.cairo(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w700,
+                                color: _textColor,
+                              ),
+                            ),
+                            subtitle: description.isNotEmpty
+                                ? Text(
+                              description,
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                color: _secondaryTextColor,
+                              ),
+                            )
+                                : null,
+                          );
+                        },
+                      ),
+                    )
+                  else if (controller.text.trim().isNotEmpty)
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'No factory found',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Text(
+                        'Enter a factory code to search',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                    ),
+                ],
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: Text(
+                  'Close',
+                  style: GoogleFonts.cairo(),
+                ),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    controller.dispose();
+  }
+
   void _showFilterDialog() {
     String? tempStatus = _filterStatus;
     String? tempFactory = _filterFactory;
@@ -2602,7 +2875,10 @@ class _OrdersPageState extends State<OrdersPage> {
                             child: _buildFilterDropdown(
                               'Factory (${factories.length})',
                               tempFactory,
-                              ['All', ...factories.toList()..sort()],
+                              [
+                                'All',
+                                ...factories.toList()..sort(),
+                              ],
                                   (v) => setDlg(() => tempFactory = v),
                             ),
                           ),
@@ -2812,7 +3088,11 @@ class _OrdersPageState extends State<OrdersPage> {
             (s) => DropdownMenuItem(
           value: s == 'All' ? null : s,
           child: Text(
-            s == 'All' ? 'All' : s,
+            s == 'All'
+                ? 'All'
+                : label.startsWith('Factory ')
+                ? _formatFactoryLabel(s)
+                : s,
             style: GoogleFonts.cairo(fontSize: 12),
             overflow: TextOverflow.ellipsis,
           ),
@@ -2956,6 +3236,10 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
           const SizedBox(width: 8),
 
+          // Factory/SLoc search - directly to the left of Employee Management.
+          _buildIconBtn(Icons.factory_outlined, _showFactorySearchDialog),
+          const SizedBox(width: 4),
+
           // Only show people icon for admin/head users
           if (isAdmin)
             _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
@@ -3022,20 +3306,6 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ),
           itemBuilder: (context) => [
-            PopupMenuItem<String>(
-              value: '',
-              child: Row(
-                children: [
-                  const Icon(Icons.clear, size: 14, color: Colors.red),
-                  const SizedBox(width: 8),
-                  Text(
-                    'Clear',
-                    style: GoogleFonts.cairo(fontSize: 12, color: Colors.red),
-                  ),
-                ],
-              ),
-            ),
-            const PopupMenuDivider(),
             ..._allEmployees.map((emp) {
               final isSelected = currentValue == emp.fullName;
               return PopupMenuItem<String>(
@@ -5243,3 +5513,5 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
     );
   }
 }
+
+

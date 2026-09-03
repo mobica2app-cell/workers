@@ -1133,7 +1133,7 @@ class _DashboardPageState extends State<DashboardPage> {
               // Approach Column
               Expanded(
                 child: _buildComparisonColumn(
-                  title: 'Approach',
+                  title: 'Approval',
                   icon: Icons.design_services,
                   color: Colors.purple,
                   orderCount: _approachOrders.length,
