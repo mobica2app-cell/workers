@@ -236,7 +236,6 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   static const List<String> _defaultStatuses = [
-    "automated",
     'Drawing Submittal',
     'Approval',
     'modifications submitted',
@@ -256,6 +255,8 @@ class _OrdersPageState extends State<OrdersPage> {
     'design studio',
     'imported',
     'ادارة تصميم المنتجات',
+    'automated',
+    'triformal'
   ];
 
   static const List<String> _allTeamStatuses = [

@@ -19,22 +19,15 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   List<Map<String, dynamic>> _allExcelData = [];
   List<Map<String, dynamic>> _newRecords = [];
   List<Map<String, dynamic>> _duplicateRecords = [];
-  bool _importDuplicates = false; // New flag
 
   // Per-row dates (3 dates)
   final Map<int, DateTime?> _rowOrderDates = {};
   final Map<int, DateTime?> _rowEndDates = {};
   final Map<int, DateTime?> _rowDeliveryDates = {};
 
-  // Bulk dates
-  DateTime? _bulkOrderDate;
-  DateTime? _bulkEndDate;
-  DateTime? _bulkDeliveryDate;
-
   // Status
   String _defaultStatus = 'Tasks';
   final Map<int, String> _rowStatuses = {};
-
   bool _isLoading = false;
   bool _fileLoaded = false;
   String? _fileName;
@@ -42,26 +35,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   int _newRows = 0;
   int _duplicateRows = 0;
   int _selectedTab = 0;
-
-  static const List<String> _sections = [
-    'Drawing Submittal',
-    'Approval',
-    'modifications submitted',
-    'Manufacturing Drawing',
-    'Done',
-    'مطلوب اكوادها الاسترشاديه',
-    'تحت المراجعة',
-    'Review',
-    'Master Data',
-    'Sales',
-    'As Built',
-    'Tasks',
-    'planning',
-    'partation  master data',
-    'الادارة الهندسه',
-    'design studio',
-    'Unknown',
-  ];
 
   static const Color primaryColor = Color(0xFF0F172A);
   static const Color greenColor = Color(0xFF059669);
@@ -236,25 +209,40 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
 
   Future<void> _checkDuplicates() async {
     final supabase = Supabase.instance.client;
+
+    // Duplicate = same CONTRACT NUMBER + ITEM NUMBER.
     final existingData = await supabase
         .from('sap_main_orders')
-        .select('design_order, item_number');
+        .select('contract_number, item_number');
+
+    String normalize(dynamic value) => value?.toString().trim().toLowerCase() ?? '';
 
     final existingKeys = <String>{};
-    for (var row in existingData) {
-      existingKeys.add('${row['design_order']}_${row['item_number']}');
+    for (final row in existingData) {
+      final contract = normalize(row['contract_number']);
+      final item = normalize(row['item_number']);
+      if (contract.isNotEmpty && item.isNotEmpty) existingKeys.add('$contract|$item');
     }
 
     _newRecords = [];
     _duplicateRecords = [];
-    for (var record in _allExcelData) {
-      final key = '${record['design_order']}_${record['item_number']}';
-      if (existingKeys.contains(key)) {
+    final fileKeys = <String>{};
+
+    for (final record in _allExcelData) {
+      final contract = normalize(record['contract_number']);
+      final item = normalize(record['item_number']);
+      final key = '$contract|$item';
+      final alreadyInOrders = contract.isNotEmpty && item.isNotEmpty && existingKeys.contains(key);
+      final duplicateInFile = contract.isNotEmpty && item.isNotEmpty && fileKeys.contains(key);
+
+      if (alreadyInOrders || duplicateInFile) {
         _duplicateRecords.add(record);
       } else {
         _newRecords.add(record);
+        if (contract.isNotEmpty && item.isNotEmpty) fileKeys.add(key);
       }
     }
+
     _newRows = _newRecords.length;
     _duplicateRows = _duplicateRecords.length;
   }
@@ -280,13 +268,13 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   }
 
   Future<void> _importRecords() async {
-    // Determine records to import based on _importDuplicates flag
-    final recordsToImport = _importDuplicates
-        ? _allExcelData
-        : _newRecords;
+    // Duplicates are always skipped; no confirmation dialog is shown.
+    final recordsToImport = _newRecords;
 
     if (recordsToImport.isEmpty) {
-      _showMessage('No records to import');
+      _showMessage(_duplicateRows > 0
+          ? 'All records are duplicates. Nothing was imported.'
+          : 'No records to import');
       return;
     }
 
@@ -359,7 +347,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               _buildResultRow('Imported:', '$imported', greenColor),
               const SizedBox(height: 4),
               _buildResultRow('Failed:', '$failed', failed > 0 ? redColor : Colors.grey),
-              if (_duplicateRows > 0 && !_importDuplicates) ...[
+              if (_duplicateRows > 0) ...[
                 const SizedBox(height: 4),
                 _buildResultRow('Duplicates skipped:', '$_duplicateRows', orangeColor),
               ],
@@ -381,82 +369,6 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         ),
       );
     }
-  }
-
-  void _showDuplicateWarning() {
-    // If no duplicates, import directly
-    if (_duplicateRows == 0) {
-      _importRecords();
-      return;
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Row(
-          children: [
-            Icon(Icons.warning_amber, color: orangeColor, size: 28),
-            const SizedBox(width: 8),
-            Text(
-              'Duplicate Records Detected',
-              style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'Found $_duplicateRows duplicate record(s) in your file.',
-              style: GoogleFonts.cairo(fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: orangeColor.withOpacity(0.05),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(color: orangeColor.withOpacity(0.2)),
-              ),
-              child: Row(
-                children: [
-                  Icon(Icons.info_outline, color: orangeColor, size: 20),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text(
-                      'Do you want to import duplicates anyway?',
-                      style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: orangeColor),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Import only new records
-              setState(() => _importDuplicates = false);
-              _importRecords();
-            },
-            child: Text('Skip Duplicates', style: GoogleFonts.cairo()),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(ctx);
-              // Import everything including duplicates
-              setState(() => _importDuplicates = true);
-              _importRecords();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: orangeColor),
-            child: Text('Import All', style: GoogleFonts.cairo(color: Colors.white)),
-          ),
-        ],
-      ),
-    );
   }
 
   void _showMessage(String message) {
@@ -964,7 +876,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           const SizedBox(width: 12),
           ElevatedButton.icon(
             onPressed: (_fileLoaded && _allExcelData.isNotEmpty)
-                ? _showDuplicateWarning
+                ? _importRecords
                 : null,
             icon: const Icon(Icons.upload, size: 18),
             label: Text(
