@@ -57,7 +57,6 @@ class _OrdersPageState extends State<OrdersPage> {
   final ScrollController _leftVerticalScrollController = ScrollController();
   final ScrollController _rightVerticalScrollController = ScrollController();
   bool _isSyncing = false;
-
   List<EmployeeAuth> _allEmployees = [];
 
   // Factory/SLoc descriptions loaded from Supabase `factory_names`.
@@ -257,6 +256,8 @@ class _OrdersPageState extends State<OrdersPage> {
     'ادارة تصميم المنتجات',
     'automated',
     'triorma'
+    'Editing'
+    'Suspended'
   ];
 
   static const List<String> _allTeamStatuses = [
@@ -590,7 +591,7 @@ class _OrdersPageState extends State<OrdersPage> {
     super.dispose();
   }
 
-  bool get _canSendToPlanning {
+  bool get _isHedOrManager {
     final role = widget.loggedInEmployee?.role?.trim().toLowerCase() ?? '';
 
     return role == 'head' ||
@@ -2060,7 +2061,7 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
 
     if (newStatus.trim().toLowerCase() == 'planning' &&
-        !_canSendToPlanning) {
+        !_isHedOrManager) {
       _showYellowWarning('Sorry, only Head and Team Leader can send orders to Planning.');
       return;
     }
@@ -2456,9 +2457,9 @@ class _OrdersPageState extends State<OrdersPage> {
     ).then((_) => _loadAllDataOnce());
   }
 
-  // Navigate to OrderTrackingPage (admin only)
+  // Navigate to OrderTrackingPage (admin and managers only)
   void _navigateToOrderTracking(SAPMainOrder order) {
-    if (_isAdmin) {
+    if (_isHedOrManager) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
