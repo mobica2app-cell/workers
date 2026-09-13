@@ -157,14 +157,19 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
 
       if (h == 'name' || h.contains('customer')) {
         columnMap['customer_name'] = i;
+      } else if (h.contains('contract') || h.contains('contract number')) {
+        columnMap['contract_number'] = i;
+      } else if (h == 'item' ||
+          h.contains('item number') ||
+          h.contains('item_number') ||
+          h.contains('item no') ||
+          h.contains('item no.') ||
+          h.contains('بند')) {
+        columnMap['item_number'] = i;
       } else if (h.contains('design') || h.contains('order')) {
         columnMap['design_order'] = i;
       } else if (h.contains('value') || h.contains('قيمة')) {
         columnMap['value'] = i;
-      } else if (h.contains('contract')) {
-        columnMap['contract_number'] = i;
-      } else if (h == 'item' || h.contains('بند')) {
-        columnMap['item_number'] = i;
       } else if (h.contains('product') || h.contains('منتج')) {
         columnMap['product_code'] = i;
       } else if (h.contains('description') || h.contains('وصف')) {
@@ -207,44 +212,110 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     return result;
   }
 
-  Future<void> _checkDuplicates() async {
+  String _normalizeDuplicateValue(dynamic value) {
+    if (value == null) return '';
+    var text = value.toString().trim().toLowerCase();
+
+    // Excel can turn numeric values such as 12345 into 12345.0.
+    if (RegExp(r'^\d+\.0+$').hasMatch(text)) {
+      text = text.split('.').first;
+    }
+
+    // Ignore formatting differences between Excel and Supabase.
+    text = text.replaceAll(RegExp(r'[\s_\-]'), '');
+    return text;
+  }
+
+  String _duplicateKey(String? contract, String? item) {
+    return '${_normalizeDuplicateValue(contract)}|${_normalizeDuplicateValue(item)}';
+  }
+
+  Future<Set<String>> _loadExistingContractItemKeys() async {
     final supabase = Supabase.instance.client;
+    const pageSize = 1000;
+    const maxRows = 100000;
 
-    // Duplicate = same CONTRACT NUMBER + ITEM NUMBER.
-    final existingData = await supabase
-        .from('sap_main_orders')
-        .select('contract_number, item_number');
+    final keys = <String>{};
+    var start = 0;
 
-    String normalize(dynamic value) => value?.toString().trim().toLowerCase() ?? '';
+    while (start < maxRows) {
+      final end = (start + pageSize - 1).clamp(0, maxRows - 1);
 
-    final existingKeys = <String>{};
-    for (final row in existingData) {
-      final contract = normalize(row['contract_number']);
-      final item = normalize(row['item_number']);
-      if (contract.isNotEmpty && item.isNotEmpty) existingKeys.add('$contract|$item');
-    }
+      final rows = await supabase
+          .from('sap_main_orders')
+          .select('contract_number, item_number')
+          .order('id', ascending: true)
+          .range(start, end);
 
-    _newRecords = [];
-    _duplicateRecords = [];
-    final fileKeys = <String>{};
+      final page = List<Map<String, dynamic>>.from(
+        (rows as List).map((e) => Map<String, dynamic>.from(e)),
+      );
 
-    for (final record in _allExcelData) {
-      final contract = normalize(record['contract_number']);
-      final item = normalize(record['item_number']);
-      final key = '$contract|$item';
-      final alreadyInOrders = contract.isNotEmpty && item.isNotEmpty && existingKeys.contains(key);
-      final duplicateInFile = contract.isNotEmpty && item.isNotEmpty && fileKeys.contains(key);
+      for (final row in page) {
+        final key = _duplicateKey(
+          row['contract_number'],
+          row['item_number'],
+        );
 
-      if (alreadyInOrders || duplicateInFile) {
-        _duplicateRecords.add(record);
-      } else {
-        _newRecords.add(record);
-        if (contract.isNotEmpty && item.isNotEmpty) fileKeys.add(key);
+        // Only a valid contract + item pair is a duplicate key.
+        if (key != '|') {
+          keys.add(key);
+        }
       }
+
+      if (page.length < pageSize) break;
+      start += pageSize;
     }
 
-    _newRows = _newRecords.length;
-    _duplicateRows = _duplicateRecords.length;
+    debugPrint(
+      'DUPLICATE CHECK: loaded ${keys.length} existing contract+item pairs',
+    );
+
+    return keys;
+  }
+
+  Future<void> _checkDuplicates() async {
+    try {
+      final existingKeys = await _loadExistingContractItemKeys();
+
+      _newRecords = [];
+      _duplicateRecords = [];
+
+      // Also prevent duplicate contract+item pairs inside the same Excel file.
+      final excelKeys = <String>{};
+
+      for (final record in _allExcelData) {
+        final contract = record['contract_number'];
+        final item = record['item_number'];
+        final key = _duplicateKey(contract, item);
+
+        debugPrint(
+          'EXCEL ROW -> contract="$contract", item="$item", key="$key"',
+        );
+
+        final alreadyInDatabase =
+            key != '|' && existingKeys.contains(key);
+        final repeatedInExcel =
+            key != '|' && !excelKeys.add(key);
+
+        if (alreadyInDatabase || repeatedInExcel) {
+          _duplicateRecords.add(record);
+        } else {
+          _newRecords.add(record);
+        }
+      }
+
+      _newRows = _newRecords.length;
+      _duplicateRows = _duplicateRecords.length;
+
+      debugPrint(
+        'DUPLICATE CHECK RESULT: new=$_newRows, duplicates=$_duplicateRows',
+      );
+    } catch (e, stackTrace) {
+      debugPrint('DUPLICATE CHECK ERROR: $e');
+      debugPrint('$stackTrace');
+      rethrow;
+    }
   }
 
   Future<void> _pickDateForRow(int index, String field) async {
@@ -268,21 +339,53 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   }
 
   Future<void> _importRecords() async {
-    // Duplicates are always skipped; no confirmation dialog is shown.
-    final recordsToImport = _newRecords;
+    // ALWAYS import only records whose contract+item pair is new.
+    final recordsToImport = List<Map<String, dynamic>>.from(_newRecords);
 
     if (recordsToImport.isEmpty) {
-      _showMessage(_duplicateRows > 0
-          ? 'All records are duplicates. Nothing was imported.'
-          : 'No records to import');
+      _showMessage('No records to import');
       return;
     }
 
     setState(() => _isLoading = true);
+
+    // FINAL DATABASE CHECK: never insert an existing contract+item pair.
+    final existingKeys = await _loadExistingContractItemKeys();
+    final safeRecordsToImport = recordsToImport.where((record) {
+      final key = _duplicateKey(
+        record['contract_number'],
+        record['item_number'],
+      );
+      return key != '|' && !existingKeys.contains(key);
+    }).toList();
+
+    final finalDuplicateCount =
+        recordsToImport.length - safeRecordsToImport.length;
+
+    if (finalDuplicateCount > 0) {
+      _duplicateRecords.addAll(
+        recordsToImport.where((record) {
+          final key = _duplicateKey(
+            record['contract_number'],
+            record['item_number'],
+          );
+          return key != '|' && existingKeys.contains(key);
+        }),
+      );
+      _duplicateRows = _duplicateRecords.length;
+      _newRecords = safeRecordsToImport;
+      _newRows = _newRecords.length;
+    }
+
+    if (safeRecordsToImport.isEmpty) {
+      setState(() => _isLoading = false);
+      _showMessage('No new contract + item pairs to import');
+      return;
+    }
     final supabase = Supabase.instance.client;
     int imported = 0, failed = 0;
 
-    final enrichedRecords = recordsToImport.map((record) {
+    final enrichedRecords = safeRecordsToImport.map((record) {
       final globalIndex = _allExcelData.indexOf(record);
       return {
         'status': 'imported',
@@ -369,6 +472,11 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         ),
       );
     }
+  }
+
+  void _showDuplicateWarning() {
+    // Duplicates are never imported and the user is not asked.
+    _importRecords();
   }
 
   void _showMessage(String message) {
@@ -876,7 +984,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           const SizedBox(width: 12),
           ElevatedButton.icon(
             onPressed: (_fileLoaded && _allExcelData.isNotEmpty)
-                ? _importRecords
+                ? _showDuplicateWarning
                 : null,
             icon: const Icon(Icons.upload, size: 18),
             label: Text(
@@ -900,6 +1008,5 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     );
   }
 }
-
 
 

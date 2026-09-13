@@ -256,7 +256,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'imported',
     'ادارة تصميم المنتجات',
     'automated',
-    'triformal'
+    'triorma'
   ];
 
   static const List<String> _allTeamStatuses = [
@@ -5514,5 +5514,4 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
     );
   }
 }
-
 
