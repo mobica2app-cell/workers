@@ -236,8 +236,8 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   static const List<String> _defaultStatuses = [
-    "automated"
-        'Drawing Submittal',
+    "automated",
+    'Drawing Submittal',
     'Approval',
     'modifications submitted',
     'Manufacturing Drawing',
