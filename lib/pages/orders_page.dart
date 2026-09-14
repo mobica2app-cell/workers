@@ -4793,7 +4793,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
             // Add tracking icon for admin users
-            if (_isHedOrManager)
+            if (_isHedOrManager&&!_isDataEntry)
               SizedBox(
                 width: 36,
                 child: IconButton(
