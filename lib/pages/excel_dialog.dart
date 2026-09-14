@@ -9,6 +9,7 @@ import 'package:universal_html/html.dart' as html;
 class ImportExcelDialog extends StatefulWidget {
   final VoidCallback onImportComplete;
 
+
   const ImportExcelDialog({super.key, required this.onImportComplete});
 
   @override
@@ -19,6 +20,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   List<Map<String, dynamic>> _allExcelData = [];
   List<Map<String, dynamic>> _newRecords = [];
   List<Map<String, dynamic>> _duplicateRecords = [];
+  bool _importDuplicates = false;
 
   // Per-row dates (3 dates)
   final Map<int, DateTime?> _rowOrderDates = {};
@@ -35,6 +37,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   int _newRows = 0;
   int _duplicateRows = 0;
   int _selectedTab = 0;
+  final ScrollController _horizontalScrollController = ScrollController();
 
   static const Color primaryColor = Color(0xFF0F172A);
   static const Color greenColor = Color(0xFF059669);
@@ -363,7 +366,9 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
 
   Future<void> _importRecords() async {
     // ALWAYS import only records whose contract+item pair is new.
-    final recordsToImport = List<Map<String, dynamic>>.from(_newRecords);
+    final recordsToImport = _importDuplicates
+        ? List<Map<String, dynamic>>.from(_allExcelData)
+        : List<Map<String, dynamic>>.from(_newRecords);
 
     if (recordsToImport.isEmpty) {
       _showMessage('No records to import');
@@ -372,33 +377,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
 
     setState(() => _isLoading = true);
 
-    // FINAL DATABASE CHECK: never insert an existing contract+item pair.
-    final existingKeys = await _loadExistingContractItemKeys();
-    final safeRecordsToImport = recordsToImport.where((record) {
-      final key = _duplicateKey(
-        record['contract_number'],
-        record['item_number'],
-      );
-      return key != '|' && !existingKeys.contains(key);
-    }).toList();
-
-    final finalDuplicateCount =
-        recordsToImport.length - safeRecordsToImport.length;
-
-    if (finalDuplicateCount > 0) {
-      _duplicateRecords.addAll(
-        recordsToImport.where((record) {
-          final key = _duplicateKey(
-            record['contract_number'],
-            record['item_number'],
-          );
-          return key != '|' && existingKeys.contains(key);
-        }),
-      );
-      _duplicateRows = _duplicateRecords.length;
-      _newRecords = safeRecordsToImport;
-      _newRows = _newRecords.length;
-    }
+    // If duplicates were NOT approved, never insert them.
+    final safeRecordsToImport = _importDuplicates
+        ? recordsToImport
+        : recordsToImport;
 
     if (safeRecordsToImport.isEmpty) {
       setState(() => _isLoading = false);
@@ -438,7 +420,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         'responsible_engineer':
         _isHeaderItem(record['item_number']) ? 'header' : null,
         'reviewer': null,
-          'correspondence_engineer': null,
+        'correspondence_engineer': null,
       };
     }).toList();
 
@@ -501,8 +483,56 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   }
 
   void _showDuplicateWarning() {
-    // Duplicates are never imported and the user is not asked.
-    _importRecords();
+    if (_duplicateRows == 0) {
+      _importDuplicates = false;
+      _importRecords();
+      return;
+    }
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.warning_amber_rounded, color: orangeColor, size: 28),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                'Duplicate Records Found',
+                style: GoogleFonts.cairo(fontWeight: FontWeight.w700),
+              ),
+            ),
+          ],
+        ),
+        content: Text(
+          '$_duplicateRows record(s) already exist with the same Contract Number + Item Number.\n\nDo you want to import the duplicates anyway?',
+          style: GoogleFonts.cairo(fontSize: 14),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _importDuplicates = false;
+              _importRecords();
+            },
+            child: Text('Skip Duplicates', style: GoogleFonts.cairo()),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(ctx);
+              _importDuplicates = true;
+              _importRecords();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: orangeColor),
+            child: Text(
+              'Import Duplicates',
+              style: GoogleFonts.cairo(color: Colors.white),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showMessage(String message) {
@@ -806,111 +836,119 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       );
     }
 
-    return SingleChildScrollView(
-      scrollDirection: Axis.horizontal,
-      child: SizedBox(
-        width: 1600,
-        child: Column(
-          children: [
-            Container(
-              height: 36,
-              decoration: const BoxDecoration(
-                color: Color(0xFFF1F5F9),
-                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+    return Scrollbar(
+      controller: _horizontalScrollController,
+      thumbVisibility: true,
+      trackVisibility: true,
+      notificationPredicate: (notification) =>
+      notification.metrics.axis == Axis.horizontal,
+      child: SingleChildScrollView(
+        controller: _horizontalScrollController,
+        scrollDirection: Axis.horizontal,
+        child: SizedBox(
+          width: 1600,
+          child: Column(
+            children: [
+              Container(
+                height: 36,
+                decoration: const BoxDecoration(
+                  color: Color(0xFFF1F5F9),
+                  border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
+                ),
+                child: Row(
+                  children: [
+                    _previewHeaderCell('Status', 110),
+                    _previewHeaderCell('Name', 140),
+                    _previewHeaderCell('Design Order', 100),
+                    _previewHeaderCell('Contract', 100),
+                    _previewHeaderCell('Item', 60),
+                    _previewHeaderCell('Product Code', 120),
+                    _previewHeaderCell('Description', 200),
+                    _previewHeaderCell('QTY', 50),
+                    _previewHeaderCell('Unit', 40),
+                    _previewHeaderCell('Value', 90),
+                    _previewHeaderCell('Sales Eng.', 130),
+                    _previewHeaderCell('Factory', 60),
+                    _previewHeaderCell('Order Date', 110),
+                    _previewHeaderCell('End Date', 110),
+                    _previewHeaderCell('Delivery Date', 110),
+                  ],
+                ),
               ),
-              child: Row(
-                children: [
-                  _previewHeaderCell('Status', 110),
-                  _previewHeaderCell('Name', 140),
-                  _previewHeaderCell('Design Order', 100),
-                  _previewHeaderCell('Contract', 100),
-                  _previewHeaderCell('Item', 60),
-                  _previewHeaderCell('Product Code', 120),
-                  _previewHeaderCell('Description', 200),
-                  _previewHeaderCell('QTY', 50),
-                  _previewHeaderCell('Unit', 40),
-                  _previewHeaderCell('Value', 90),
-                  _previewHeaderCell('Sales Eng.', 130),
-                  _previewHeaderCell('Factory', 60),
-                  _previewHeaderCell('Order Date', 110),
-                  _previewHeaderCell('End Date', 110),
-                  _previewHeaderCell('Delivery Date', 110),
-                ],
-              ),
-            ),
-            Expanded(
-              child: ListView.builder(
-                itemCount: displayData.length > 100 ? 100 : displayData.length,
-                itemBuilder: (context, rowIndex) {
-                  final record = displayData[rowIndex];
-                  final globalIndex = _allExcelData.indexOf(record);
-                  final orderDate = _rowOrderDates[globalIndex];
-                  final endDate = _rowEndDates[globalIndex];
-                  final deliveryDate = _rowDeliveryDates[globalIndex];
+              Expanded(
+                child: ListView.builder(
+                  itemCount: displayData.length > 100 ? 100 : displayData.length,
+                  itemBuilder: (context, rowIndex) {
+                    final record = displayData[rowIndex];
+                    final globalIndex = _allExcelData.indexOf(record);
+                    final orderDate = _rowOrderDates[globalIndex];
+                    final endDate = _rowEndDates[globalIndex];
+                    final deliveryDate = _rowDeliveryDates[globalIndex];
 
-                  return Container(
-                    height: 40,
-                    decoration: BoxDecoration(
-                      border: const Border(
-                        bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                    return Container(
+                      height: 40,
+                      decoration: BoxDecoration(
+                        border: const Border(
+                          bottom: BorderSide(color: Color(0xFFE2E8F0)),
+                        ),
+                        color: _selectedTab == 1 ? Colors.orange.shade50 : null,
                       ),
-                      color: _selectedTab == 1 ? Colors.orange.shade50 : null,
-                    ),
-                    child: Row(
-                      children: [
-                        SizedBox(
-                          width: 110,
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 4),
-                            child: Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: Colors.grey.withOpacity(0.1),
-                                borderRadius: BorderRadius.circular(4),
-                              ),
-                              child: Row(
-                                children: [
-                                  const Icon(Icons.lock, size: 10, color: Colors.grey),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    'imported',
-                                    style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
-                                  ),
-                                ],
+                      child: Row(
+                        children: [
+                          SizedBox(
+                            width: 110,
+                            child: Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 4),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                decoration: BoxDecoration(
+                                  color: Colors.grey.withOpacity(0.1),
+                                  borderRadius: BorderRadius.circular(4),
+                                ),
+                                child: Row(
+                                  children: [
+                                    const Icon(Icons.lock, size: 10, color: Colors.grey),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      'imported',
+                                      style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w600, color: Colors.grey.shade700),
+                                    ),
+                                  ],
+                                ),
                               ),
                             ),
                           ),
-                        ),
-                        _previewDataCell(record['customer_name']?.toString() ?? '', 140),
-                        _previewDataCell(record['design_order']?.toString() ?? '', 100),
-                        _previewDataCell(record['contract_number']?.toString() ?? '', 100),
-                        _previewDataCell(record['item_number']?.toString() ?? '', 60),
-                        _previewDataCell(record['product_code']?.toString() ?? '', 120),
-                        _previewDataCell(record['description']?.toString() ?? '', 200),
-                        _previewDataCell(record['quantity']?.toString() ?? '', 50),
-                        _previewDataCell(record['unit_of_measure']?.toString() ?? '', 40),
-                        _previewDataCell(record['value']?.toString() ?? '', 90),
-                        _previewDataCell(record['sales_engineer']?.toString() ?? '', 130),
-                        _previewDataCell(record['factory']?.toString() ?? '', 60),
-                        SizedBox(
-                          width: 110,
-                          child: _buildDateCell('Order', orderDate, () => _pickDateForRow(globalIndex, 'order_date')),
-                        ),
-                        SizedBox(
-                          width: 110,
-                          child: _buildDateCell('End', endDate, () => _pickDateForRow(globalIndex, 'end_date')),
-                        ),
-                        SizedBox(
-                          width: 110,
-                          child: _buildDateCell('Delivery', deliveryDate, () => _pickDateForRow(globalIndex, 'delivery_date')),
-                        ),
-                      ],
-                    ),
-                  );
-                },
+                          _previewDataCell(record['customer_name']?.toString() ?? '', 140),
+                          _previewDataCell(record['design_order']?.toString() ?? '', 100),
+                          _previewDataCell(record['contract_number']?.toString() ?? '', 100),
+                          _previewDataCell(record['item_number']?.toString() ?? '', 60),
+                          _previewDataCell(record['product_code']?.toString() ?? '', 120),
+                          _previewDataCell(record['description']?.toString() ?? '', 200),
+                          _previewDataCell(record['quantity']?.toString() ?? '', 50),
+                          _previewDataCell(record['unit_of_measure']?.toString() ?? '', 40),
+                          _previewDataCell(record['value']?.toString() ?? '', 90),
+                          _previewDataCell(record['sales_engineer']?.toString() ?? '', 130),
+                          _previewDataCell(record['factory']?.toString() ?? '', 60),
+                          SizedBox(
+                            width: 110,
+                            child: _buildDateCell('Order', orderDate, () => _pickDateForRow(globalIndex, 'order_date')),
+                          ),
+                          SizedBox(
+                            width: 110,
+                            child: _buildDateCell('End', endDate, () => _pickDateForRow(globalIndex, 'end_date')),
+                          ),
+                          SizedBox(
+                            width: 110,
+                            child: _buildDateCell('Delivery', deliveryDate, () => _pickDateForRow(globalIndex, 'delivery_date')),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -1033,4 +1071,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       ),
     );
   }
+  @override
+  void dispose() {
+    _horizontalScrollController.dispose();
+    super.dispose();
+  }
+
 }
