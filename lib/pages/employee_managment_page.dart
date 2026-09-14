@@ -79,6 +79,64 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
     }
   }
 
+
+  /// Checks the complete employees_auth table (not the currently filtered list)
+  /// so duplicate names/usernames can never be created accidentally.
+  ///
+  /// Returns a user-friendly error message, or null when both values are
+  /// available. Comparison is case-insensitive and ignores surrounding spaces.
+  Future<String?> _validateEmployeeIdentity({
+    required String fullName,
+    required String username,
+    String? excludeEmployeeId,
+  }) async {
+    final name = fullName.trim();
+    final user = username.trim();
+
+    if (name.isEmpty) return 'Full name is required';
+    if (user.isEmpty) return 'Username is required';
+
+    try {
+      // Always load the complete list so active filters/search cannot hide
+      // an existing employee from the duplicate check.
+      final allEmployees = await _authService.getAllEmployees();
+
+      final normalizedName = name.toLowerCase();
+      final normalizedUsername = user.toLowerCase();
+      final excludedId = excludeEmployeeId?.trim();
+
+      for (final existing in allEmployees) {
+        if (excludedId != null && existing.id.trim() == excludedId) {
+          continue;
+        }
+
+        if (existing.username.trim().toLowerCase() == normalizedUsername) {
+          return 'Username "$user" is already taken.';
+        }
+
+        if (existing.fullName.trim().toLowerCase() == normalizedName) {
+          return 'Full name "$name" is already used by another employee.';
+        }
+      }
+
+      return null;
+    } catch (e) {
+      debugPrint('Error checking employee uniqueness: $e');
+      return 'Could not verify employee name/username. Please try again.';
+    }
+  }
+
+  void _showEmployeeValidationError(String message) {
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message, style: GoogleFonts.cairo()),
+        backgroundColor: Colors.red,
+        behavior: SnackBarBehavior.floating,
+      ),
+    );
+  }
+
   void _showAddEmployeeDialog() {
     final nameController = TextEditingController();
     final usernameController = TextEditingController();
@@ -221,6 +279,16 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   return;
                 }
 
+                final duplicateError = await _validateEmployeeIdentity(
+                  fullName: nameController.text,
+                  username: usernameController.text,
+                );
+
+                if (duplicateError != null) {
+                  _showEmployeeValidationError(duplicateError);
+                  return;
+                }
+
                 final success = await _authService.addEmployee(
                   username: usernameController.text.trim(),
                   password: passwordController.text,
@@ -299,15 +367,11 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                 const SizedBox(height: 12),
                 TextField(
                   controller: usernameController,
-                  enabled: false,
-                  style: GoogleFonts.cairo(color: _secondaryTextColor),
+                  style: GoogleFonts.cairo(color: _textColor),
                   decoration: InputDecoration(
                     labelText: 'Username',
                     labelStyle: GoogleFonts.cairo(color: _secondaryTextColor),
                     border: const OutlineInputBorder(),
-                    disabledBorder: OutlineInputBorder(
-                      borderSide: BorderSide(color: _borderColor),
-                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
@@ -370,42 +434,67 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
             ),
             ElevatedButton(
               onPressed: () async {
-                if (nameController.text.isEmpty) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Name is required',
-                        style: GoogleFonts.cairo(),
-                      ),
-                      backgroundColor: Colors.red,
-                    ),
+                final fullName = nameController.text.trim();
+                final username = usernameController.text.trim();
+
+                if (fullName.isEmpty || username.isEmpty) {
+                  _showEmployeeValidationError(
+                    'Full name and username are required.',
                   );
                   return;
                 }
-                final success = await _authService.updateEmployee(
-                  id: employee.id,
-                  fullName: nameController.text.trim(),
-                  department: selectedDepartment.isNotEmpty
-                      ? selectedDepartment
-                      : null,
-                  role: selectedRole.isNotEmpty ? selectedRole : null,
-                  phoneNumber: phoneController.text.isNotEmpty
-                      ? phoneController.text.trim()
-                      : null,
+
+                final duplicateError = await _validateEmployeeIdentity(
+                  fullName: fullName,
+                  username: username,
+                  excludeEmployeeId: employee.id,
                 );
-                if (mounted) {
-                  Navigator.pop(context);
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        success ? 'Employee updated!' : 'Failed to update',
-                        style: GoogleFonts.cairo(),
+
+                if (duplicateError != null) {
+                  _showEmployeeValidationError(duplicateError);
+                  return;
+                }
+
+                try {
+                  // Update all editable employee fields in one request,
+                  // including username. The current employee is excluded from
+                  // the duplicate check above, so keeping the same values is OK.
+                  await Supabase.instance.client
+                      .from('employees_auth')
+                      .update({
+                    'full_name': fullName,
+                    'username': username,
+                    'department': selectedDepartment.isNotEmpty
+                        ? selectedDepartment
+                        : null,
+                    'role': selectedRole.isNotEmpty ? selectedRole : null,
+                    'phone_number': phoneController.text.isNotEmpty
+                        ? phoneController.text.trim()
+                        : null,
+                  })
+                      .eq('id', employee.id);
+
+                  if (mounted) {
+                    Navigator.pop(context);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Employee updated!',
+                          style: GoogleFonts.cairo(),
+                        ),
+                        backgroundColor: Colors.green,
+                        behavior: SnackBarBehavior.floating,
                       ),
-                      backgroundColor: success ? Colors.green : Colors.red,
-                      behavior: SnackBarBehavior.floating,
-                    ),
-                  );
-                  if (success) _loadEmployees();
+                    );
+                    _loadEmployees();
+                  }
+                } catch (e) {
+                  debugPrint('Error updating employee: $e');
+                  if (mounted) {
+                    _showEmployeeValidationError(
+                      'Failed to update employee. Please try again.',
+                    );
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(

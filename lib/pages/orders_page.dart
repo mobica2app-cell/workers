@@ -91,7 +91,7 @@ class _OrdersPageState extends State<OrdersPage> {
   String? _filterCorrespondenceEngineer;
   List<String> _sortedStatuses = [];
 
-  int? _lastSelectedIndex;
+  String? _lastSelectedOrderId;
 
   // Expandable sections+
   final Set<String> _expandedSections = {};
@@ -255,9 +255,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'imported',
     'ادارة تصميم المنتجات',
     'automated',
-    'triorma'
-    'Editing'
-    'Suspended'
+    'Partition Editing',
   ];
 
   static const List<String> _allTeamStatuses = [
@@ -594,8 +592,7 @@ class _OrdersPageState extends State<OrdersPage> {
   bool get _isHedOrManager {
     final role = widget.loggedInEmployee?.role?.trim().toLowerCase() ?? '';
 
-    return role == 'head' ||
-        role == 'manager';
+    return role == 'head' || role == 'manager';
   }
 
   void _showBulkEditDialog() {
@@ -1042,6 +1039,14 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
+          // Header rows may only be changed by admins.
+          if (field == 'responsible_engineer' &&
+              order.responsibleEngineer?.trim().toLowerCase() == 'header' &&
+              !_isAdmin) {
+            skipped++;
+            continue;
+          }
+
           try {
             await supabase
                 .from('sap_main_orders')
@@ -1338,6 +1343,26 @@ class _OrdersPageState extends State<OrdersPage> {
       String? newValue,
       ) async {
     final oldValue = _getCurrentFieldValue(order, field);
+
+    // Header rows can only be changed by admins.
+    if (field == 'responsible_engineer' &&
+        order.responsibleEngineer?.trim().toLowerCase() == 'header' &&
+        !_isAdmin) {
+      _showYellowWarning(
+        '⚠️ Only admins can change the Responsible Engineer of a header row.',
+      );
+      return;
+    }
+
+
+    // Imported header rows assigned to "No One" cannot be changed.
+    if (field == 'responsible_engineer' &&
+        order.responsibleEngineer?.trim().toLowerCase() == 'no one') {
+      _showYellowWarning(
+        '⚠️ Responsible Engineer is locked as "No One" for header rows.',
+      );
+      return;
+    }
 
     // Responsible Engineer cannot be cleared on a normal order.
     // The exception is based on the order's CURRENT status.
@@ -2003,7 +2028,7 @@ class _OrdersPageState extends State<OrdersPage> {
       _allOrders.removeWhere((o) => deletedIds.contains(o.id));
       _orderIndexMap.removeWhere((key, value) => deletedIds.contains(key.id));
       _selectedRowsIds.clear();
-      _lastSelectedIndex = null;
+      _lastSelectedOrderId = null;
       _isLoading = false;
     });
 
@@ -2248,6 +2273,8 @@ class _OrdersPageState extends State<OrdersPage> {
 
   List<SAPMainOrder> _getFilteredOrders() {
     var result = _allOrders;
+
+    // Search remains a normal text search first.
     if (_searchQuery.isNotEmpty) {
       final q = _searchQuery.toLowerCase().trim();
       result = result
@@ -2255,65 +2282,92 @@ class _OrdersPageState extends State<OrdersPage> {
             (o) =>
         o.contractNumber.toLowerCase().contains(q) ||
             o.customerName.toLowerCase().contains(q) ||
-            o.designOrder.toLowerCase().contains(q), // Added design order search
+            o.designOrder.toLowerCase().contains(q),
       )
           .toList();
     }
-    if (_filterStatus != null)
-      result = result.where((o) => o.status == _filterStatus).toList();
-    if (_filterFactory != null)
-      result = result.where((o) => o.factory == _filterFactory).toList();
-    if (_filterDesignTeam != null)
-      result = result.where((o) => o.designTeam == _filterDesignTeam).toList();
-    if (_filterContractNumber != null)
-      result = result
-          .where(
-            (o) => o.contractNumber.toLowerCase().contains(
-          _filterContractNumber!.toLowerCase(),
-        ),
-      )
-          .toList();
-    if (_filterDesignOrder != null)
-      result = result
-          .where(
-            (o) => o.designOrder.toLowerCase().contains(
-          _filterDesignOrder!.toLowerCase(),
-        ),
-      )
-          .toList();
-    if (_filterSalesEngineer != null)
-      result = result
-          .where((o) => o.salesEngineer == _filterSalesEngineer)
-          .toList();
 
-    // My Work filter - check if employee is in ANY of these 3 fields
-    if (_filterMyWork) {
+    // Multiple filters use OR logic, NOT AND logic.
+    //
+    // Example:
+    // Status = Approval + Factory = F01
+    // means:
+    // status == Approval OR factory == F01
+    final activeFilterCount =
+        (_filterStatus != null ? 1 : 0) +
+            (_filterFactory != null ? 1 : 0) +
+            (_filterDesignTeam != null ? 1 : 0) +
+            (_filterContractNumber != null ? 1 : 0) +
+            (_filterDesignOrder != null ? 1 : 0) +
+            (_filterSalesEngineer != null ? 1 : 0) +
+            (_filterResponsibleEngineer != null ? 1 : 0) +
+            (_filterReviewer != null ? 1 : 0) +
+            (_filterCorrespondenceEngineer != null ? 1 : 0) +
+            (_filterMyWork ? 1 : 0);
+
+    if (activeFilterCount > 0) {
       final myName = widget.loggedInEmployee?.fullName ?? '';
+
       result = result.where((o) {
-        return o.responsibleEngineer == myName ||
-            o.reviewer == myName ||
-            o.correspondenceEngineer == myName;
+        final matchesStatus =
+            _filterStatus != null && o.status == _filterStatus;
+
+        final matchesFactory =
+            _filterFactory != null && o.factory == _filterFactory;
+
+        final matchesDesignTeam =
+            _filterDesignTeam != null && o.designTeam == _filterDesignTeam;
+
+        final matchesContract =
+            _filterContractNumber != null &&
+                o.contractNumber
+                    .toLowerCase()
+                    .contains(_filterContractNumber!.toLowerCase());
+
+        final matchesDesignOrder =
+            _filterDesignOrder != null &&
+                o.designOrder
+                    .toLowerCase()
+                    .contains(_filterDesignOrder!.toLowerCase());
+
+        final matchesSalesEngineer =
+            _filterSalesEngineer != null &&
+                o.salesEngineer == _filterSalesEngineer;
+
+        final matchesResponsibleEngineer =
+            _filterResponsibleEngineer != null &&
+                o.responsibleEngineer == _filterResponsibleEngineer;
+
+        final matchesReviewer =
+            _filterReviewer != null &&
+                o.reviewer == _filterReviewer;
+
+        final matchesCorrespondenceEngineer =
+            _filterCorrespondenceEngineer != null &&
+                o.correspondenceEngineer == _filterCorrespondenceEngineer;
+
+        final matchesMyWork =
+            _filterMyWork &&
+                (o.responsibleEngineer == myName ||
+                    o.reviewer == myName ||
+                    o.correspondenceEngineer == myName);
+
+        return matchesStatus ||
+            matchesFactory ||
+            matchesDesignTeam ||
+            matchesContract ||
+            matchesDesignOrder ||
+            matchesSalesEngineer ||
+            matchesResponsibleEngineer ||
+            matchesReviewer ||
+            matchesCorrespondenceEngineer ||
+            matchesMyWork;
       }).toList();
-    } else {
-      // Normal individual filters
-      if (_filterResponsibleEngineer != null)
-        result = result
-            .where((o) => o.responsibleEngineer == _filterResponsibleEngineer)
-            .toList();
-      if (_filterReviewer != null)
-        result = result.where((o) => o.reviewer == _filterReviewer).toList();
-      if (_filterCorrespondenceEngineer != null)
-        result = result
-            .where(
-              (o) => o.correspondenceEngineer == _filterCorrespondenceEngineer,
-        )
-            .toList();
     }
 
     _applySorting(result);
     return result;
   }
-
 
   bool get _hasActiveFilters =>
       _filterStatus != null ||
@@ -2336,12 +2390,48 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   void _toggleRowSelection(SAPMainOrder order) {
+    // Use the ACTUAL visible row order from _flatList.
+    // The table is displayed as status sections, so _getFilteredOrders()
+    // alone does not necessarily match the visual arrangement.
+    final visibleOrders = _flatList.whereType<SAPMainOrder>().toList();
+    final clickedIndex = visibleOrders.indexWhere((o) => o.id == order.id);
+
+    final shiftPressed =
+        HardwareKeyboard.instance.logicalKeysPressed.contains(
+          LogicalKeyboardKey.shiftLeft,
+        ) ||
+            HardwareKeyboard.instance.logicalKeysPressed.contains(
+              LogicalKeyboardKey.shiftRight,
+            );
+
+    final anchorIndex = _lastSelectedOrderId == null
+        ? -1
+        : visibleOrders.indexWhere(
+          (o) => o.id == _lastSelectedOrderId,
+    );
+
     setState(() {
-      if (_selectedRowsIds.contains(order.id)) {
+      if (shiftPressed &&
+          anchorIndex != -1 &&
+          clickedIndex != -1) {
+        final startIndex =
+        anchorIndex < clickedIndex ? anchorIndex : clickedIndex;
+        final endIndex =
+        anchorIndex > clickedIndex ? anchorIndex : clickedIndex;
+
+        // Select every row between the anchor and clicked row,
+        // following exactly the order shown on screen.
+        for (int i = startIndex; i <= endIndex; i++) {
+          _selectedRowsIds.add(visibleOrders[i].id);
+        }
+      } else if (_selectedRowsIds.contains(order.id)) {
         _selectedRowsIds.remove(order.id);
       } else {
         _selectedRowsIds.add(order.id);
       }
+
+      // The clicked row becomes the new Shift anchor.
+      _lastSelectedOrderId = order.id;
     });
   }
 
@@ -2367,7 +2457,7 @@ class _OrdersPageState extends State<OrdersPage> {
   void _clearSelection() {
     setState(() {
       _selectedRowsIds.clear();
-      _lastSelectedIndex = null;
+      _lastSelectedOrderId = null;
     });
   }
 
@@ -2858,6 +2948,33 @@ class _OrdersPageState extends State<OrdersPage> {
                   ),
                   const SizedBox(height: 16),
 
+                  Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF6366F1).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(8),
+                      border: Border.all(
+                        color: const Color(0xFF6366F1).withOpacity(0.18),
+                      ),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Icon(Icons.info_outline, size: 17, color: Color(0xFF6366F1)),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Multiple filters use OR: Status = Approval OR Factory = F01. '
+                                'A row only needs to match one active filter.',
+                            style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
                   // ===== STATUS & DEPARTMENT =====
                   _buildFilterSection(
                     '📊 Status & Department',
@@ -3072,37 +3189,234 @@ class _OrdersPageState extends State<OrdersPage> {
       List<String> items,
       Function(String?) onChanged,
       ) {
-    return DropdownButtonFormField<String>(
-      value: value,
-      isExpanded: true,
-      decoration: InputDecoration(
-        labelText: label,
-        labelStyle: GoogleFonts.cairo(fontSize: 12),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-        contentPadding: const EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: 10,
-        ),
+    final hasValue = value != null && value.isNotEmpty;
+    final displayValue = hasValue
+        ? (label.startsWith('Factory ')
+        ? _formatFactoryLabel(value!)
+        : value!)
+        : 'All';
+
+    return InkWell(
+      borderRadius: BorderRadius.circular(8),
+      onTap: () => _showSearchableFilterPicker(
+        label: label,
+        value: value,
+        items: items,
+        onChanged: onChanged,
       ),
-      style: GoogleFonts.cairo(fontSize: 13),
-      items: items
-          .map(
-            (s) => DropdownMenuItem(
-          value: s == 'All' ? null : s,
-          child: Text(
-            s == 'All'
-                ? 'All'
-                : label.startsWith('Factory ')
-                ? _formatFactoryLabel(s)
-                : s,
-            style: GoogleFonts.cairo(fontSize: 12),
-            overflow: TextOverflow.ellipsis,
+      child: InputDecorator(
+        decoration: InputDecoration(
+          labelText: label,
+          labelStyle: GoogleFonts.cairo(fontSize: 12),
+          border: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(8),
+          ),
+          contentPadding: const EdgeInsets.symmetric(
+            horizontal: 12,
+            vertical: 10,
           ),
         ),
-      )
-          .toList(),
-      onChanged: (v) => onChanged(v),
+        child: Row(
+          children: [
+            Expanded(
+              child: Text(
+                displayValue,
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  color: hasValue ? _textColor : _secondaryTextColor,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            Icon(
+              Icons.search,
+              size: 17,
+              color: hasValue
+                  ? const Color(0xFF6366F1)
+                  : _secondaryTextColor,
+            ),
+          ],
+        ),
+      ),
     );
+  }
+
+  Future<void> _showSearchableFilterPicker({
+    required String label,
+    required String? value,
+    required List<String> items,
+    required Function(String?) onChanged,
+  }) async {
+    final searchController = TextEditingController();
+    final uniqueItems = <String>[];
+
+    for (final item in items) {
+      if (!uniqueItems.contains(item)) {
+        uniqueItems.add(item);
+      }
+    }
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        String query = '';
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final filteredItems = uniqueItems.where((item) {
+              if (query.trim().isEmpty) return true;
+
+              final searchText = query.toLowerCase().trim();
+              final displayText = item == 'All'
+                  ? 'All'
+                  : label.startsWith('Factory ')
+                  ? _formatFactoryLabel(item)
+                  : item;
+
+              return displayText.toLowerCase().contains(searchText);
+            }).toList();
+
+            return AlertDialog(
+              titlePadding: const EdgeInsets.fromLTRB(20, 18, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              title: Row(
+                children: [
+                  const Icon(Icons.search, size: 20),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      'Search $label',
+                      style: GoogleFonts.cairo(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 430,
+                height: 460,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      autofocus: true,
+                      onChanged: (v) {
+                        setDialogState(() => query = v);
+                      },
+                      style: GoogleFonts.cairo(fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: 'Type to search...',
+                        hintStyle: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _secondaryTextColor,
+                        ),
+                        prefixIcon: const Icon(Icons.search, size: 19),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? IconButton(
+                          icon: const Icon(Icons.clear, size: 18),
+                          onPressed: () {
+                            searchController.clear();
+                            setDialogState(() => query = '');
+                          },
+                        )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 10,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: filteredItems.isEmpty
+                          ? Center(
+                        child: Text(
+                          'No results found',
+                          style: GoogleFonts.cairo(
+                            fontSize: 13,
+                            color: _secondaryTextColor,
+                          ),
+                        ),
+                      )
+                          : ListView.builder(
+                        itemCount: filteredItems.length,
+                        itemBuilder: (_, index) {
+                          final item = filteredItems[index];
+                          final isAll = item == 'All';
+                          final selected =
+                              (isAll && value == null) ||
+                                  (!isAll && item == value);
+
+                          final displayText = isAll
+                              ? 'All'
+                              : label.startsWith('Factory ')
+                              ? _formatFactoryLabel(item)
+                              : item;
+
+                          return ListTile(
+                            dense: true,
+                            selected: selected,
+                            leading: Icon(
+                              isAll
+                                  ? Icons.select_all
+                                  : Icons.circle_outlined,
+                              size: 18,
+                              color: selected
+                                  ? const Color(0xFF6366F1)
+                                  : _secondaryTextColor,
+                            ),
+                            title: Text(
+                              displayText,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12,
+                                fontWeight: selected
+                                    ? FontWeight.w700
+                                    : FontWeight.w400,
+                                color: selected
+                                    ? const Color(0xFF6366F1)
+                                    : _textColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            trailing: selected
+                                ? const Icon(
+                              Icons.check,
+                              size: 18,
+                              color: Color(0xFF6366F1),
+                            )
+                                : null,
+                            onTap: () {
+                              // Empty string is our internal "All"
+                              // result. Null means the dialog was
+                              // dismissed without changing anything.
+                              Navigator.pop(
+                                dialogContext,
+                                isAll ? '' : item,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    searchController.dispose();
+
+    if (result != null) {
+      onChanged(result.isEmpty ? null : result);
+    }
   }
 
   // ==================== BUILD ====================
@@ -3259,6 +3573,50 @@ class _OrdersPageState extends State<OrdersPage> {
     final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
+    // Header rows are assigned to "header" during import.
+    // Only admins can change the Responsible Engineer of a header row.
+    if (field == 'responsible_engineer' &&
+        currentValue?.trim().toLowerCase() == 'header' &&
+        !_isAdmin) {
+      return SizedBox(
+        width: field == 'responsible_engineer' ? 130 : 120,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(
+                color: Colors.grey.withOpacity(0.25),
+              ),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.lock_outline,
+                  size: 11,
+                  color: Colors.grey,
+                ),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    'header',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
 
     // Editable dropdown
     return SizedBox(
@@ -4435,7 +4793,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
             // Add tracking icon for admin users
-            if (_isAdmin)
+            if (_isHedOrManager)
               SizedBox(
                 width: 36,
                 child: IconButton(
@@ -4445,15 +4803,18 @@ class _OrdersPageState extends State<OrdersPage> {
                     color: Color(0xFF6366F1),
                   ),
                   onLongPress: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => OrderDetailPage(
-                          order: order,
-                          sapService: widget.sapService,
+                    if (_isAdmin) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => OrderDetailPage(
+                            order: order,
+                            sapService: widget.sapService,
+                          ),
                         ),
-                      ),
-                    );
+                      );
+                    }
+
                   },
                   onPressed: () => _navigateToOrderTracking(order),
                   tooltip: 'Track Order',
@@ -5137,6 +5498,14 @@ class _OrdersPageState extends State<OrdersPage> {
       if (order != null) {
         // Skip locked orders
         if (_isOrderLocked(order)) {
+          skipped++;
+          continue;
+        }
+
+        // Header rows with "No One" are permanently locked for
+        // Responsible Engineer, including bulk edits.
+        if (field == 'responsible_engineer' &&
+            order.responsibleEngineer?.trim().toLowerCase() == 'no one') {
           skipped++;
           continue;
         }

@@ -230,6 +230,29 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     return '${_normalizeDuplicateValue(contract)}|${_normalizeDuplicateValue(item)}';
   }
 
+  // Header items are the first item in each numeric range:
+  // 100 -> 101..199
+  // 200 -> 201..299
+  // 1000 -> 1001..1999
+  // 3000 -> 3001..3999
+  // 10000 -> 10001..19999
+  bool _isHeaderItem(dynamic item) {
+    final text = item?.toString().trim() ?? '';
+    final number = int.tryParse(
+      text.endsWith('.0') ? text.substring(0, text.length - 2) : text,
+    );
+
+    if (number == null || number < 100) return false;
+
+    final digits = number.toString().length;
+    var base = 1;
+    for (var i = 1; i < digits; i++) {
+      base *= 10;
+    }
+
+    return number % base == 0;
+  }
+
   Future<Set<String>> _loadExistingContractItemKeys() async {
     final supabase = Supabase.instance.client;
     const pageSize = 1000;
@@ -410,9 +433,12 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             : null,
         'factory': record['factory'] ?? null,
         'design_team': null,
-        'responsible_engineer': null,
+        // Header rows are automatically assigned to "header".
+        // Normal item rows stay empty and editable from Orders Page.
+        'responsible_engineer':
+        _isHeaderItem(record['item_number']) ? 'header' : null,
         'reviewer': null,
-        'correspondence_engineer': null,
+          'correspondence_engineer': null,
       };
     }).toList();
 
@@ -1008,5 +1034,3 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     );
   }
 }
-
-

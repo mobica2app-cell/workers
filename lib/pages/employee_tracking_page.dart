@@ -45,10 +45,10 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
   final List<String> _roles = const [
     'All',
-    'Responsible Engineer',
-    'Reviewer',
-    'Alternative Engineer',
-    'Other',
+    'Drawing Submittal',
+    'Modifications Submitted',
+    'Manufacturing Drawing',
+    'Task',
   ];
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -214,6 +214,69 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   String _normalize(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
+  // Employee workload is calculated ONLY from status audit transitions.
+  // The employee who performed the audit entry gets the credit, regardless
+  // of who is currently assigned to the order.
+  static const List<String> _trackedFromStatuses = [
+    'drawing submittal',
+    'modifications submitted',
+    'manufacturing drawing',
+    'task',
+  ];
+
+  bool _matchesSelectedFromStatus(Map<String, dynamic> log) {
+    if (_selectedRole == 'All') return true;
+
+    final from = _normalize(log['old_value']?.toString() ?? '');
+
+    switch (_selectedRole) {
+      case 'Drawing Submittal':
+        return from == 'drawing submittal';
+      case 'Modifications Submitted':
+        return from == 'modifications submitted';
+      case 'Manufacturing Drawing':
+        return from == 'manufacturing drawing';
+      case 'Task':
+        return from == 'task';
+      default:
+        return true;
+    }
+  }
+
+  bool _isTrackedStatusTransition(Map<String, dynamic> log) {
+    if (_normalize(log['field_name']?.toString() ?? '') != 'status') {
+      return false;
+    }
+
+    final from = _normalize(log['old_value']?.toString() ?? '');
+    final to = _normalize(log['new_value']?.toString() ?? '');
+
+    if (from.isEmpty || to.isEmpty || from == to) return false;
+
+    return _trackedFromStatuses.contains(from);
+  }
+
+  String _transitionLabel(Map<String, dynamic> log) {
+    final from = _displayAuditValue(log['old_value']);
+    final to = _displayAuditValue(log['new_value']);
+    return '$from → $to';
+  }
+
+  Map<String, int> _transitionCounts(
+      List<Map<String, dynamic>> changes) {
+    final counts = <String, int>{};
+
+    for (final change in changes) {
+      final log = Map<String, dynamic>.from(change['log'] as Map);
+      if (!_isTrackedStatusTransition(log)) continue;
+
+      final label = _transitionLabel(log);
+      counts[label] = (counts[label] ?? 0) + 1;
+    }
+
+    return counts;
+  }
+
   bool _samePerson(String? a, String? b) {
     if (a == null || b == null) return false;
 
@@ -223,27 +286,20 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return first.isNotEmpty && first == second;
   }
 
-  // Alternative Engineer is the project's correspondence_engineer field.
-  // If an alternative/correspondence engineer exists, the responsible
-  // engineer is not treated as the owner of that order in this report.
+  // Workload ownership rule:
+  // Correspondence Engineer has priority. Responsible Engineer is used only
+  // when Correspondence Engineer is empty.
   String _roleForOrder(SAPMainOrder order, String employeeName) {
-    // Alternative Engineer (correspondence_engineer) has priority.
-    if (_samePerson(order.correspondenceEngineer, employeeName)) {
-      return 'Alternative Engineer';
+    final correspondence = order.correspondenceEngineer?.trim() ?? '';
+    if (correspondence.isNotEmpty) {
+      return _samePerson(correspondence, employeeName)
+          ? 'Correspondence Engineer'
+          : '';
     }
 
-    if (_samePerson(order.reviewer, employeeName)) {
-      return 'Reviewer';
-    }
-
-    // If an Alternative Engineer exists, the Responsible Engineer is not
-    // considered the owner for the role-specific tracking view.
-    if (_samePerson(order.responsibleEngineer, employeeName)) {
-      final alternative = order.correspondenceEngineer?.trim() ?? '';
-      if (alternative.isNotEmpty) {
-        return '';
-      }
-
+    final responsible = order.responsibleEngineer?.trim() ?? '';
+    if (responsible.isNotEmpty &&
+        _samePerson(responsible, employeeName)) {
       return 'Responsible Engineer';
     }
 
@@ -251,52 +307,31 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   }
 
   bool _matchesRole(SAPMainOrder order, String employeeName) {
-    // IMPORTANT:
-    // The audit actor is the source of truth for employee activity.
-    // An employee can edit an order even when they are not currently
-    // assigned to it. Therefore "All" must never discard a real audit
-    // change based on the order's current assignment.
+    // The old implementation filtered audit activity by the order's current
+    // assignment. That caused changes made by one employee on another
+    // employee's row to be incorrectly attributed/hidden.
+    //
+    // Keep the existing UI filter slot, but make it filter by the AUDIT
+    // transition's source status instead of current assignment.
     if (_selectedRole == 'All') return true;
-
-    final role = _roleForOrder(order, employeeName);
-
-    if (_selectedRole == 'Other') {
-      return role.isEmpty;
-    }
-
-    if (role.isEmpty) return false;
-
-    return role == _selectedRole;
+    return true;
   }
 
-  bool _auditWasMadeBy(
-      Map<String, dynamic> log,
-      EmployeeAuth employee,
-      ) {
-    final changedById = log['changed_by_id']?.toString().trim();
-    final changedBy = log['changed_by']?.toString().trim();
-
-    if (changedById != null &&
-        changedById.isNotEmpty &&
-        changedById == employee.id.trim()) {
-      return true;
-    }
-
-    return _samePerson(changedBy, employee.fullName);
-  }
 
   SAPMainOrder? _findOrder(String orderId) {
     return _ordersById[orderId.trim()];
   }
 
-  // Every audit-log change made by the employee.
-  // The date filter is applied to changed_at, because this tracks activity
-  // performed by the employee rather than when the order was created.
+  // Status transitions come from the audit log, but workload ownership
+  // comes from the order assignment:
+  // 1) Responsible Engineer has priority.
+  // 2) If Responsible Engineer is empty, use Correspondence Engineer.
+  // changed_by is NOT used to decide who receives the workload credit.
   List<Map<String, dynamic>> _changesForEmployee(
       EmployeeAuth employee,
       ) {
     final cacheKey =
-        '${employee.id}|${_selectedRole}|${_startDate?.millisecondsSinceEpoch ?? ''}|'
+        '${employee.id}|status-transitions|${_startDate?.millisecondsSinceEpoch ?? ''}|'
         '${_endDate?.millisecondsSinceEpoch ?? ''}';
 
     final cached = _changesCache[cacheKey];
@@ -304,8 +339,18 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
     final result = <Map<String, dynamic>>[];
 
+    // IMPORTANT:
+    // The audit log is the source of truth for WHAT transition happened.
+    // Employee workload ownership is determined by the order assignment:
+    //
+    //   Responsible Engineer (priority)
+    //   -> Correspondence Engineer (only when Responsible Engineer is empty)
+    //
+    // The employee who appears in changed_by does NOT receive the workload
+    // credit just because they performed the edit.
     for (final log in _auditLogs) {
-      if (!_auditWasMadeBy(log, employee)) continue;
+      if (!_isTrackedStatusTransition(log)) continue;
+      if (!_matchesSelectedFromStatus(log)) continue;
 
       final changedAt = _parseDate(log['changed_at']);
       if (!_inDateRange(changedAt)) continue;
@@ -314,19 +359,27 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       if (orderId.isEmpty) continue;
 
       final order = _findOrder(orderId);
-      if (order == null) {
-        // The order may have been deleted after this audit entry was created.
-        // Keep the audit record in the database; it simply cannot be rendered
-        // by the current order-based card until a deleted-order view is added.
+      if (order == null) continue;
+
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final correspondence = order.correspondenceEngineer?.trim() ?? '';
+
+      // Correspondence Engineer has priority.
+      // Responsible Engineer is used only when Correspondence Engineer
+      // is empty.
+      final owner =
+      correspondence.isNotEmpty ? correspondence : responsible;
+
+      if (owner.isEmpty || !_samePerson(owner, employee.fullName)) {
         continue;
       }
-
-      if (!_matchesRole(order, employee.fullName)) continue;
 
       result.add({
         'log': log,
         'order': order,
-        'role': _roleForOrder(order, employee.fullName),
+        'role': correspondence.isNotEmpty
+            ? 'Correspondence Engineer'
+            : 'Responsible Engineer',
         'changedAt': changedAt,
       });
     }
@@ -344,6 +397,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     _changesCache[cacheKey] = result;
     return result;
   }
+
 
   List<SAPMainOrder> _ordersForEmployee(EmployeeAuth employee) {
     final seen = <String>{};
@@ -810,7 +864,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                 ? _selectedRole
                 : 'All',
             decoration: InputDecoration(
-              labelText: 'Work Role',
+              labelText: 'From Status',
               labelStyle: GoogleFonts.cairo(
                 color: _secondaryTextColor,
               ),
@@ -1035,6 +1089,102 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return (total / orders.length).round();
   }
 
+  Widget _buildTransitionBreakdown(
+      List<Map<String, dynamic>> changes,
+      bool compact,
+      ) {
+    final counts = _transitionCounts(changes);
+
+    if (counts.isEmpty) {
+      return const SizedBox.shrink();
+    }
+
+    final entries = counts.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+
+    return Container(
+      width: double.infinity,
+      padding: EdgeInsets.all(compact ? 10 : 12),
+      decoration: BoxDecoration(
+        color: _mutedColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.swap_horiz,
+                size: 16,
+                color: _secondaryTextColor,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                'Status Changes',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w700,
+                  color: _textColor,
+                ),
+              ),
+              const Spacer(),
+              Text(
+                '${entries.fold<int>(0, (sum, e) => sum + e.value)} changes',
+                style: GoogleFonts.cairo(
+                  fontSize: 9,
+                  fontWeight: FontWeight.w600,
+                  color: _secondaryTextColor,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          ...entries.map(
+                (entry) => Padding(
+              padding: const EdgeInsets.only(bottom: 5),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      entry.key,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        color: _textColor,
+                      ),
+                    ),
+                  ),
+                  Container(
+                    constraints: const BoxConstraints(minWidth: 28),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 7,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.blue.withOpacity(0.10),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Text(
+                      '${entry.value}',
+                      textAlign: TextAlign.center,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.blue,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   Widget _buildEmployeeCard(
       EmployeeAuth employee,
       List<SAPMainOrder> orders,
@@ -1141,7 +1291,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: _buildMiniStat(
-                  'Every Change',
+                  'Status Changes',
                   '${changes.length}',
                   Icons.history,
                   Colors.orange,
@@ -1158,6 +1308,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
               ),
             ],
           ),
+          _buildTransitionBreakdown(changes, compact),
           if (orders.isNotEmpty) ...[
             const SizedBox(height: 12),
             Align(
@@ -1510,9 +1661,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
             color: Colors.blue,
           ),
           _buildSummaryCard(
-            title: 'Every Change',
+            title: 'Status Changes',
             value: '$totalChanges',
-            subtitle: 'Audit changes made',
+            subtitle: 'Tracked audit transitions',
             icon: Icons.history,
             color: Colors.indigo,
           ),
@@ -1664,7 +1815,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  "Every audit-log change is credited to the employee who actually made it. Role filters use the employee's current order assignment.",
+                  "Workload is collected from the audit log first. Each status change is credited to the employee who actually made it, not the employee currently assigned to the order.",
                   style: GoogleFonts.cairo(
                     fontSize: 10,
                     color: _secondaryTextColor,
