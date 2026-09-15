@@ -83,8 +83,6 @@ class _OrdersPageState extends State<OrdersPage> {
   // Filters
   String? _filterStatus;
   String? _filterFactory;
-  String? _filterContractNumber;
-  String? _filterDesignOrder;
   String? _filterSalesEngineer;
   String? _filterResponsibleEngineer;
   String? _filterReviewer;
@@ -262,8 +260,8 @@ class _OrdersPageState extends State<OrdersPage> {
     'تصميم المنتجات',
     'imos team',
     'partition division',
-    'product division',
-    'الادارة الهندسة',
+    'Product Section',
+    'الادارة الهندسية',
     'Master Data division',
     'design studio',
     'تفصيل مصنع',
@@ -371,6 +369,65 @@ class _OrdersPageState extends State<OrdersPage> {
   bool get _isAdmin {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
     return role == 'admin' || role == 'software head' || role == 'head';
+  }
+
+
+  // Numeric header rows:
+  // 100   -> header only when 101..199 exists below it
+  // 200   -> header only when 201..299 exists below it
+  // 1000  -> header only when 1001..1999 exists below it
+  // 3000  -> header only when 3001..3999 exists below it
+  // 10000 -> header only when 10001..19999 exists below it
+  //
+  // 0, 1 and non-round numbers such as 101/199 are never headers.
+  bool _isNumericHeaderRow(SAPMainOrder order) {
+    final raw = order.itemNumber.trim().replaceAll(',', '');
+    if (raw.isEmpty) return false;
+
+    final normalized = raw.endsWith('.0')
+        ? raw.substring(0, raw.length - 2)
+        : raw;
+    final number = int.tryParse(normalized);
+    if (number == null || number < 100) return false;
+
+    // 100 -> 100, 1000 -> 1000, 10000 -> 10000, etc.
+    var rangeSize = 1;
+    var temp = number;
+    while (temp >= 10) {
+      temp ~/= 10;
+      rangeSize *= 10;
+    }
+
+    // Only the first/round number of a range can be a header.
+    if (number % rangeSize != 0) return false;
+
+    final rangeEnd = number + rangeSize - 1;
+    final orderIndex = _allOrders.indexWhere((o) => o.id == order.id);
+    if (orderIndex == -1) return false;
+
+    // There must be a child item BELOW this row.
+    for (var i = orderIndex + 1; i < _allOrders.length; i++) {
+      final childRaw = _allOrders[i].itemNumber.trim().replaceAll(',', '');
+      if (childRaw.isEmpty) continue;
+
+      final childNormalized = childRaw.endsWith('.0')
+          ? childRaw.substring(0, childRaw.length - 2)
+          : childRaw;
+      final childNumber = int.tryParse(childNormalized);
+
+      if (childNumber != null &&
+          childNumber > number &&
+          childNumber <= rangeEnd) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  bool _isHeaderResponsibleEngineerRow(SAPMainOrder order) {
+    return order.responsibleEngineer?.trim().toLowerCase() == 'header' ||
+        _isNumericHeaderRow(order);
   }
 
   String _getSortLabel() {
@@ -1041,7 +1098,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
           // Header rows may only be changed by admins.
           if (field == 'responsible_engineer' &&
-              order.responsibleEngineer?.trim().toLowerCase() == 'header' &&
+              _isHeaderResponsibleEngineerRow(order) &&
               !_isAdmin) {
             skipped++;
             continue;
@@ -1346,7 +1403,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // Header rows can only be changed by admins.
     if (field == 'responsible_engineer' &&
-        order.responsibleEngineer?.trim().toLowerCase() == 'header' &&
+        _isHeaderResponsibleEngineerRow(order) &&
         !_isAdmin) {
       _showYellowWarning(
         '⚠️ Only admins can change the Responsible Engineer of a header row.',
@@ -1997,20 +2054,22 @@ class _OrdersPageState extends State<OrdersPage> {
         }
 
         try {
-          await _auditService.logChange(
-            orderId: order.id,
-            designOrder: order.designOrder,
-            fieldName: 'order_deleted',
-            oldValue:
-            '${order.designOrder} | ${order.customerName} | ${order.description}',
-            newValue: null,
-            changedBy: _currentUserName,
-            changedById: _currentUserId,
-            actionType: 'delete',
-            notes: 'Order permanently deleted',
-          );
+          // First remove EVERY audit record belonging to this order.
+          // `order_id` in `order_audit_log` contains the SAP order id.
+          // This works whether the order has 1 audit row or many rows.
+          await supabase
+              .from('order_audit_log')
+              .delete()
+              .eq('order_id', order.id);
 
-          await supabase.from('sap_main_orders').delete().eq('id', order.id);
+          // Then delete the actual order.
+          // Deleting the audit rows first also prevents a foreign-key
+          // constraint from blocking the order deletion, if one exists.
+          await supabase
+              .from('sap_main_orders')
+              .delete()
+              .eq('id', order.id);
+
           deleted++;
           deletedIds.add(order.id);
           deletedOrders.add({
@@ -2019,7 +2078,7 @@ class _OrdersPageState extends State<OrdersPage> {
           });
         } catch (e) {
           failed++;
-          print('Failed to delete ${order.id}: $e');
+          print('Failed to delete order ${order.id} and its audit records: $e');
         }
       }
     }
@@ -2047,19 +2106,8 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
-    if (deleted > 1) {
-      await _auditService.logChange(
-        orderId: 'bulk_delete',
-        fieldName: 'bulk_delete',
-        oldValue: null,
-        newValue: '$deleted orders deleted',
-        changedBy: _currentUserName,
-        changedById: _currentUserId,
-        actionType: 'delete',
-        notes:
-        'Bulk deleted $deleted orders: ${deletedOrders.map((o) => o['designOrder']).join(', ')}',
-      );
-    }
+    // Do not create a new audit entry for deletion.
+    // All audit rows whose order_id matched a deleted order were removed above.
   }
 
   // A Responsible Engineer is required for manual status changes
@@ -2297,8 +2345,6 @@ class _OrdersPageState extends State<OrdersPage> {
         (_filterStatus != null ? 1 : 0) +
             (_filterFactory != null ? 1 : 0) +
             (_filterDesignTeam != null ? 1 : 0) +
-            (_filterContractNumber != null ? 1 : 0) +
-            (_filterDesignOrder != null ? 1 : 0) +
             (_filterSalesEngineer != null ? 1 : 0) +
             (_filterResponsibleEngineer != null ? 1 : 0) +
             (_filterReviewer != null ? 1 : 0) +
@@ -2318,17 +2364,6 @@ class _OrdersPageState extends State<OrdersPage> {
         final matchesDesignTeam =
             _filterDesignTeam != null && o.designTeam == _filterDesignTeam;
 
-        final matchesContract =
-            _filterContractNumber != null &&
-                o.contractNumber
-                    .toLowerCase()
-                    .contains(_filterContractNumber!.toLowerCase());
-
-        final matchesDesignOrder =
-            _filterDesignOrder != null &&
-                o.designOrder
-                    .toLowerCase()
-                    .contains(_filterDesignOrder!.toLowerCase());
 
         final matchesSalesEngineer =
             _filterSalesEngineer != null &&
@@ -2355,8 +2390,6 @@ class _OrdersPageState extends State<OrdersPage> {
         return matchesStatus ||
             matchesFactory ||
             matchesDesignTeam ||
-            matchesContract ||
-            matchesDesignOrder ||
             matchesSalesEngineer ||
             matchesResponsibleEngineer ||
             matchesReviewer ||
@@ -2373,8 +2406,6 @@ class _OrdersPageState extends State<OrdersPage> {
       _filterStatus != null ||
           _filterFactory != null ||
           _filterDesignTeam != null ||
-          _filterContractNumber != null ||
-          _filterDesignOrder != null ||
           _filterSalesEngineer != null ||
           _filterResponsibleEngineer != null ||
           _filterReviewer != null ||
@@ -2796,9 +2827,6 @@ class _OrdersPageState extends State<OrdersPage> {
   void _showFilterDialog() {
     String? tempStatus = _filterStatus;
     String? tempFactory = _filterFactory;
-    String? tempDesignTeam = _filterDesignTeam;
-    String? tempContractNumber = _filterContractNumber;
-    String? tempDesignOrder = _filterDesignOrder;
     String? tempSalesEngineer = _filterSalesEngineer;
     String? tempResponsibleEngineer = _filterResponsibleEngineer;
     String? tempReviewer = _filterReviewer;
@@ -2806,7 +2834,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // Get unique values from data
     final factories = <String>{};
-    final designTeams = <String>{};
     final salesEngineers = <String>{};
     final responsibleEngineers = <String>{};
     final reviewers = <String>{};
@@ -2815,8 +2842,6 @@ class _OrdersPageState extends State<OrdersPage> {
     for (var order in _allOrders) {
       if (order.factory != null && order.factory!.isNotEmpty)
         factories.add(order.factory!);
-      if (order.designTeam != null && order.designTeam!.isNotEmpty)
-        designTeams.add(order.designTeam!);
       if (order.salesEngineer.isNotEmpty)
         salesEngineers.add(order.salesEngineer);
       if (order.responsibleEngineer != null &&
@@ -2828,9 +2853,6 @@ class _OrdersPageState extends State<OrdersPage> {
           order.correspondenceEngineer!.isNotEmpty)
         correspondenceEngineers.add(order.correspondenceEngineer!);
     }
-
-    final contractCtrl = TextEditingController(text: _filterContractNumber);
-    final designOrderCtrl = TextEditingController(text: _filterDesignOrder);
 
     showDialog(
       context: context,
@@ -2850,8 +2872,6 @@ class _OrdersPageState extends State<OrdersPage> {
               const Spacer(),
               if (tempStatus != null ||
                   tempFactory != null ||
-                  tempDesignTeam != null ||
-                  tempContractNumber != null ||
                   tempSalesEngineer != null ||
                   tempResponsibleEngineer != null ||
                   tempReviewer != null ||
@@ -2882,99 +2902,6 @@ class _OrdersPageState extends State<OrdersPage> {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  // ===== ORDER INFO =====
-                  _buildFilterSection(
-                    '📋 Order Information',
-                    children: [
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: contractCtrl,
-                              style: GoogleFonts.cairo(fontSize: 13),
-                              decoration: InputDecoration(
-                                labelText: 'Contract Number',
-                                labelStyle: GoogleFonts.cairo(fontSize: 12),
-                                hintText: 'e.g. 9100035288',
-                                hintStyle: GoogleFonts.cairo(
-                                  fontSize: 11,
-                                  color: _secondaryTextColor,
-                                ),
-                                prefixIcon: const Icon(
-                                  Icons.description,
-                                  size: 18,
-                                ),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                              ),
-                              onChanged: (v) =>
-                              tempContractNumber = v.isEmpty ? null : v,
-                            ),
-                          ),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: TextField(
-                              controller: designOrderCtrl,
-                              style: GoogleFonts.cairo(fontSize: 13),
-                              decoration: InputDecoration(
-                                labelText: 'Design Order',
-                                labelStyle: GoogleFonts.cairo(fontSize: 12),
-                                hintText: 'e.g. 20083982',
-                                hintStyle: GoogleFonts.cairo(
-                                  fontSize: 11,
-                                  color: _secondaryTextColor,
-                                ),
-                                prefixIcon: const Icon(Icons.receipt, size: 18),
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(8),
-                                ),
-                                contentPadding: const EdgeInsets.symmetric(
-                                  horizontal: 12,
-                                  vertical: 10,
-                                ),
-                              ),
-                              onChanged: (v) =>
-                              tempDesignOrder = v.isEmpty ? null : v,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 16),
-
-                  Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(10),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF6366F1).withOpacity(0.08),
-                      borderRadius: BorderRadius.circular(8),
-                      border: Border.all(
-                        color: const Color(0xFF6366F1).withOpacity(0.18),
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Icon(Icons.info_outline, size: 17, color: Color(0xFF6366F1)),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: Text(
-                            'Multiple filters use OR: Status = Approval OR Factory = F01. '
-                                'A row only needs to match one active filter.',
-                            style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-
                   // ===== STATUS & DEPARTMENT =====
                   _buildFilterSection(
                     '📊 Status & Department',
@@ -3002,13 +2929,6 @@ class _OrdersPageState extends State<OrdersPage> {
                             ),
                           ),
                         ],
-                      ),
-                      const SizedBox(height: 10),
-                      _buildFilterDropdown(
-                        'Design Team (${designTeams.length})',
-                        tempDesignTeam,
-                        ['All', ...designTeams.toList()..sort()],
-                            (v) => setDlg(() => tempDesignTeam = v),
                       ),
                     ],
                   ),
@@ -3079,15 +2999,10 @@ class _OrdersPageState extends State<OrdersPage> {
                     setDlg(() {
                       tempStatus = null;
                       tempFactory = null;
-                      tempDesignTeam = null;
-                      tempContractNumber = null;
-                      tempDesignOrder = null;
                       tempSalesEngineer = null;
                       tempResponsibleEngineer = null;
                       tempReviewer = null;
                       tempCorrespondenceEngineer = null;
-                      contractCtrl.clear();
-                      designOrderCtrl.clear();
                     });
                   },
                   child: Row(
@@ -3115,9 +3030,6 @@ class _OrdersPageState extends State<OrdersPage> {
                     setState(() {
                       _filterStatus = tempStatus;
                       _filterFactory = tempFactory;
-                      _filterDesignTeam = tempDesignTeam;
-                      _filterContractNumber = tempContractNumber;
-                      _filterDesignOrder = tempDesignOrder;
                       _filterSalesEngineer = tempSalesEngineer;
                       _filterResponsibleEngineer = tempResponsibleEngineer;
                       _filterReviewer = tempReviewer;
@@ -3576,7 +3488,7 @@ class _OrdersPageState extends State<OrdersPage> {
     // Header rows are assigned to "header" during import.
     // Only admins can change the Responsible Engineer of a header row.
     if (field == 'responsible_engineer' &&
-        currentValue?.trim().toLowerCase() == 'header' &&
+        _isHeaderResponsibleEngineerRow(order) &&
         !_isAdmin) {
       return SizedBox(
         width: field == 'responsible_engineer' ? 130 : 120,
@@ -3730,6 +3642,31 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  Widget _buildDesignTeamFilterButton() {
+    final designTeams = <String>{};
+    for (final order in _allOrders) {
+      final team = order.designTeam?.trim();
+      if (team != null && team.isNotEmpty) {
+        designTeams.add(team);
+      }
+    }
+
+    return SizedBox(
+      width: 190,
+      child: _buildFilterDropdown(
+        'Design Team',
+        _filterDesignTeam,
+        ['All', ...designTeams.toList()..sort()],
+            (value) {
+          setState(() {
+            _filterDesignTeam = value;
+          });
+          _rebuildGroups();
+        },
+      ),
+    );
+  }
+
   Widget _buildHeaderRow() {
     return LayoutBuilder(
       builder: (context, constraints) {
@@ -3741,6 +3678,8 @@ class _OrdersPageState extends State<OrdersPage> {
             children: [
               Expanded(child: _buildHeaderInfo()),
               _buildSearchField(),
+              const SizedBox(width: 8),
+              _buildDesignTeamFilterButton(),
               const SizedBox(width: 8),
               _buildSortButton(),
               const SizedBox(width: 12),
@@ -3768,6 +3707,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 runSpacing: 8,
                 children: [
                   _buildSearchField(),
+                  _buildDesignTeamFilterButton(),
                   _buildSortButton(),
                   _buildActionBtn(
                     Icons.filter_list,
@@ -3820,8 +3760,6 @@ class _OrdersPageState extends State<OrdersPage> {
                 _filterStatus = null;
                 _filterFactory = null;
                 _filterDesignTeam = null;
-                _filterContractNumber = null;
-                _filterDesignOrder = null;
                 _filterSalesEngineer = null;
                 _filterResponsibleEngineer = null;
                 _filterReviewer = null;
