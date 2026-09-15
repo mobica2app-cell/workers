@@ -1411,16 +1411,6 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-
-    // Imported header rows assigned to "No One" cannot be changed.
-    if (field == 'responsible_engineer' &&
-        order.responsibleEngineer?.trim().toLowerCase() == 'no one') {
-      _showYellowWarning(
-        '⚠️ Responsible Engineer is locked as "No One" for header rows.',
-      );
-      return;
-    }
-
     // Responsible Engineer cannot be cleared on a normal order.
     // The exception is based on the order's CURRENT status.
     if (field == 'responsible_engineer' &&

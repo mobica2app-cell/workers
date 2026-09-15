@@ -1,4 +1,5 @@
 // lib/main.dart
+import 'dart:async';
 import 'dart:ui' as ui;
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
@@ -10,6 +11,9 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import 'services/sap_service.dart';
+
+final GlobalKey<NavigatorState> navigatorKey =
+GlobalKey<NavigatorState>();
 
 // Global Theme Notifier for instant theme changes
 class ThemeNotifier extends ChangeNotifier {
@@ -92,7 +96,11 @@ class MyApp extends StatelessWidget {
               );
             }
 
-            return SmartZoomWrapper(child: content);
+            return AutoRefreshManager(
+              child: SmartZoomWrapper(
+                child: content,
+              ),
+            );
           },
           home: const LoginPage(),
         );
@@ -484,13 +492,186 @@ void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   await Supabase.initialize(
-    url: 'https://tcztkkexgzxlurvhibmc.supabase.co',  // Your Supabase URL
+    url: 'https://tcztkkexgzxlurvhibmc.supabase.co',
     anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjenRra2V4Z3p4bHVydmhpYm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTExNTksImV4cCI6MjEwMTU4NzE1OX0.7XHX0uaC8YzRdd42Str__cyAK8Fpyhs7h-yv2pTaDBQ',           // Your anon key
+
   );
 
   runApp(const MyApp());
 }
 
+class AutoRefreshManager extends StatefulWidget {
+  final Widget child;
+
+  const AutoRefreshManager({
+    super.key,
+    required this.child,
+  });
+
+  @override
+  State<AutoRefreshManager> createState() => _AutoRefreshManagerState();
+}
+
+class _AutoRefreshManagerState extends State<AutoRefreshManager> {
+  Timer? _refreshTimer;
+  Timer? _countdownTimer;
+
+  bool _showWarning = false;
+  int _secondsLeft = 30;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Show the refresh warning after 2 hours.
+    _refreshTimer = Timer(
+      const Duration(hours: 1),
+      _showRefreshWarning,
+    );
+  }
+
+  void _showRefreshWarning() {
+    if (!mounted) return;
+
+    setState(() {
+      _showWarning = true;
+      _secondsLeft = 30;
+    });
+
+    _countdownTimer?.cancel();
+
+    _countdownTimer = Timer.periodic(
+      const Duration(seconds: 1),
+          (timer) {
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
+
+        if (_secondsLeft <= 1) {
+          timer.cancel();
+
+          // Full browser/page refresh.
+          html.window.location.reload();
+          return;
+        }
+
+        setState(() {
+          _secondsLeft--;
+        });
+      },
+    );
+  }
+
+  @override
+  void dispose() {
+    _refreshTimer?.cancel();
+    _countdownTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Your existing application.
+        widget.child,
+
+        // Refresh warning.
+        if (_showWarning)
+          Positioned(
+            top: 20,
+            right: 20,
+            child: Material(
+              elevation: 10,
+              borderRadius: BorderRadius.circular(12),
+              color: Theme.of(context).cardColor,
+              child: Container(
+                width: 340,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).cardColor,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: Colors.orange,
+                    width: 1.5,
+                  ),
+                  boxShadow: const [
+                    BoxShadow(
+                      blurRadius: 15,
+                      spreadRadius: 1,
+                      offset: Offset(0, 5),
+                      color: Colors.black26,
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(
+                          Icons.refresh,
+                          color: Colors.orange,
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            'Page Refresh Required',
+                            style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurface,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    Text(
+                      'This page will refresh automatically to load the latest version.',
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface
+                            .withOpacity(0.8),
+                      ),
+                    ),
+
+                    const SizedBox(height: 12),
+
+                    Text(
+                      'Refreshing in $_secondsLeft seconds...',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.bold,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .onSurface,
+                      ),
+                    ),
+
+                    const SizedBox(height: 10),
+
+                    LinearProgressIndicator(
+                      value: _secondsLeft / 30,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+}
 
 /*
 flutter pub get
