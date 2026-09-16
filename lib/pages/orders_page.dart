@@ -372,62 +372,8 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
 
-  // Numeric header rows:
-  // 100   -> header only when 101..199 exists below it
-  // 200   -> header only when 201..299 exists below it
-  // 1000  -> header only when 1001..1999 exists below it
-  // 3000  -> header only when 3001..3999 exists below it
-  // 10000 -> header only when 10001..19999 exists below it
-  //
-  // 0, 1 and non-round numbers such as 101/199 are never headers.
-  bool _isNumericHeaderRow(SAPMainOrder order) {
-    final raw = order.itemNumber.trim().replaceAll(',', '');
-    if (raw.isEmpty) return false;
-
-    final normalized = raw.endsWith('.0')
-        ? raw.substring(0, raw.length - 2)
-        : raw;
-    final number = int.tryParse(normalized);
-    if (number == null || number < 100) return false;
-
-    // 100 -> 100, 1000 -> 1000, 10000 -> 10000, etc.
-    var rangeSize = 1;
-    var temp = number;
-    while (temp >= 10) {
-      temp ~/= 10;
-      rangeSize *= 10;
-    }
-
-    // Only the first/round number of a range can be a header.
-    if (number % rangeSize != 0) return false;
-
-    final rangeEnd = number + rangeSize - 1;
-    final orderIndex = _allOrders.indexWhere((o) => o.id == order.id);
-    if (orderIndex == -1) return false;
-
-    // There must be a child item BELOW this row.
-    for (var i = orderIndex + 1; i < _allOrders.length; i++) {
-      final childRaw = _allOrders[i].itemNumber.trim().replaceAll(',', '');
-      if (childRaw.isEmpty) continue;
-
-      final childNormalized = childRaw.endsWith('.0')
-          ? childRaw.substring(0, childRaw.length - 2)
-          : childRaw;
-      final childNumber = int.tryParse(childNormalized);
-
-      if (childNumber != null &&
-          childNumber > number &&
-          childNumber <= rangeEnd) {
-        return true;
-      }
-    }
-
-    return false;
-  }
-
   bool _isHeaderResponsibleEngineerRow(SAPMainOrder order) {
-    return order.responsibleEngineer?.trim().toLowerCase() == 'header' ||
-        _isNumericHeaderRow(order);
+    return order.responsibleEngineer?.trim().toLowerCase() == 'header';
   }
 
   String _getSortLabel() {
@@ -2122,99 +2068,177 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
+    final oldStatus = order.status;
+    final isHeader =
+        order.responsibleEngineer?.trim().toLowerCase() == 'header';
+    final isNoBodyDestination =
+    _isNoBodyDestination(oldStatus, newStatus);
 
-    if (newStatus.trim().toLowerCase() == 'planning' &&
-        !_isHedOrManager) {
-      _showYellowWarning('Sorry, only Head and Team Leader can send orders to Planning.');
-      return;
+    // Only Header rows can bypass the transition/assignment rules.
+    // A Header keeps Responsible Engineer = "header".
+    if (!isHeader) {
+      // A "(no body)" destination requires Responsible Engineer = "No One".
+      if (isNoBodyDestination &&
+          order.responsibleEngineer?.trim().toLowerCase() != 'no one') {
+        _showYellowWarning(
+          '⚠️ This status is for orders with no body. Assign Responsible Engineer to "No One" first.',
+        );
+        return;
+      }
+
+      // Normal status changes still require a Responsible Engineer,
+      // except when the CURRENT status is Imported or Automated.
+      final requiresResponsibleEngineer =
+      _statusRequiresResponsibleEngineer(order.status);
+
+      if (requiresResponsibleEngineer && !_hasResponsibleEngineer(order)) {
+        _showYellowWarning(
+          '⚠️ To change status to "$newStatus", you must assign a Responsible Engineer first.',
+        );
+        return;
+      }
     }
 
-    final oldStatus = order.status;
-
-    // Responsible Engineer is required unless the order is ALREADY
-    // Imported or Automated. The exception is based on the CURRENT status,
-    // not on the status we are changing TO.
-    final requiresResponsibleEngineer =
-    _statusRequiresResponsibleEngineer(order.status);
-
-    if (requiresResponsibleEngineer && !_hasResponsibleEngineer(order)) {
+    // Planning permission remains unchanged.
+    if (newStatus.trim().toLowerCase() == 'planning' &&
+        !_isHedOrManager &&
+        !isHeader) {
       _showYellowWarning(
-        '⚠️ To change status to "$newStatus", you must assign a Responsible Engineer first',
+        'Sorry, only Head and Team Leader can send orders to Planning.',
       );
       return;
     }
 
-    // Keep the old locked-status behavior for the current order.
-    // Check if current status is locked (cannot change FROM locked)
+    // Done, Task Done, and Planning cannot be moved FROM.
     if (_isOrderLocked(order)) {
-      _showYellowWarning('⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders');
+      _showYellowWarning(
+        '⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders',
+      );
       return;
     }
 
-    // If multiple rows selected, apply to all
+    // Make sure the selected status is actually allowed.
+    final allowedStatuses = _getAllowedStatusesForOrder(order);
+    if (!allowedStatuses.any(
+          (s) => s.trim().toLowerCase() == newStatus.trim().toLowerCase(),
+    )) {
+      _showYellowWarning(
+        '⚠️ "$newStatus" is not an allowed destination from "$oldStatus".',
+      );
+      return;
+    }
+
+    // If multiple rows are selected, validate ALL rows before updating
+    // so a bulk operation does not partially move invalid rows.
     if (_selectedRowsIds.length > 1) {
+      final selectedOrders = _selectedRowsIds
+          .map((id) => _allOrders.where((o) => o.id == id).firstOrNull)
+          .whereType<SAPMainOrder>()
+          .toList();
+
+      final invalidTransition = selectedOrders.where((selectedOrder) {
+        final selectedIsHeader =
+            selectedOrder.responsibleEngineer?.trim().toLowerCase() == 'header';
+
+        if (selectedIsHeader) return false;
+
+        return !_getAllowedStatusesForOrder(selectedOrder).any(
+              (s) => s.trim().toLowerCase() == newStatus.trim().toLowerCase(),
+        );
+      }).toList();
+
+      if (invalidTransition.isNotEmpty) {
+        _showYellowWarning(
+          '⚠️ "$newStatus" is not an allowed destination for '
+              '${invalidTransition.length == 1 ? '1 selected order' : '${invalidTransition.length} selected orders'}.',
+        );
+        return;
+      }
+
+      final invalidNoBody = selectedOrders.where((selectedOrder) {
+        final selectedIsHeader =
+            selectedOrder.responsibleEngineer?.trim().toLowerCase() == 'header';
+
+        if (selectedIsHeader) return false;
+
+        return _isNoBodyDestination(selectedOrder.status, newStatus) &&
+            selectedOrder.responsibleEngineer?.trim().toLowerCase() != 'no one';
+      }).toList();
+
+      if (invalidNoBody.isNotEmpty) {
+        _showYellowWarning(
+          '⚠️ There is ${invalidNoBody.length == 1 ? '1 order' : '${invalidNoBody.length} orders'} not assigned to "No One". '
+              'Assign them to "No One" before sending to "$newStatus".',
+        );
+        return;
+      }
+
+      final invalidEngineer = selectedOrders.where((selectedOrder) {
+        final selectedIsHeader =
+            selectedOrder.responsibleEngineer?.trim().toLowerCase() == 'header';
+
+        if (selectedIsHeader) return false;
+
+        return _statusRequiresResponsibleEngineer(selectedOrder.status) &&
+            !_hasResponsibleEngineer(selectedOrder);
+      }).toList();
+
+      if (invalidEngineer.isNotEmpty) {
+        _showYellowWarning(
+          '⚠️ There is ${invalidEngineer.length == 1 ? '1 order' : '${invalidEngineer.length} orders'} without a Responsible Engineer.',
+        );
+        return;
+      }
+
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
       int skipped = 0;
-      int missingEngineer = 0;
 
-      for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders
-            .where((o) => o.id == orderId)
-            .firstOrNull;
-        if (selectedOrder != null) {
-          // Skip locked orders
-          if (_isOrderLocked(selectedOrder)) {
-            skipped++;
-            continue;
-          }
+      for (final selectedOrder in selectedOrders) {
+        if (_isOrderLocked(selectedOrder)) {
+          skipped++;
+          continue;
+        }
 
-          // Check the CURRENT status of each selected order.
-          // Imported/Automated orders are exempt; changing TO Imported/Automated
-          // does not create an exemption.
-          final selectedRequiresResponsibleEngineer =
-          _statusRequiresResponsibleEngineer(selectedOrder.status);
+        final selectedIsHeader =
+            selectedOrder.responsibleEngineer?.trim().toLowerCase() == 'header';
 
-          if (selectedRequiresResponsibleEngineer &&
-              !_hasResponsibleEngineer(selectedOrder)) {
-            missingEngineer++;
-            continue;
-          }
+        // Header can move anywhere allowed and remains "header".
+        // No-body orders must remain assigned to No One.
+        try {
+          await supabase
+              .from('sap_main_orders')
+              .update({'status': newStatus})
+              .eq('id', selectedOrder.id);
 
-          try {
-            await supabase
-                .from('sap_main_orders')
-                .update({'status': newStatus})
-                .eq('id', selectedOrder.id);
+          await _auditService.logChange(
+            orderId: selectedOrder.id,
+            designOrder: selectedOrder.designOrder,
+            fieldName: 'status',
+            oldValue: selectedOrder.status,
+            newValue: newStatus,
+            changedBy: _currentUserName,
+            changedById: _currentUserId,
+            actionType: 'bulk_update',
+          );
 
-            await _auditService.logChange(
-              orderId: selectedOrder.id,
-              designOrder: selectedOrder.designOrder,
-              fieldName: 'status',
-              oldValue: selectedOrder.status,
-              newValue: newStatus,
-              changedBy: _currentUserName,
-              changedById: _currentUserId,
-              actionType: 'bulk_update',
-            );
-            updated++;
-          } catch (e) {
-            print('Failed to update ${selectedOrder.id}: $e');
-          }
+          updated++;
+        } catch (e) {
+          print('Failed to update ${selectedOrder.id}: $e');
         }
       }
 
-
       setState(() => _isLoading = false);
 
-      if (missingEngineer > 0) {
-        _showSnackBar('⚠️ $missingEngineer order(s) have no Responsible Engineer and were not changed to "$newStatus". ✅ $updated updated, ⚠️ $skipped locked skipped');
-      } else if (skipped > 0) {
-        _showSnackBar('✅ Status updated for $updated rows, ⚠️ $skipped locked rows skipped');
+      if (skipped > 0) {
+        _showSnackBar(
+          '✅ Status updated for $updated rows, ⚠️ $skipped locked rows skipped',
+        );
       } else {
         _showSnackBar('✅ Status updated for $updated rows!');
       }
+
       _updateMultipleOrdersLocally('status', newStatus);
       setState(() {
         _clearSelection();
@@ -2222,9 +2246,10 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    // Single row update (original behavior)
+    // Single row update.
     try {
       final supabase = Supabase.instance.client;
+
       await supabase
           .from('sap_main_orders')
           .update({'status': newStatus})
@@ -2246,6 +2271,7 @@ class _OrdersPageState extends State<OrdersPage> {
       _showSnackBar('Error updating status: $e');
     }
   }
+
 
   // Log import action
   Future<void> _logImportAction(int recordCount) async {
@@ -5492,7 +5518,8 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
   Widget _statusCell(String status, SAPMainOrder order) {
-    // Dropdown for status
+    final allowedStatuses = _getAllowedStatusesForOrder(order);
+
     return SizedBox(
       width: 140,
       child: Padding(
@@ -5533,7 +5560,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ],
             ),
           ),
-          itemBuilder: (context) => _allStatuses.map((s) {
+          itemBuilder: (context) => allowedStatuses.map((s) {
             return PopupMenuItem<String>(
               value: s,
               child: Row(
@@ -5547,22 +5574,26 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                   ),
                   const SizedBox(width: 8),
-                  Text(
-                    s,
-                    style: GoogleFonts.cairo(
-                      fontSize: 12,
-                      color: s == status
-                          ? _getStatusColor(s)
-                          : _textColor,
-                      fontWeight: s == status
-                          ? FontWeight.w700
-                          : FontWeight.w400,
+                  Expanded(
+                    child: Text(
+                      s,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        color: s == status
+                            ? _getStatusColor(s)
+                            : _textColor,
+                        fontWeight: s == status
+                            ? FontWeight.w700
+                            : FontWeight.w400,
+                      ),
                     ),
                   ),
-                  if (s == status) ...[
-                    const Spacer(),
-                    Icon(Icons.check, size: 16, color: _getStatusColor(s)),
-                  ],
+                  if (s == status)
+                    Icon(
+                      Icons.check,
+                      size: 16,
+                      color: _getStatusColor(s),
+                    ),
                 ],
               ),
             );
@@ -5570,6 +5601,184 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       ),
     );
+  }
+
+  // Allowed status transitions.
+  // The "(no body)" routes below mean the order MUST have
+  // Responsible Engineer = "No One".
+  List<String> _getAllowedStatusesForOrder(SAPMainOrder order) {
+    final current = order.status.trim().toLowerCase();
+    final isHeader =
+        order.responsibleEngineer?.trim().toLowerCase() == 'header';
+
+    // Header rows can move anywhere, except the permanently locked
+    // statuses which cannot be moved FROM.
+    if (isHeader) {
+      // A header can move to any status. If its CURRENT status is
+      // Done/Task Done/Planning, _isOrderLocked() still prevents moving it.
+      return List<String>.from(_allStatuses);
+    }
+
+    const transitions = <String, List<String>>{
+      'drawing submittal': [
+        'Approval',
+        'Partition Editing',
+      ],
+      'approval': [
+        'modifications submitted',
+        'Manufacturing Drawing',
+      ],
+      'modifications submitted': [
+        'Approval',
+      ],
+      'manufacturing drawing': [
+        'Review',
+        'Master Data',
+        'partation  master data',
+      ],
+      'review': [
+        'Master Data',
+      ],
+      'master data': [
+        'Done',
+      ],
+      'sales': [
+        'Drawing Submittal',
+      ],
+      'as built': [
+        'Drawing Submittal',
+      ],
+      'planning': [
+        'Drawing Submittal',
+      ],
+      'partation  master data': [
+        'Done',
+      ],
+      'الادارة الهندسه': [
+        'Master Data',
+      ],
+      'ادارة تصميم المنتجات': [
+        'Master Data',
+      ],
+      'design studio': [
+        'Master Data',
+      ],
+      'partition editing': [
+        'Manufacturing Drawing',
+        'partation  master data',
+      ],
+      'imported': [
+        'Drawing Submittal',
+        'Master Data',
+        'planning',
+        'الادارة الهندسه',
+        'ادارة تصميم المنتجات',
+        'design studio',
+      ],
+      'automated': [
+        'Drawing Submittal',
+        'Master Data',
+        'planning',
+        'الادارة الهندسه',
+        'ادارة تصميم المنتجات',
+        'design studio',
+      ],
+    };
+
+    final noBodyTransitions = <String, List<String>>{
+      'drawing submittal': [
+        'Sales',
+        'As Built',
+        'Master Data',
+        'planning',
+        'ادارة تصميم المنتجات',
+        'design studio',
+        'الادارة الهندسه',
+      ],
+      'approval': [
+        'Sales',
+        'As Built',
+        'Master Data',
+        'planning',
+        'ادارة تصميم المنتجات',
+        'design studio',
+        'الادارة الهندسه',
+      ],
+      'sales': [
+        'planning',
+        'As Built',
+        'Master Data',
+      ],
+      'as built': [
+        'Sales',
+      ],
+      'planning': [
+        'As Built',
+        'Master Data',
+      ],
+    };
+
+    final normal = transitions[current] ?? const <String>[];
+    final noBody = noBodyTransitions[current] ?? const <String>[];
+
+    final hasNoOne = order.responsibleEngineer?.trim().toLowerCase() == 'no one';
+
+    final result = <String>[
+      ...normal,
+      if (hasNoOne) ...noBody,
+    ];
+
+    // Keep only statuses that actually exist in the user's configured list.
+    return result
+        .where((target) => _allStatuses.any(
+          (configured) =>
+      configured.trim().toLowerCase() == target.trim().toLowerCase(),
+    ))
+        .map((target) => _allStatuses.firstWhere(
+          (configured) =>
+      configured.trim().toLowerCase() == target.trim().toLowerCase(),
+    ))
+        .toList();
+  }
+
+  bool _isNoBodyDestination(String currentStatus, String newStatus) {
+    final current = currentStatus.trim().toLowerCase();
+    final target = newStatus.trim().toLowerCase();
+
+    const noBodyTransitions = <String, Set<String>>{
+      'drawing submittal': {
+        'sales',
+        'as built',
+        'master data',
+        'planning',
+        'ادارة تصميم المنتجات',
+        'design studio',
+        'الادارة الهندسه',
+      },
+      'approval': {
+        'sales',
+        'as built',
+        'master data',
+        'planning',
+        'ادارة تصميم المنتجات',
+        'design studio',
+        'الادارة الهندسه',
+      },
+      'sales': {
+        'planning',
+        'as built',
+        'master data',
+      },
+      'as built': {
+        'sales',
+      },
+      'planning': {
+        'as built',
+        'master data',
+      },
+    };
+
+    return noBodyTransitions[current]?.contains(target) ?? false;
   }
 
   Widget _cell(
