@@ -523,7 +523,7 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
   void initState() {
     super.initState();
 
-    // Show the refresh warning after 2 hours.
+    // Show the refresh warning after 1 hours.
     _refreshTimer = Timer(
       const Duration(hours: 1),
       _showRefreshWarning,

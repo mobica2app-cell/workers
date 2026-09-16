@@ -260,7 +260,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'تصميم المنتجات',
     'imos team',
     'partition division',
-    'Product Section',
+    'product division',
     'الادارة الهندسية',
     'Master Data division',
     'design studio',
