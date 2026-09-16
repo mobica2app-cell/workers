@@ -3478,7 +3478,7 @@ class _OrdersPageState extends State<OrdersPage> {
     // Header rows are assigned to "header" during import.
     // Only admins can change the Responsible Engineer of a header row.
     if (field == 'responsible_engineer' &&
-        _isHeaderResponsibleEngineerRow(order) &&
+        currentValue?.trim().toLowerCase() == 'header' &&
         !_isAdmin) {
       return SizedBox(
         width: field == 'responsible_engineer' ? 130 : 120,
