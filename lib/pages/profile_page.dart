@@ -27,7 +27,6 @@ class _ProfilePageState extends State<ProfilePage>
   List<_EmployeeWorkItem> _filteredWorkItems = [];
   bool _isLoading = true;
   String _workFilter = 'All';
-  TabController? _tabController;
 
   // Theme preference
   bool _isDarkMode = false;
@@ -53,7 +52,6 @@ class _ProfilePageState extends State<ProfilePage>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
     _employee = widget.employee;
     _loadWorkData();
 
@@ -72,7 +70,6 @@ class _ProfilePageState extends State<ProfilePage>
   void dispose() {
     // Add this line to remove the listener
     ThemeNotifier.instance.removeListener(_onThemeChanged);
-    _tabController?.dispose();
     super.dispose();
   }
 
@@ -385,25 +382,9 @@ class _ProfilePageState extends State<ProfilePage>
               ),
             ),
           ),
-          SliverPersistentHeader(pinned: true,
-              delegate: _SliverAppBarDelegate(
-                TabBar(controller: _tabController,
-                    labelColor: Theme.of(context).colorScheme.primary,
-                    unselectedLabelColor: _secondaryTextColor,
-                    indicatorColor: Theme.of(context).colorScheme.primary,
-                    labelStyle: GoogleFonts.cairo(fontWeight: FontWeight.w600,
-                        fontSize: 14),
-                    tabs: const [Tab(text: 'Profile'), Tab(text: 'My Work'), Tab(
-                        text: 'By Role')
-                    ]),
-                surfaceColor: _surfaceColor,
-              )),
+          // Only the Profile content is shown. My Work and By Role were removed.
         ],
-        body: TabBarView(controller: _tabController, children: [
-          _buildProfileTab(),
-          _buildWorkTab(),
-          _buildRoleTab(),
-        ]),
+        body: _buildProfileTab(),
       ),
     );
   }
@@ -547,107 +528,6 @@ class _ProfilePageState extends State<ProfilePage>
           ),
         ),
       ]),
-    );
-  }
-
-  Widget _buildWorkTab() {
-    return Column(children: [
-      Container(
-        padding: const EdgeInsets.all(16),
-        child: SingleChildScrollView(
-            scrollDirection: Axis.horizontal, child: Row(children: [
-          _buildFilterChip('All'),
-          _buildFilterChip('Unknown'),
-          _buildFilterChip('مطلوب اكوادها الاسترشاديه'),
-          _buildFilterChip('Drawing Submittal'),
-          _buildFilterChip('Approval'),
-          _buildFilterChip('Done'),
-        ])),
-      ),
-      Expanded(
-        child: _filteredWorkItems.isEmpty
-            ? Center(child: Column(mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.work_off, size: 64, color: _secondaryTextColor),
-              const SizedBox(height: 16),
-              Text('No work found', style: GoogleFonts.cairo(
-                  fontSize: 16, color: _secondaryTextColor))
-            ]))
-            : ListView.builder(
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _filteredWorkItems.length,
-            itemBuilder: (context, index) =>
-                _buildWorkCard(_filteredWorkItems[index])),
-      ),
-    ]);
-  }
-
-  Widget _buildRoleTab() {
-    final roles = [
-      'Sales Engineer',
-      'Responsible Engineer',
-      'Reviewer',
-      'Correspondence Engineer'
-    ];
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: roles.length,
-      itemBuilder: (context, index) {
-        final role = roles[index];
-        final items = _workItems.where((w) => w.role == role).toList();
-        if (items.isEmpty) return const SizedBox.shrink();
-        return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-            decoration: BoxDecoration(
-                color: items.first.roleColor.withOpacity(0.1),
-                borderRadius: BorderRadius.circular(8),
-                border: Border.all(
-                    color: items.first.roleColor.withOpacity(0.3))),
-            child: Row(children: [
-              Icon(
-                  items.first.roleIcon, color: items.first.roleColor, size: 20),
-              const SizedBox(width: 8),
-              Text('$role (${items.length})', style: GoogleFonts.cairo(
-                  fontSize: 14,
-                  fontWeight: FontWeight.w600,
-                  color: items.first.roleColor)),
-            ]),
-          ),
-          const SizedBox(height: 8),
-          ...items.map((item) =>
-              Card(
-                color: _cardColor,
-                margin: const EdgeInsets.only(bottom: 6),
-                child: ListTile(
-                  leading: CircleAvatar(
-                      backgroundColor: item.roleColor.withOpacity(0.1),
-                      child: Icon(
-                          item.roleIcon, color: item.roleColor, size: 18)),
-                  title: Text(item.order.description, style: GoogleFonts.cairo(
-                      fontSize: 13, fontWeight: FontWeight.w600,
-                      color: _textColor),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis),
-                  subtitle: Text(
-                      '${item.order.designOrder} • ${item.order.factory ??
-                          "N/A"}', style: GoogleFonts.cairo(
-                      fontSize: 11, color: _secondaryTextColor)),
-                  trailing: Container(padding: const EdgeInsets.symmetric(
-                      horizontal: 8, vertical: 3),
-                      decoration: BoxDecoration(color: _getStatusColor(item
-                          .order.status).withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(12)),
-                      child: Text(item.order.status.length > 15 ? '${item.order
-                          .status.substring(0, 13)}...' : item.order.status,
-                          style: GoogleFonts.cairo(fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              color: _getStatusColor(item.order.status)))),
-                ),
-              )),
-          const SizedBox(height: 16),
-        ]);
-      },
     );
   }
 
@@ -820,20 +700,3 @@ class _EmployeeWorkItem {
   _EmployeeWorkItem(
       {required this.order, required this.role, required this.roleIcon, required this.roleColor});
 }
-
-class _SliverAppBarDelegate extends SliverPersistentHeaderDelegate {
-  final TabBar _tabBar;
-  final Color surfaceColor;
-
-  _SliverAppBarDelegate(this._tabBar, {required this.surfaceColor});
-
-  @override double get minExtent => _tabBar.preferredSize.height;
-
-  @override double get maxExtent => _tabBar.preferredSize.height;
-
-  @override Widget build(BuildContext context, double shrinkOffset,
-      bool overlapsContent) => Container(color: surfaceColor, child: _tabBar);
-
-  @override bool shouldRebuild(_SliverAppBarDelegate oldDelegate) => false;
-}
-

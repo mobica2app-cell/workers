@@ -243,11 +243,10 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
   //   10000 -> header only if 10001..19999 exists below it
   //
   // 0, 1, 101, 199, etc. are never treated as headers by this rule.
-  bool _isHeaderItem(dynamic item, int rowIndex) {
+  bool _isHeaderItem(dynamic item, dynamic contractNumber) {
     final text = item?.toString().trim() ?? '';
     if (text.isEmpty) return false;
 
-    // Excel may represent whole numbers as "100.0" and may contain commas.
     final normalizedText = text.replaceAll(',', '');
     final integerText = normalizedText.endsWith('.0')
         ? normalizedText.substring(0, normalizedText.length - 2)
@@ -256,45 +255,36 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     final number = int.tryParse(integerText);
     if (number == null || number < 100) return false;
 
-    // The range size is based on the number of digits:
-    // 100 -> 100, 1000 -> 1000, 10000 -> 10000, etc.
-    final rangeSize = _headerRangeSize(number);
+    final digitCount = integerText.length;
+    if (digitCount < 3) return false;
 
-    // It must be the round/base number of its range.
-    if (number % rangeSize != 0) return false;
+    if (!integerText.substring(digitCount - 2).contains('00')) {
+      return false;
+    }
 
-    final rangeEnd = number + rangeSize - 1;
+    final nextItem = number + 1;
+    final targetContract = _normalizeDuplicateValue(contractNumber);
 
-    // A base number with no child rows BELOW it is a normal row.
-    // "Below" means a later row in the imported Excel/CSV data.
-    for (var i = rowIndex + 1; i < _allExcelData.length; i++) {
-      final childText = _allExcelData[i]['item_number']?.toString().trim() ?? '';
+    for (final record in _allExcelData) {
+      final recordContract =
+      _normalizeDuplicateValue(record['contract_number']);
+      if (recordContract != targetContract) continue;
+
+      final childText = record['item_number']?.toString().trim() ?? '';
       if (childText.isEmpty) continue;
 
       final childNormalized = childText.replaceAll(',', '');
       final childIntegerText = childNormalized.endsWith('.0')
           ? childNormalized.substring(0, childNormalized.length - 2)
           : childNormalized;
-      final childNumber = int.tryParse(childIntegerText);
 
-      if (childNumber != null &&
-          childNumber > number &&
-          childNumber <= rangeEnd) {
+      final childNumber = int.tryParse(childIntegerText);
+      if (childNumber == nextItem) {
         return true;
       }
     }
 
     return false;
-  }
-
-  int _headerRangeSize(int number) {
-    var size = 1;
-    var remaining = number;
-    while (remaining >= 10) {
-      remaining ~/= 10;
-      size *= 10;
-    }
-    return size;
   }
 
   Future<Set<String>> _loadExistingContractItemKeys() async {
@@ -459,7 +449,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         // Header rows are automatically assigned to "header".
         // Normal item rows stay empty and editable from Orders Page.
         'responsible_engineer':
-        _isHeaderItem(record['item_number'], _allExcelData.indexOf(record)) ? 'header' : null,
+        _isHeaderItem(record['item_number'], record['contract_number']) ? 'header' : null,
         'reviewer': null,
         'correspondence_engineer': null,
       };
