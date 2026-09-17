@@ -36,18 +36,15 @@ dependencies:
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.16.0
   http: ^1.6.0
-  google_fonts: ^8.2.0
   intl: ^0.20.3
   excel: ^4.0.6
   path_provider: ^2.1.6
-  open_file: ^4.0.0
   fl_chart: ^1.2.0
   csv: ^8.0.0
-  desktop_drop: ^0.7.1
   file_picker: ^3.0.4
   universal_html: ^2.3.0
   responsive_framework: ^1.5.1
-
+  google_fonts: ^8.2.0
 dev_dependencies:
   flutter_test:
     sdk: flutter
