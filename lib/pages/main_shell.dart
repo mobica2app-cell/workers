@@ -1194,7 +1194,10 @@ class _MainShellState extends State<MainShell> {
           return const DepartmentTrackingPage();
 
         case 4:
-          return const EmployeeTrackingPage();
+          return EmployeeTrackingPage(
+            loggedInEmployee:
+            widget.loggedInEmployee!,
+          );
 
         case 5:
           return ProfilePage(

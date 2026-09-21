@@ -700,7 +700,7 @@ class _OrdersPageState extends State<OrdersPage> {
   // Check if user can import/delete (admin role or specific username)
   bool get _canImportDelete {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
-    return role == 'admin' ||
+    return role == 'manager' ||
         role == 'software head' ||
         role == 'head' ||
         _isDataEntry;
@@ -1042,6 +1042,13 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
+          // Header rows cannot have an Alternative Engineer.
+          if (field == 'correspondence_engineer' &&
+              _isHeaderResponsibleEngineerRow(order)) {
+            skipped++;
+            continue;
+          }
+
           // Header rows may only be changed by admins.
           if (field == 'responsible_engineer' &&
               _isHeaderResponsibleEngineerRow(order) &&
@@ -1347,6 +1354,15 @@ class _OrdersPageState extends State<OrdersPage> {
       ) async {
     final oldValue = _getCurrentFieldValue(order, field);
 
+    // A header row must never have an Alternative Engineer.
+    if (field == 'correspondence_engineer' &&
+        _isHeaderResponsibleEngineerRow(order)) {
+      _showYellowWarning(
+        '⚠️ Alternative Engineer is locked when Responsible Engineer is header.',
+      );
+      return;
+    }
+
     // Header rows can only be changed by admins.
     if (field == 'responsible_engineer' &&
         _isHeaderResponsibleEngineerRow(order) &&
@@ -1387,6 +1403,13 @@ class _OrdersPageState extends State<OrdersPage> {
         if (selectedOrder != null) {
           // Skip locked orders
           if (_isOrderLocked(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
+          // Header rows cannot have an Alternative Engineer.
+          if (field == 'correspondence_engineer' &&
+              _isHeaderResponsibleEngineerRow(selectedOrder)) {
             skipped++;
             continue;
           }
@@ -1973,6 +1996,30 @@ class _OrdersPageState extends State<OrdersPage> {
     final deletedOrders = <Map<String, String>>[];
     final deletedIds = <String>[];
 
+    // Delete ALL audit rows for the selected orders first.
+    // Using one bulk query guarantees that every audit row whose
+    // order_id matches a selected order is targeted, including orders
+    // that have multiple audit records.
+    final selectedOrderIds = selectedOrders
+        .map((order) => order.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet()
+        .toList();
+
+    if (selectedOrderIds.isNotEmpty) {
+      try {
+        await supabase
+            .from('order_audit_log')
+            .delete()
+            .inFilter('order_id', selectedOrderIds);
+      } catch (e) {
+        print('Failed to bulk delete order audits: $e');
+        setState(() => _isLoading = false);
+        _showSnackBar('❌ Could not delete order audit records. Orders were not deleted.');
+        return;
+      }
+    }
+
     for (var orderId in _selectedRowsIds.toList()) {
       SAPMainOrder? order;
       for (var o in _allOrders) {
@@ -1990,15 +2037,9 @@ class _OrdersPageState extends State<OrdersPage> {
         }
 
         try {
-          // First remove EVERY audit record belonging to this order.
-          // `order_id` in `order_audit_log` contains the SAP order id.
-          // This works whether the order has 1 audit row or many rows.
-          await supabase
-              .from('order_audit_log')
-              .delete()
-              .eq('order_id', order.id);
-
-          // Then delete the actual order.
+          // Audits for all selected orders were already deleted by the
+          // bulk query above. Do NOT create an audit entry for deletion.
+          // Now delete the actual order.
           // Deleting the audit rows first also prevents a foreign-key
           // constraint from blocking the order deletion, if one exists.
           await supabase
@@ -3501,6 +3542,43 @@ class _OrdersPageState extends State<OrdersPage> {
     final canEdit = _isOrderEditable(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
+    // If Responsible Engineer is "header", Alternative Engineer is fully locked.
+    if (field == 'correspondence_engineer' &&
+        _isHeaderResponsibleEngineerRow(order)) {
+      return SizedBox(
+        width: 120,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.withOpacity(0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 11, color: Colors.grey),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    'Locked',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
     // Header rows are assigned to "header" during import.
     // Only admins can change the Responsible Engineer of a header row.
     if (field == 'responsible_engineer' &&
@@ -5456,6 +5534,13 @@ class _OrdersPageState extends State<OrdersPage> {
           continue;
         }
 
+        // Header rows cannot have an Alternative Engineer, including bulk edits.
+        if (field == 'correspondence_engineer' &&
+            _isHeaderResponsibleEngineerRow(order)) {
+          skipped++;
+          continue;
+        }
+
         // Header rows with "No One" are permanently locked for
         // Responsible Engineer, including bulk edits.
         if (field == 'responsible_engineer' &&
@@ -5640,7 +5725,6 @@ class _OrdersPageState extends State<OrdersPage> {
         'Master Data',
       ],
       'master data': [
-        'Done',
       ],
       'sales': [
         'Drawing Submittal',

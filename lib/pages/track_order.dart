@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:universal_html/html.dart' as html;
 import '../main.dart';
 import '../services/audit_service.dart';
 import '../services/sap_service.dart';
@@ -32,18 +33,61 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
 
-  // Get current user info
-  String get _currentUserName {
-    // You can get this from a global state or pass it to the page
-    // For now, we'll use a placeholder
-    return 'Admin';
-  }
+  // Current employee is stored in the same employees_auth table used by
+  // LoginPage. LoginPage also stores the logged-in username in browser
+  // localStorage as `remembered_username`.
+  //
+  // We intentionally resolve the employee from employees_auth instead of
+  // using Supabase Auth, because this project uses its own employees_auth
+  // login system.
+  String? _currentUserName;
+  String? _currentUserId;
 
-  String get _currentUserId => '';
+  Future<void> _loadCurrentEmployee() async {
+    try {
+      final username = html.window.localStorage['remembered_username']?.trim();
+
+      if (username == null || username.isEmpty) {
+        throw Exception('No logged-in employee username was found.');
+      }
+
+      final response = await Supabase.instance.client
+          .from('employees_auth')
+          .select('id, full_name')
+          .eq('username', username)
+          .eq('is_active', true)
+          .maybeSingle();
+
+      if (response == null) {
+        throw Exception('Employee not found in employees_auth.');
+      }
+
+      final name = response['full_name']?.toString().trim();
+      final id = response['id']?.toString().trim();
+
+      if (name == null || name.isEmpty || id == null || id.isEmpty) {
+        throw Exception('Employee record is missing id or full_name.');
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _currentUserName = name;
+        _currentUserId = id;
+      });
+    } catch (e) {
+      print('Error loading current employee: $e');
+      if (!mounted) return;
+      setState(() {
+        _currentUserName = null;
+        _currentUserId = null;
+      });
+    }
+  }
 
   @override
   void initState() {
     super.initState();
+    _loadCurrentEmployee();
     _loadAuditLogs();
   }
 
@@ -85,6 +129,18 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
       return;
     }
 
+    if (_currentUserName == null || _currentUserId == null) {
+      await _loadCurrentEmployee();
+    }
+
+    if (_currentUserName == null || _currentUserId == null) {
+      _showSnackBar(
+        'Could not identify the logged-in employee.',
+        isError: true,
+      );
+      return;
+    }
+
     setState(() => _isRestoring = true);
 
     try {
@@ -103,8 +159,8 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         fieldName: fieldName,
         oldValue: newValue?.toString(),
         newValue: oldValue.toString(),
-        changedBy: _currentUserName,
-        changedById: _currentUserId,
+        changedBy: _currentUserName!,
+        changedById: _currentUserId!,
         actionType: 'restore',
         notes: 'Restored from audit log: ${_formatDateTime(log['changed_at'])}',
       );

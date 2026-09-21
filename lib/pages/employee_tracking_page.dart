@@ -1,5 +1,6 @@
-import 'dart:math' as math;
 // lib/pages/employee_tracking_page.dart
+
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -8,10 +9,16 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../main.dart';
 import '../services/sap_service.dart';
+import '../services/audit_service.dart';
 import 'track_order.dart';
 
 class EmployeeTrackingPage extends StatefulWidget {
-  const EmployeeTrackingPage({Key? key}) : super(key: key);
+  final EmployeeAuth loggedInEmployee;
+
+  const EmployeeTrackingPage({
+    Key? key,
+    required this.loggedInEmployee,
+  }) : super(key: key);
 
   @override
   State<EmployeeTrackingPage> createState() => _EmployeeTrackingPageState();
@@ -23,6 +30,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   EmployeeAuthService(Supabase.instance.client);
   final SAPMainService _sapService =
   SAPMainService(Supabase.instance.client);
+
+  final AuditService _auditService =
+  AuditService(Supabase.instance.client);
 
   bool _isLoading = true;
   String? _error;
@@ -38,6 +48,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   // Cached employee movements. Invalidated whenever data or filters change.
   final Map<String, List<Map<String, dynamic>>> _changesCache = {};
   final Set<String> _expandedEmployees = <String>{};
+  // Employees whose workload bar is displayed as UNIQUE CONTRACT counts
+  // instead of order/item-row counts.
+  final Set<String> _contractCountEmployees = <String>{};
 
   DateTime? _startDate;
   DateTime? _endDate;
@@ -678,6 +691,264 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
           ),
         ),
       ),
+    );
+  }
+
+  Widget _buildWorkloadOrderCard(
+      SAPMainOrder order,
+      String stage, {
+        bool showAssignmentEditors = false,
+        void Function(SAPMainOrder updatedOrder)? onOrderUpdated,
+      }) {
+    final actualStage = _currentStageForStatus(order.status) ?? stage;
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: () => _openOrderTracking(order),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: _mutedColor,
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: _borderColor),
+          ),
+          child: LayoutBuilder(
+            builder: (context, constraints) {
+              final narrow = constraints.maxWidth < 720;
+
+              final orderInfo = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          order.designOrder.isNotEmpty
+                              ? order.designOrder
+                              : order.id,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.cairo(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w700,
+                            color: _textColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Icon(
+                        Icons.open_in_new,
+                        size: 13,
+                        color: _secondaryTextColor,
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    '${order.contractNumber} • ${order.customerName}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Engineer',
+                    name: order.responsibleEngineer,
+                    icon: Icons.engineering,
+                    color: Colors.orange,
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Reviewer',
+                    name: order.reviewer,
+                    icon: Icons.rate_review,
+                    color: Colors.purple,
+                  ),
+                  _buildAssignmentLine(
+                    label: 'Alternative',
+                    name: order.correspondenceEngineer,
+                    icon: Icons.alt_route,
+                    color: Colors.teal,
+                  ),
+                  if (showAssignmentEditors) ...[
+                    const SizedBox(height: 10),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Expanded(
+                          child: _buildTrackingEmployeeDropdown(
+                            label: 'Responsible Engineer',
+                            currentValue: order.responsibleEngineer,
+                            field: 'responsible_engineer',
+                            order: order,
+                            onUpdated: onOrderUpdated,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: _buildTrackingEmployeeDropdown(
+                            label: 'Reviewer',
+                            currentValue: order.reviewer,
+                            field: 'reviewer',
+                            order: order,
+                            onUpdated: onOrderUpdated,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              );
+
+              final stageInfo = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Current Workload Stage',
+                    style: GoogleFonts.cairo(
+                      fontSize: 9,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 5),
+                  _buildStatusBadge(actualStage),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Status: ${order.status}',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor,
+                    ),
+                  ),
+                ],
+              );
+
+              if (narrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    orderInfo,
+                    const SizedBox(height: 10),
+                    stageInfo,
+                  ],
+                );
+              }
+
+              return Row(
+                children: [
+                  Expanded(flex: 3, child: orderInfo),
+                  const SizedBox(width: 18),
+                  Expanded(flex: 2, child: stageInfo),
+                ],
+              );
+            },
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showWorkloadStageOrders(
+      String employeeName,
+      String stage,
+      List<SAPMainOrder> orders,
+      ) {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: _cardColor,
+          insetPadding: const EdgeInsets.all(16),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(
+              maxWidth: 1100,
+              maxHeight: 700,
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Icon(
+                        Icons.bar_chart,
+                        color: _secondaryTextColor,
+                        size: 20,
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          '$employeeName — All Workload Statuses',
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.cairo(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w700,
+                            color: _textColor,
+                          ),
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.withOpacity(0.10),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Text(
+                          '${orders.length} orders',
+                          style: GoogleFonts.cairo(
+                            fontSize: 9,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.blue,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.pop(dialogContext),
+                        icon: Icon(
+                          Icons.close,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Divider(color: _borderColor),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: orders.isEmpty
+                        ? Center(
+                      child: Text(
+                        'No workload orders found',
+                        style: GoogleFonts.cairo(
+                          fontSize: 12,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                    )
+                        : ListView.builder(
+                      itemCount: orders.length,
+                      itemBuilder: (context, index) {
+                        return _buildWorkloadOrderCard(
+                          orders[index],
+                          stage,
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
     );
   }
 
@@ -1713,6 +1984,36 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return null;
   }
 
+  Map<String, int> _unassignedWorkloadCounts() {
+    var header = 0;
+    var noOne = 0;
+    var notAssigned = 0;
+
+    for (final order in _orders) {
+      if (_currentStageForStatus(order.status) == null) continue;
+
+      // Use the same ownership priority as the workload graph.
+      final alternative = order.correspondenceEngineer?.trim() ?? '';
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final owner = alternative.isNotEmpty ? alternative : responsible;
+      final normalizedOwner = _normalize(owner);
+
+      if (normalizedOwner == 'header') {
+        header++;
+      } else if (normalizedOwner == 'no one') {
+        noOne++;
+      } else if (normalizedOwner.isEmpty) {
+        notAssigned++;
+      }
+    }
+
+    return {
+      'Header': header,
+      'No One': noOne,
+      'Not Assigned Yet': notAssigned,
+    };
+  }
+
   Map<String, Map<String, int>> _currentWorkloadByEmployee() {
     final result = <String, Map<String, int>>{};
 
@@ -1737,7 +2038,15 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       final alternative = order.correspondenceEngineer?.trim() ?? '';
       final responsible = order.responsibleEngineer?.trim() ?? '';
       final owner = alternative.isNotEmpty ? alternative : responsible;
-      if (owner.isEmpty) continue;
+      final normalizedOwner = _normalize(owner);
+
+      // Header, No One, and unassigned work are shown as counts above the
+      // graph, not as employee bars.
+      if (normalizedOwner.isEmpty ||
+          normalizedOwner == 'header' ||
+          normalizedOwner == 'no one') {
+        continue;
+      }
 
       final stages = stagesFor(owner);
       stages[stage] = (stages[stage] ?? 0) + 1;
@@ -1746,9 +2055,505 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return result;
   }
 
+  List<SAPMainOrder> _ordersForEmployeeStage(
+      String employeeName,
+      String stage,
+      ) {
+    // Build the popup from the exact same full _orders collection used by the
+    // workload graph. Do NOT deduplicate by order id here: every row in
+    // sap_main_orders is an order/item row and must be displayed.
+    final result = <SAPMainOrder>[];
+
+    for (final order in _orders) {
+      final currentStage = _currentStageForStatus(order.status);
+      if (currentStage == null) continue;
+
+      final alternative = order.correspondenceEngineer?.trim() ?? '';
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final owner = alternative.isNotEmpty ? alternative : responsible;
+
+      if (!_samePerson(owner, employeeName)) continue;
+
+      result.add(order);
+    }
+
+    result.sort((a, b) {
+      final contractCompare =
+      a.contractNumber.toString().compareTo(b.contractNumber.toString());
+      if (contractCompare != 0) return contractCompare;
+      final itemCompare =
+      a.itemNumber.toString().compareTo(b.itemNumber.toString());
+      if (itemCompare != 0) return itemCompare;
+      return a.id.compareTo(b.id);
+    });
+
+    return result;
+  }
+
+  List<SAPMainOrder> _ordersForSpecialWorkload(String special) {
+    final result = <SAPMainOrder>[];
+
+    for (final order in _orders) {
+      if (_currentStageForStatus(order.status) == null) continue;
+
+      final alternative = order.correspondenceEngineer?.trim() ?? '';
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final owner = alternative.isNotEmpty ? alternative : responsible;
+      final normalizedOwner = _normalize(owner);
+
+      final matches = switch (special) {
+        'Header' => normalizedOwner == 'header',
+        'No One' => normalizedOwner == 'no one',
+        'Not Assigned Yet' => normalizedOwner.isEmpty,
+        _ => false,
+      };
+
+      if (matches) result.add(order);
+    }
+
+    result.sort((a, b) {
+      final contractCompare =
+      a.contractNumber.toString().compareTo(b.contractNumber.toString());
+      if (contractCompare != 0) return contractCompare;
+      final itemCompare =
+      a.itemNumber.toString().compareTo(b.itemNumber.toString());
+      if (itemCompare != 0) return itemCompare;
+      return a.id.compareTo(b.id);
+    });
+
+    return result;
+  }
+
+  Widget _buildTrackingEmployeeDropdown({
+    required String label,
+    required String? currentValue,
+    required String field,
+    required SAPMainOrder order,
+    void Function(SAPMainOrder updatedOrder)? onUpdated,
+  }) {
+    final hasValue = currentValue != null && currentValue.trim().isNotEmpty;
+    final displayValue = hasValue ? currentValue!.trim() : 'Not assigned';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          label,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.cairo(
+            fontSize: 9,
+            fontWeight: FontWeight.w600,
+            color: _secondaryTextColor,
+          ),
+        ),
+        const SizedBox(height: 3),
+        PopupMenuButton<String>(
+          onSelected: (selectedValue) async {
+            final valueToSave =
+            selectedValue.trim().isEmpty ? null : selectedValue.trim();
+            await _updateTrackingAssignment(
+              order: order,
+              field: field,
+              newValue: valueToSave,
+              onUpdated: onUpdated,
+            );
+          },
+          offset: const Offset(0, 38),
+          position: PopupMenuPosition.under,
+          child: Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 6),
+            decoration: BoxDecoration(
+              color: hasValue
+                  ? const Color(0xFF6366F1).withOpacity(0.05)
+                  : _mutedColor,
+              borderRadius: BorderRadius.circular(6),
+              border: Border.all(
+                color: hasValue
+                    ? const Color(0xFF6366F1).withOpacity(0.2)
+                    : _borderColor,
+              ),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    displayValue,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w500,
+                      color: hasValue ? _textColor : _secondaryTextColor,
+                    ),
+                  ),
+                ),
+                Icon(
+                  Icons.arrow_drop_down,
+                  size: 15,
+                  color: hasValue
+                      ? const Color(0xFF6366F1)
+                      : _secondaryTextColor,
+                ),
+              ],
+            ),
+          ),
+          itemBuilder: (context) => [
+            const PopupMenuItem<String>(
+              value: '',
+              child: Text('Clear'),
+            ),
+            ..._employees.map((employee) {
+              final isSelected = _samePerson(currentValue, employee.fullName);
+              return PopupMenuItem<String>(
+                value: employee.fullName,
+                child: Row(
+                  children: [
+                    CircleAvatar(
+                      radius: 11,
+                      backgroundColor: Colors.blue.withOpacity(0.15),
+                      child: Text(
+                        employee.initials,
+                        style: GoogleFonts.cairo(
+                          fontSize: 9,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.blue,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            employee.fullName,
+                            overflow: TextOverflow.ellipsis,
+                            style: GoogleFonts.cairo(
+                              fontSize: 11,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w400,
+                              color: isSelected
+                                  ? const Color(0xFF6366F1)
+                                  : _textColor,
+                            ),
+                          ),
+                          if (employee.role != null)
+                            Text(
+                              employee.role!,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                fontSize: 9,
+                                color: _secondaryTextColor,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            }),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Future<void> _updateTrackingAssignment({
+    required SAPMainOrder order,
+    required String field,
+    required String? newValue,
+    void Function(SAPMainOrder updatedOrder)? onUpdated,
+  }) async {
+    final oldValue = field == 'responsible_engineer'
+        ? order.responsibleEngineer
+        : order.reviewer;
+
+    final oldText = oldValue?.trim() ?? '';
+    final newText = newValue?.trim() ?? '';
+    if (oldText == newText) return;
+
+    // IMPORTANT:
+    // Employee Tracking now receives the same EmployeeAuth instance as OrdersPage.
+    // Do NOT use Supabase auth UID here because this project uses employees_auth.
+    final EmployeeAuth auditEmployee = widget.loggedInEmployee;
+
+    final changedBy = auditEmployee.fullName.trim();
+    final changedById = auditEmployee.id.trim();
+
+    try {
+      // Resolve the audit actor BEFORE changing the database. This prevents
+      // an order from being changed without a corresponding audit record.
+      await _supabase
+          .from('sap_main_orders')
+          .update({field: newValue})
+          .eq('id', order.id);
+
+      await _auditService.logChange(
+        orderId: order.id,
+        designOrder: order.designOrder,
+        fieldName: field,
+        oldValue: oldText.isEmpty ? null : oldText,
+        newValue: newText.isEmpty ? null : newText,
+        changedBy: changedBy,
+        changedById: changedById,
+      );
+
+      final updatedOrder = SAPMainOrder(
+        id: order.id,
+        status: order.status,
+        customerName: order.customerName,
+        itemNumber: order.itemNumber,
+        productCode: order.productCode,
+        contractNumber: order.contractNumber,
+        description: order.description,
+        designOrder: order.designOrder,
+        quantity: order.quantity,
+        unitOfMeasure: order.unitOfMeasure,
+        value: order.value,
+        salesEngineer: order.salesEngineer,
+        orderDate: order.orderDate,
+        endDate: order.endDate,
+        deliveryDate: order.deliveryDate,
+        factory: order.factory,
+        designTeam: order.designTeam,
+        responsibleEngineer: field == 'responsible_engineer'
+            ? newValue
+            : order.responsibleEngineer,
+        reviewer: field == 'reviewer' ? newValue : order.reviewer,
+        correspondenceEngineer: order.correspondenceEngineer,
+        createdAt: order.createdAt,
+      );
+
+      final index = _orders.indexWhere((item) => item.id == order.id);
+      if (index != -1) {
+        _orders[index] = updatedOrder;
+      }
+
+      _changesCache.clear();
+
+      if (mounted) {
+        setState(() {});
+      }
+      onUpdated?.call(updatedOrder);
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${_fieldLabel(field)} updated successfully',
+              style: GoogleFonts.cairo(fontSize: 12),
+            ),
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Error updating ${_fieldLabel(field)}: $e',
+            style: GoogleFonts.cairo(fontSize: 12),
+          ),
+        ),
+      );
+    }
+  }
+
+  void _showSpecialWorkloadOrders(String special) {
+    final orders = _ordersForSpecialWorkload(special);
+    if (orders.isEmpty) return;
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (dialogContext, setDialogState) {
+            return Dialog(
+              backgroundColor: _cardColor,
+              insetPadding: const EdgeInsets.all(16),
+              child: ConstrainedBox(
+                constraints: const BoxConstraints(maxWidth: 1100, maxHeight: 700),
+                child: Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    children: [
+                      Row(
+                        children: [
+                          Icon(Icons.bar_chart, color: _secondaryTextColor, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              '$special — All Workload Statuses',
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w700,
+                                color: _textColor,
+                              ),
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.withOpacity(0.10),
+                              borderRadius: BorderRadius.circular(14),
+                            ),
+                            child: Text(
+                              '${orders.length} orders',
+                              style: GoogleFonts.cairo(
+                                fontSize: 9,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.blue,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: () => Navigator.pop(dialogContext),
+                            icon: Icon(Icons.close, color: _secondaryTextColor),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Divider(color: _borderColor),
+                      const SizedBox(height: 8),
+                      Expanded(
+                        child: ListView.builder(
+                          itemCount: orders.length,
+                          itemBuilder: (context, index) {
+                            final order = orders[index];
+                            final stage =
+                                _currentStageForStatus(order.status) ?? 'Unknown';
+                            return _buildWorkloadOrderCard(
+                              order,
+                              stage,
+                              showAssignmentEditors: special == 'Not Assigned Yet',
+                              onOrderUpdated: special == 'Not Assigned Yet'
+                                  ? (updatedOrder) {
+                                orders[index] = updatedOrder;
+                                setDialogState(() {});
+                              }
+                                  : null,
+                            );
+                          },
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildWorkloadCountBadge(
+      String title,
+      int count,
+      Color color,
+      ) {
+    return Material(
+      color: Colors.transparent,
+      borderRadius: BorderRadius.circular(8),
+      child: InkWell(
+        onTap: count > 0 ? () => _showSpecialWorkloadOrders(title) : null,
+        borderRadius: BorderRadius.circular(8),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.08),
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(color: color.withOpacity(0.18)),
+          ),
+          child: Text(
+            '$title: $count',
+            style: GoogleFonts.cairo(
+              fontSize: 9,
+              fontWeight: FontWeight.w700,
+              color: color,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  String _contractKey(SAPMainOrder order) {
+    final contract = order.contractNumber.toString().trim();
+    // If a row has no contract number, keep it distinct instead of grouping
+    // every empty value into one contract.
+    return contract.isEmpty
+        ? '__order__${order.id.trim()}'
+        : _normalize(contract);
+  }
+
+  Map<String, int> _contractWorkloadByStage(String employeeName) {
+    final stageContracts = <String, Set<String>>{
+      'Drawing Submittal': <String>{},
+      'Task': <String>{},
+      'Modification': <String>{},
+      'Manufacturing': <String>{},
+    };
+
+    for (final order in _orders) {
+      final stage = _currentStageForStatus(order.status);
+      if (stage == null) continue;
+
+      final alternative = order.correspondenceEngineer?.trim() ?? '';
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final owner = alternative.isNotEmpty ? alternative : responsible;
+
+      if (!_samePerson(owner, employeeName)) continue;
+
+      stageContracts[stage]!.add(_contractKey(order));
+    }
+
+    return {
+      for (final entry in stageContracts.entries)
+        entry.key: entry.value.length,
+    };
+  }
+
+  int _contractCountForEmployee(String employeeName) {
+    final contracts = <String>{};
+
+    for (final order in _orders) {
+      if (_currentStageForStatus(order.status) == null) continue;
+
+      final alternative = order.correspondenceEngineer?.trim() ?? '';
+      final responsible = order.responsibleEngineer?.trim() ?? '';
+      final owner = alternative.isNotEmpty ? alternative : responsible;
+
+      if (_samePerson(owner, employeeName)) {
+        contracts.add(_contractKey(order));
+      }
+    }
+
+    return contracts.length;
+  }
+
+  Map<String, int> _displayedWorkloadStages(
+      String employeeName,
+      Map<String, int> orderStages,
+      ) {
+    if (!_contractCountEmployees.contains(_normalize(employeeName))) {
+      return orderStages;
+    }
+
+    return _contractWorkloadByStage(employeeName);
+  }
+
   Widget _buildCurrentWorkloadGraph(bool compact) {
+
     final workload = _currentWorkloadByEmployee();
-    if (workload.isEmpty) return const SizedBox.shrink();
+    final unassignedCounts = _unassignedWorkloadCounts();
+    if (workload.isEmpty && unassignedCounts.values.every((count) => count == 0)) {
+      return const SizedBox.shrink();
+    }
 
     final stageOrder = const [
       'Drawing Submittal',
@@ -1776,8 +2581,16 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       });
 
     final maxTotal = employeeEntries
-        .map((entry) =>
-        entry.value.values.fold<int>(0, (sum, value) => sum + value))
+        .map((entry) {
+      final displayed = _displayedWorkloadStages(
+        entry.key,
+        entry.value,
+      );
+      return displayed.values.fold<int>(
+        0,
+            (sum, value) => sum + value,
+      );
+    })
         .fold<int>(0, (a, b) => a > b ? a : b);
 
     // Keep the graph compact even when there are many employees.
@@ -1796,25 +2609,87 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Icon(Icons.bar_chart, size: 19, color: _textColor),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  'Current Workload by Employee',
-                  style: GoogleFonts.cairo(
-                    fontSize: compact ? 14 : 16,
-                    fontWeight: FontWeight.w700,
-                    color: _textColor,
-                  ),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final compactHeader = constraints.maxWidth < 760;
+
+              final specialCountWidgets = <Widget>[
+                _buildWorkloadCountBadge(
+                  'Header',
+                  unassignedCounts['Header'] ?? 0,
+                  Colors.deepPurple,
                 ),
-              ),
-            ],
+                _buildWorkloadCountBadge(
+                  'No One',
+                  unassignedCounts['No One'] ?? 0,
+                  Colors.grey,
+                ),
+                _buildWorkloadCountBadge(
+                  'Not Assigned Yet',
+                  unassignedCounts['Not Assigned Yet'] ?? 0,
+                  Colors.orange,
+                ),
+              ];
+
+              final title = Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.bar_chart, size: 19, color: _textColor),
+                  const SizedBox(width: 8),
+                  Text(
+                    'Current Workload by Employee',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: compact ? 14 : 16,
+                      fontWeight: FontWeight.w700,
+                      color: _textColor,
+                    ),
+                  ),
+                ],
+              );
+
+              if (compactHeader) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    title,
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 6,
+                        runSpacing: 5,
+                        children: specialCountWidgets,
+                      ),
+                    ),
+                  ],
+                );
+              }
+
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(child: title),
+                  const SizedBox(width: 12),
+                  Flexible(
+                    child: Align(
+                      alignment: Alignment.topRight,
+                      child: Wrap(
+                        alignment: WrapAlignment.end,
+                        spacing: 6,
+                        runSpacing: 5,
+                        children: specialCountWidgets,
+                      ),
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           const SizedBox(height: 4),
           Text(
-            'Total current work in the four stages. Alternative Engineer gets priority; when empty, the Responsible Engineer gets the order.',
+            'Each bar normally counts order rows. Use the checkbox under a bar to count unique contract numbers for that employee. Clicking a bar still opens all matching order rows.',
             style: GoogleFonts.cairo(
               fontSize: 10,
               color: _secondaryTextColor,
@@ -1865,15 +2740,38 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                 borderData: FlBorderData(show: false),
                 barTouchData: BarTouchData(
                   enabled: true,
+
+                  // Hover shows the complete workload breakdown.
+                  // Hover never opens the orders dialog.
                   touchTooltipData: BarTouchTooltipData(
                     getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final employee = employeeEntries[group.x.toInt()];
-                      final stages = employee.value;
+                      if (groupIndex < 0 ||
+                          groupIndex >= employeeEntries.length) {
+                        return null;
+                      }
+
+                      final employee = employeeEntries[groupIndex];
+                      final orderStages = employee.value;
+                      final stages = _displayedWorkloadStages(
+                        employee.key,
+                        orderStages,
+                      );
+
                       final drawing = stages['Drawing Submittal'] ?? 0;
                       final task = stages['Task'] ?? 0;
                       final modification = stages['Modification'] ?? 0;
                       final manufacturing = stages['Manufacturing'] ?? 0;
-                      final total = drawing + task + modification + manufacturing;
+                      final displayedTotal =
+                          drawing + task + modification + manufacturing;
+                      final totalOrders = orderStages.values.fold<int>(
+                        0,
+                            (sum, value) => sum + value,
+                      );
+                      final totalContracts =
+                      _contractCountForEmployee(employee.key);
+                      final contractMode = _contractCountEmployees.contains(
+                        _normalize(employee.key),
+                      );
 
                       return BarTooltipItem(
                         '${employee.key}\n'
@@ -1881,16 +2779,58 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                             'Task: $task\n'
                             'Modification: $modification\n'
                             'Manufacturing: $manufacturing\n'
-                            'Total: $total',
+                            '${contractMode ? 'Displayed: $displayedTotal contracts\n' : ''}'
+                            'Total Orders: $totalOrders\n'
+                            'Total Contracts: $totalContracts',
                         GoogleFonts.cairo(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
                           color: Colors.white,
-                          height: 1.35,
+                          height: 1.4,
                         ),
                       );
                     },
                   ),
+
+                  // Only an actual click/tap opens the orders.
+                  touchCallback: (event, response) {
+                    if (event is! FlTapUpEvent ||
+                        response?.spot == null) {
+                      return;
+                    }
+
+                    final spot = response!.spot!;
+                    final groupIndex = spot.touchedBarGroupIndex;
+                    final stackIndex = spot.touchedStackItemIndex;
+
+                    if (groupIndex < 0 ||
+                        groupIndex >= employeeEntries.length ||
+                        stackIndex < 0 ||
+                        stackIndex >= stageOrder.length) {
+                      return;
+                    }
+
+                    final employee = employeeEntries[groupIndex];
+                    final stage = stageOrder[stackIndex];
+                    final displayedStages = _displayedWorkloadStages(
+                      employee.key,
+                      employee.value,
+                    );
+                    final count = displayedStages[stage] ?? 0;
+
+                    if (count <= 0) return;
+
+                    final orders = _ordersForEmployeeStage(
+                      employee.key,
+                      stage,
+                    );
+
+                    _showWorkloadStageOrders(
+                      employee.key,
+                      stage,
+                      orders,
+                    );
+                  },
                 ),
                 titlesData: FlTitlesData(
                   topTitles: const AxisTitles(
@@ -1925,28 +2865,60 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                   bottomTitles: AxisTitles(
                     sideTitles: SideTitles(
                       showTitles: true,
-                      reservedSize: compact ? 62 : 70,
+                      reservedSize: compact ? 92 : 100,
                       getTitlesWidget: (value, meta) {
                         final index = value.toInt();
                         if (index < 0 || index >= employeeEntries.length) {
                           return const SizedBox.shrink();
                         }
+
+                        final employeeName = employeeEntries[index].key;
+                        final normalizedName = _normalize(employeeName);
+                        final checked =
+                        _contractCountEmployees.contains(normalizedName);
+
                         return SideTitleWidget(
                           meta: meta,
                           space: 8,
                           angle: -math.pi / 7,
                           child: SizedBox(
                             width: compact ? 90 : 120,
-                            child: Text(
-                              employeeEntries[index].key,
-                              textAlign: TextAlign.center,
-                              maxLines: 2,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.cairo(
-                                fontSize: compact ? 11 : 12,
-                                fontWeight: FontWeight.w600,
-                                color: _textColor,
-                              ),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  employeeName,
+                                  textAlign: TextAlign.center,
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: compact ? 11 : 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: _textColor,
+                                  ),
+                                ),
+                                const SizedBox(height: 1),
+                                Transform.scale(
+                                  scale: compact ? 0.70 : 0.78,
+                                  child: Checkbox(
+                                    value: checked,
+                                    visualDensity: VisualDensity.compact,
+                                    materialTapTargetSize:
+                                    MaterialTapTargetSize.shrinkWrap,
+                                    onChanged: (value) {
+                                      setState(() {
+                                        if (value == true) {
+                                          _contractCountEmployees
+                                              .add(normalizedName);
+                                        } else {
+                                          _contractCountEmployees
+                                              .remove(normalizedName);
+                                        }
+                                      });
+                                    },
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         );
@@ -1956,48 +2928,45 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                 ),
                 barGroups: employeeEntries.asMap().entries.map((entry) {
                   final index = entry.key;
-                  final stages = entry.value.value;
+                  final employeeName = entry.value.key;
+                  final stages = _displayedWorkloadStages(
+                    employeeName,
+                    entry.value.value,
+                  );
+
+                  final drawing = stages['Drawing Submittal'] ?? 0;
+                  final task = stages['Task'] ?? 0;
+                  final modification = stages['Modification'] ?? 0;
+                  final manufacturing = stages['Manufacturing'] ?? 0;
+                  final displayedTotal =
+                      drawing + task + modification + manufacturing;
 
                   return BarChartGroupData(
                     x: index,
                     barRods: [
                       BarChartRodData(
-                        toY: stages.values
-                            .fold<int>(0, (sum, value) => sum + value)
-                            .toDouble(),
+                        toY: displayedTotal.toDouble(),
                         width: compact ? 22 : 28,
                         borderRadius: BorderRadius.circular(5),
                         rodStackItems: [
                           BarChartRodStackItem(
                             0,
-                            (stages['Drawing Submittal'] ?? 0).toDouble(),
+                            drawing.toDouble(),
                             stageColors['Drawing Submittal']!,
                           ),
                           BarChartRodStackItem(
-                            (stages['Drawing Submittal'] ?? 0).toDouble(),
-                            ((stages['Drawing Submittal'] ?? 0) +
-                                (stages['Task'] ?? 0))
-                                .toDouble(),
+                            drawing.toDouble(),
+                            (drawing + task).toDouble(),
                             stageColors['Task']!,
                           ),
                           BarChartRodStackItem(
-                            ((stages['Drawing Submittal'] ?? 0) +
-                                (stages['Task'] ?? 0))
-                                .toDouble(),
-                            ((stages['Drawing Submittal'] ?? 0) +
-                                (stages['Task'] ?? 0) +
-                                (stages['Modification'] ?? 0))
-                                .toDouble(),
+                            (drawing + task).toDouble(),
+                            (drawing + task + modification).toDouble(),
                             stageColors['Modification']!,
                           ),
                           BarChartRodStackItem(
-                            ((stages['Drawing Submittal'] ?? 0) +
-                                (stages['Task'] ?? 0) +
-                                (stages['Modification'] ?? 0))
-                                .toDouble(),
-                            stages.values
-                                .fold<int>(0, (sum, value) => sum + value)
-                                .toDouble(),
+                            (drawing + task + modification).toDouble(),
+                            displayedTotal.toDouble(),
                             stageColors['Manufacturing']!,
                           ),
                         ],
@@ -2205,4 +3174,3 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     );
   }
 }
-
