@@ -1347,6 +1347,185 @@ class _OrdersPageState extends State<OrdersPage> {
     _rebuildGroups();
   }
 
+  Future<String?> _showEmployeeAssignmentDialog({
+    required String field,
+    required String? currentValue,
+  }) async {
+    final searchController = TextEditingController();
+
+    final result = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            final query = searchController.text.trim().toLowerCase();
+
+            final filteredEmployees = _allEmployees.where((emp) {
+              if (query.isEmpty) return true;
+
+              final name = emp.fullName.toLowerCase();
+              final role = emp.role?.toLowerCase() ?? '';
+              final initials = emp.initials.toLowerCase();
+
+              return name.contains(query) ||
+                  role.contains(query) ||
+                  initials.contains(query);
+            }).toList();
+
+            return AlertDialog(
+              titlePadding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+              contentPadding: const EdgeInsets.fromLTRB(20, 8, 20, 16),
+              title: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      field == 'responsible_engineer'
+                          ? 'Assign Responsible Engineer'
+                          : field == 'reviewer'
+                          ? 'Assign Reviewer'
+                          : 'Assign Alternative Engineer',
+                      style: GoogleFonts.cairo(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    tooltip: 'Close',
+                    onPressed: () => Navigator.pop(dialogContext),
+                    icon: const Icon(Icons.close, size: 20),
+                  ),
+                ],
+              ),
+              content: SizedBox(
+                width: 360,
+                height: 430,
+                child: Column(
+                  children: [
+                    TextField(
+                      controller: searchController,
+                      autofocus: true,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        hintText: 'Search employee...',
+                        hintStyle: GoogleFonts.cairo(fontSize: 12),
+                        prefixIcon: const Icon(Icons.search, size: 20),
+                        suffixIcon: searchController.text.isNotEmpty
+                            ? IconButton(
+                          tooltip: 'Clear search',
+                          onPressed: () {
+                            searchController.clear();
+                            setDialogState(() {});
+                          },
+                          icon: const Icon(Icons.clear, size: 18),
+                        )
+                            : null,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 10,
+                        ),
+                      ),
+                      style: GoogleFonts.cairo(fontSize: 12),
+                    ),
+                    const SizedBox(height: 10),
+                    Expanded(
+                      child: filteredEmployees.isEmpty
+                          ? Center(
+                        child: Text(
+                          'No employees found',
+                          style: GoogleFonts.cairo(
+                            fontSize: 12,
+                            color: _secondaryTextColor,
+                          ),
+                        ),
+                      )
+                          : ListView.separated(
+                        itemCount: filteredEmployees.length,
+                        separatorBuilder: (_, __) => Divider(
+                          height: 1,
+                          color: _borderColor,
+                        ),
+                        itemBuilder: (context, index) {
+                          final emp = filteredEmployees[index];
+                          final isSelected =
+                              currentValue == emp.fullName;
+
+                          return ListTile(
+                            dense: true,
+                            contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 4,
+                              vertical: 2,
+                            ),
+                            leading: CircleAvatar(
+                              radius: 16,
+                              backgroundColor:
+                              Colors.blue.withOpacity(0.12),
+                              child: Text(
+                                emp.initials,
+                                style: GoogleFonts.cairo(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.blue,
+                                ),
+                              ),
+                            ),
+                            title: Text(
+                              emp.fullName,
+                              style: GoogleFonts.cairo(
+                                fontSize: 12,
+                                fontWeight: isSelected
+                                    ? FontWeight.w700
+                                    : FontWeight.w500,
+                                color: isSelected
+                                    ? const Color(0xFF6366F1)
+                                    : _textColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            subtitle: emp.role != null &&
+                                emp.role!.trim().isNotEmpty
+                                ? Text(
+                              emp.role!,
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                color: _secondaryTextColor,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            )
+                                : null,
+                            trailing: isSelected
+                                ? const Icon(
+                              Icons.check_circle,
+                              size: 18,
+                              color: Color(0xFF6366F1),
+                            )
+                                : null,
+                            onTap: () {
+                              Navigator.pop(
+                                dialogContext,
+                                emp.fullName,
+                              );
+                            },
+                          );
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+
+    searchController.dispose();
+    return result;
+  }
+
   Future<void> _updateOrderEngineer(
       SAPMainOrder order,
       String field,
@@ -3624,18 +3803,23 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
-    // Editable dropdown
+    // Editable searchable assignment dropdown.
     return SizedBox(
       width: field == 'responsible_engineer' ? 130 : 120,
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 2),
-        child: PopupMenuButton<String>(
-          onSelected: (newValue) {
-            final valueToSave = newValue.isEmpty ? null : newValue;
-            _updateOrderEngineer(order, field, valueToSave);
+        child: InkWell(
+          borderRadius: BorderRadius.circular(4),
+          onTap: () async {
+            final selectedValue = await _showEmployeeAssignmentDialog(
+              field: field,
+              currentValue: currentValue,
+            );
+
+            if (selectedValue != null) {
+              _updateOrderEngineer(order, field, selectedValue);
+            }
           },
-          offset: const Offset(0, 40),
-          position: PopupMenuPosition.under,
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
             decoration: BoxDecoration(
@@ -3666,71 +3850,13 @@ class _OrdersPageState extends State<OrdersPage> {
                 Icon(
                   Icons.arrow_drop_down,
                   size: 12,
-                  color: hasValue ? const Color(0xFF6366F1) : _secondaryTextColor,
+                  color: hasValue
+                      ? const Color(0xFF6366F1)
+                      : _secondaryTextColor,
                 ),
               ],
             ),
           ),
-          itemBuilder: (context) => [
-            ..._allEmployees.map((emp) {
-              final isSelected = currentValue == emp.fullName;
-              return PopupMenuItem<String>(
-                value: emp.fullName,
-                child: Row(
-                  children: [
-                    CircleAvatar(
-                      radius: 12,
-                      backgroundColor: Colors.blue.withOpacity(0.2),
-                      child: Text(
-                        emp.initials,
-                        style: GoogleFonts.cairo(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                          color: Colors.blue,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            emp.fullName,
-                            style: GoogleFonts.cairo(
-                              fontSize: 12,
-                              fontWeight: isSelected
-                                  ? FontWeight.w700
-                                  : FontWeight.w400,
-                              color: isSelected
-                                  ? const Color(0xFF6366F1)
-                                  : _textColor,
-                            ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                          if (emp.role != null)
-                            Text(
-                              emp.role!,
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                color: _secondaryTextColor,
-                              ),
-                              overflow: TextOverflow.ellipsis,
-                            ),
-                        ],
-                      ),
-                    ),
-                    if (isSelected)
-                      const Icon(
-                        Icons.check,
-                        size: 16,
-                        color: Color(0xFF6366F1),
-                      ),
-                  ],
-                ),
-              );
-            }),
-          ],
         ),
       ),
     );

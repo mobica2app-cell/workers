@@ -19,47 +19,52 @@ class AnalyticsPage extends StatefulWidget {
 class _AnalyticsPageState extends State<AnalyticsPage> {
   bool _isLoading = true;
 
-  static const List<String> _approvalStatuses = [
+  static const List<String> _beforeApprovalStatuses = [
     'Drawing Submittal',
     'modifications submitted',
+  ];
+
+  static const List<String> _approvalStatuses = [
     'Approval',
     'Sales',
     'As Built',
-    'ادارة تصميم المنتجات',
-    'الادارة الهندسه',
-    'design studio',
+    'Partition Editing',
   ];
 
   static const List<String> _manufacturingStatuses = [
     'Manufacturing Drawing',
     'Review',
-    'Master Data',
     'partation  master data',
   ];
 
   List<SAPMainOrder> _orders = [];
-  List<Map<String, dynamic>> _auditLogs = [];
 
   DateTime? _startDate;
   DateTime? _endDate;
 
   // Section data
+  int _beforeApprovalOrders = 0;
   int _approvalOrders = 0;
   int _manufacturingOrders = 0;
+  double _beforeApprovalValue = 0;
   double _approvalValue = 0;
   double _manufacturingValue = 0;
+  double _beforeApprovalQuantity = 0;
   double _approvalQuantity = 0;
   double _manufacturingQuantity = 0;
 
+  Map<String, int> _beforeApprovalFactories = {};
   Map<String, int> _approvalFactories = {};
   Map<String, int> _manufacturingFactories = {};
   // Factory/SLoc descriptions loaded from Supabase `factory_names`.
   // Key is normalized factory code, value is description.
   Map<String, String> _factoryDescriptions = {};
   Map<String, String> _factoryOriginalCodes = {};
+  Map<String, int> _beforeApprovalSales = {};
   Map<String, int> _approvalSales = {};
   Map<String, int> _manufacturingSales = {};
 
+  Map<String, int> _beforeApprovalByDate = {};
   Map<String, int> _approvalByDate = {};
   Map<String, int> _manufacturingByDate = {};
 
@@ -91,18 +96,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
       final orders = await widget.sapService.getAllOrders();
 
-      // Status audit history is used for date analytics, exactly like the
-      // dashboard. A large limit keeps the analytics useful for big datasets.
-      final auditRows = await Supabase.instance.client
-          .from('order_audit_log')
-          .select('order_id, field_name, new_value, changed_at')
-          .eq('field_name', 'status')
-          .order('changed_at', ascending: true)
-          .limit(100000);
-
       _orders = orders;
-      _auditLogs = List<Map<String, dynamic>>.from(auditRows);
-
       _recalculate();
     } catch (e) {
       debugPrint('Error loading analytics: $e');
@@ -222,6 +216,9 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return true;
   }
 
+  bool _isBeforeApproval(String status) =>
+      _beforeApprovalStatuses.any((s) => s.toLowerCase() == status.toLowerCase());
+
   bool _isApproval(String status) =>
       _approvalStatuses.any((s) => s.toLowerCase() == status.toLowerCase());
 
@@ -232,77 +229,149 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   void _recalculate() {
     final orders = _orders;
-    final ordersById = <String, SAPMainOrder>{for (final order in orders) _orderKey(order): order};
+    final ordersById = <String, SAPMainOrder>{
+      for (final order in orders) _orderKey(order): order,
+    };
+
+    final beforeApprovalIds = <String>{};
     final approvalIds = <String>{};
     final manufacturingIds = <String>{};
+
+    final beforeApprovalFactories = <String, Set<String>>{};
     final approvalFactories = <String, Set<String>>{};
     final manufacturingFactories = <String, Set<String>>{};
+
+    final beforeApprovalSales = <String, Set<String>>{};
     final approvalSales = <String, Set<String>>{};
     final manufacturingSales = <String, Set<String>>{};
+
+    final beforeApprovalDates = <String, Set<String>>{};
     final approvalDates = <String, Set<String>>{};
     final manufacturingDates = <String, Set<String>>{};
 
-    void addOrder(String id, SAPMainOrder order, bool approval, [DateTime? date]) {
-      final ids = approval ? approvalIds : manufacturingIds;
-      final factories = approval ? approvalFactories : manufacturingFactories;
-      final sales = approval ? approvalSales : manufacturingSales;
-      final dates = approval ? approvalDates : manufacturingDates;
+    void addOrder(
+        String id,
+        SAPMainOrder order,
+        String section,
+        DateTime orderDate,
+        ) {
+      final ids = section == 'before'
+          ? beforeApprovalIds
+          : section == 'approval'
+          ? approvalIds
+          : manufacturingIds;
+
+      final factories = section == 'before'
+          ? beforeApprovalFactories
+          : section == 'approval'
+          ? approvalFactories
+          : manufacturingFactories;
+
+      final sales = section == 'before'
+          ? beforeApprovalSales
+          : section == 'approval'
+          ? approvalSales
+          : manufacturingSales;
+
+      final dates = section == 'before'
+          ? beforeApprovalDates
+          : section == 'approval'
+          ? approvalDates
+          : manufacturingDates;
+
       ids.add(id);
+
       final factory = (order.factory ?? '').trim();
-      if (factory.isNotEmpty) factories.putIfAbsent(factory, () => <String>{}).add(id);
+      if (factory.isNotEmpty) {
+        factories.putIfAbsent(factory, () => <String>{}).add(id);
+      }
+
       final salesEngineer = order.salesEngineer.trim();
-      if (salesEngineer.isNotEmpty) sales.putIfAbsent(salesEngineer, () => <String>{}).add(id);
-      if (date != null) {
-        final dayKey = DateFormat('yyyy-MM-dd').format(date);
-        dates.putIfAbsent(dayKey, () => <String>{}).add(id);
+      if (salesEngineer.isNotEmpty) {
+        sales.putIfAbsent(salesEngineer, () => <String>{}).add(id);
+      }
+
+      final dayKey = DateFormat('yyyy-MM-dd').format(orderDate);
+      dates.putIfAbsent(dayKey, () => <String>{}).add(id);
+    }
+
+    // Date filtering is based ONLY on sap_main_orders.order_date.
+    // Status is always the order's current SAP status.
+    for (final order in orders) {
+      final orderDate = _parseDate(order.orderDate);
+      if (orderDate == null) continue;
+
+      if ((_startDate != null || _endDate != null) &&
+          !_inDateRange(orderDate)) {
+        continue;
+      }
+
+      final id = _orderKey(order);
+
+      if (_isBeforeApproval(order.status)) {
+        addOrder(id, order, 'before', orderDate);
+      }
+
+      if (_isApproval(order.status)) {
+        addOrder(id, order, 'approval', orderDate);
+      }
+
+      if (_isManufacturing(order.status)) {
+        addOrder(id, order, 'manufacturing', orderDate);
       }
     }
 
-    if (_startDate == null && _endDate == null) {
-      // Same source and current-status logic as Dashboard.
-      for (final order in orders) {
-        final id = _orderKey(order);
-        if (_isApproval(order.status)) addOrder(id, order, true);
-        if (_isManufacturing(order.status)) addOrder(id, order, false);
-      }
-    } else {
-      // Same date-filter logic as Dashboard.
-      for (final log in _auditLogs) {
-        final fieldName = log['field_name']?.toString().trim() ?? '';
-        final orderId = log['order_id']?.toString().trim() ?? '';
-        final status = log['new_value']?.toString().trim() ?? '';
-        final changedAt = _parseDate(log['changed_at']);
-        if (fieldName != 'status' || orderId.isEmpty || orderId == 'bulk_delete' || orderId == 'import_batch' || status.isEmpty || changedAt == null || !_inDateRange(changedAt)) continue;
-        final order = ordersById[orderId];
-        if (order == null || order.status.trim() != status) continue;
-        if (_isApproval(status)) addOrder(orderId, order, true, changedAt);
-        if (_isManufacturing(status)) addOrder(orderId, order, false, changedAt);
-      }
-    }
+    final sumValue = (Set<String> ids) =>
+        ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.value ?? 0));
 
-    final sumValue = (Set<String> ids) => ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.value ?? 0));
-    final sumQuantity = (Set<String> ids) => ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.quantity ?? 0));
-    Map<String, int> counts(Map<String, Set<String>> source) => {for (final e in source.entries) e.key: e.value.length};
+    final sumQuantity = (Set<String> ids) =>
+        ids.fold<double>(0, (sum, id) => sum + (ordersById[id]?.quantity ?? 0));
+
+    Map<String, int> counts(Map<String, Set<String>> source) =>
+        {for (final e in source.entries) e.key: e.value.length};
+
     Map<String, int> dateCounts(Map<String, Set<String>> source) {
       final result = counts(source);
-      return Map.fromEntries(result.entries.toList()..sort((a, b) => a.key.compareTo(b.key)));
+      return Map.fromEntries(
+        result.entries.toList()..sort((a, b) => a.key.compareTo(b.key)),
+      );
     }
 
-    debugPrint('[ANALYTICS] SAP orders: ${orders.length} | Approval: ${approvalIds.length} | Manufacturing: ${manufacturingIds.length} | Range: ${_dateRangeLabel()}');
+    debugPrint(
+      '[ANALYTICS] SAP orders: ${orders.length} | '
+          'Before Approval: ${beforeApprovalIds.length} | '
+          'Approval: ${approvalIds.length} | '
+          'Manufacturing: ${manufacturingIds.length} | '
+          'Order Date Range: ${_dateRangeLabel()}',
+    );
+
     if (!mounted) return;
+
     setState(() {
+      _beforeApprovalOrders = beforeApprovalIds.length;
       _approvalOrders = approvalIds.length;
       _manufacturingOrders = manufacturingIds.length;
+
+      _beforeApprovalValue = sumValue(beforeApprovalIds);
       _approvalValue = sumValue(approvalIds);
       _manufacturingValue = sumValue(manufacturingIds);
+
+      _beforeApprovalQuantity = sumQuantity(beforeApprovalIds);
       _approvalQuantity = sumQuantity(approvalIds);
       _manufacturingQuantity = sumQuantity(manufacturingIds);
+
+      _beforeApprovalFactories = counts(beforeApprovalFactories);
       _approvalFactories = counts(approvalFactories);
       _manufacturingFactories = counts(manufacturingFactories);
+
+      _beforeApprovalSales = counts(beforeApprovalSales);
       _approvalSales = counts(approvalSales);
       _manufacturingSales = counts(manufacturingSales);
+
+      _beforeApprovalByDate = dateCounts(beforeApprovalDates);
       _approvalByDate = dateCounts(approvalDates);
       _manufacturingByDate = dateCounts(manufacturingDates);
+
       _isLoading = false;
     });
   }
@@ -430,9 +499,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   _buildOverviewCards(),
                   const SizedBox(height: 24),
                   _buildSection(
+                    title: 'Before Approval',
+                    icon: Icons.draw_outlined,
+                    sectionColor: Colors.purple,
+                    orderCount: _beforeApprovalOrders,
+                    value: _beforeApprovalValue,
+                    quantity: _beforeApprovalQuantity,
+                    factories: _beforeApprovalFactories,
+                    sales: _beforeApprovalSales,
+                    dates: _beforeApprovalByDate,
+                  ),
+                  const SizedBox(height: 24),
+                  _buildSection(
                     title: 'Approval',
                     icon: Icons.fact_check_outlined,
-                    sectionColor: Colors.purple,
+                    sectionColor: Colors.green,
                     orderCount: _approvalOrders,
                     value: _approvalValue,
                     quantity: _approvalQuantity,
@@ -478,7 +559,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Approval & Manufacturing performance',
+                'Before Approval, Approval & Manufacturing performance',
                 style: GoogleFonts.cairo(
                   fontSize: 12,
                   color: _secondaryTextColor,
@@ -514,7 +595,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   color: Theme.of(context).colorScheme.primary),
               const SizedBox(width: 8),
               Text(
-                'Audit Date',
+                'Order Date',
                 style: GoogleFonts.cairo(
                   fontWeight: FontWeight.w700,
                   color: _textColor,
@@ -567,7 +648,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               color: Theme.of(context).colorScheme.primary),
           const SizedBox(width: 10),
           Text(
-            'Audit Date',
+            'Order Date',
             style: GoogleFonts.cairo(
               fontSize: 14,
               fontWeight: FontWeight.w700,
@@ -673,16 +754,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildOverviewCards() {
     final cards = [
       _overviewCard(
+        'Before Approval Orders',
+        '$_beforeApprovalOrders',
+        Icons.draw_outlined,
+        Colors.purple,
+      ),
+      _overviewCard(
         'Approval Orders',
         '$_approvalOrders',
         Icons.fact_check_outlined,
-        Colors.purple,
+        Colors.green,
       ),
       _overviewCard(
         'Manufacturing Orders',
         '$_manufacturingOrders',
         Icons.precision_manufacturing_outlined,
         Colors.orange,
+      ),
+      _overviewCard(
+        'Before Approval Value',
+        '\$${_formatNumber(_beforeApprovalValue)}',
+        Icons.attach_money,
+        Colors.deepPurple,
       ),
       _overviewCard(
         'Approval Value',

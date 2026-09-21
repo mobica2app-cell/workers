@@ -51,11 +51,14 @@ class _DashboardPageState extends State<DashboardPage> {
   int _ordersThisMonth = 0;
 
   // Approach and Manufacturing data
-  List<SAPMainOrder> _approachOrders = [];
+  List<SAPMainOrder> _beforeApprovalOrders = [];
+  List<SAPMainOrder> _approvalOrders = [];
   List<SAPMainOrder> _manufacturingOrders = [];
-  double _approachValue = 0;
+  double _beforeApprovalValue = 0;
+  double _approvalValue = 0;
   double _manufacturingValue = 0;
-  double _approachQuantity = 0;
+  double _beforeApprovalQuantity = 0;
+  double _approvalQuantity = 0;
   double _manufacturingQuantity = 0;
 
   // Employee auth service
@@ -73,21 +76,21 @@ class _DashboardPageState extends State<DashboardPage> {
   Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
 
   // Status lists
-  static const List<String> _approachStatuses = [
+  static const List<String> _beforeApprovalStatuses = [
     'Drawing Submittal',
     'modifications submitted',
+  ];
+
+  static const List<String> _approvalStatuses = [
     'Approval',
     'Sales',
     'As Built',
-    'ادارة تصميم المنتجات',
-    'الادارة الهندسه',
-    'design studio',
+    'Partition Editing',
   ];
 
   static const List<String> _manufacturingStatuses = [
     'Manufacturing Drawing',
     'Review',
-    'Master Data',
     'partation  master data',
   ];
 
@@ -251,10 +254,13 @@ class _DashboardPageState extends State<DashboardPage> {
       final currentMonth = '${now.year}-${now.month.toString().padLeft(2, '0')}';
 
       final approachOrders = <SAPMainOrder>[];
+      final approvalOrders = <SAPMainOrder>[];
       final manufacturingOrders = <SAPMainOrder>[];
       double approachVal = 0;
+      double approvalVal = 0;
       double manufacturingVal = 0;
       double approachQty = 0;
+      double approvalQty = 0;
       double manufacturingQty = 0;
 
       for (final order in orders) {
@@ -280,10 +286,15 @@ class _DashboardPageState extends State<DashboardPage> {
           thisMonth++;
         }
 
-        if (_approachStatuses.contains(order.status)) {
+        if (_beforeApprovalStatuses.contains(order.status)) {
           approachOrders.add(order);
           approachVal += order.value;
           approachQty += order.quantity;
+        }
+        if (_approvalStatuses.contains(order.status)) {
+          approvalOrders.add(order);
+          approvalVal += order.value;
+          approvalQty += order.quantity;
         }
         if (_manufacturingStatuses.contains(order.status)) {
           manufacturingOrders.add(order);
@@ -308,11 +319,14 @@ class _DashboardPageState extends State<DashboardPage> {
         _statusQuantities = statusQuantities;
         _recentOrders = recent.take(8).toList();
         _ordersThisMonth = thisMonth;
-        _approachOrders = approachOrders;
+        _beforeApprovalOrders = approachOrders;
+        _approvalOrders = approvalOrders;
         _manufacturingOrders = manufacturingOrders;
-        _approachValue = approachVal;
+        _beforeApprovalValue = approachVal;
+        _approvalValue = approvalVal;
         _manufacturingValue = manufacturingVal;
-        _approachQuantity = approachQty;
+        _beforeApprovalQuantity = approachQty;
+        _approvalQuantity = approvalQty;
         _manufacturingQuantity = manufacturingQty;
         _isLoading = false;
       });
@@ -384,11 +398,15 @@ class _DashboardPageState extends State<DashboardPage> {
         .toList();
 
     final approachIds = <String>{};
+    final approvalIds = <String>{};
     final manufacturingIds = <String>{};
 
     for (final entry in auditIdsByStatus.entries) {
-      if (_approachStatuses.contains(entry.key)) {
+      if (_beforeApprovalStatuses.contains(entry.key)) {
         approachIds.addAll(entry.value);
+      }
+      if (_approvalStatuses.contains(entry.key)) {
+        approvalIds.addAll(entry.value);
       }
       if (_manufacturingStatuses.contains(entry.key)) {
         manufacturingIds.addAll(entry.value);
@@ -396,6 +414,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     final approachOrders = ordersForIds(approachIds);
+    final approvalOrders = ordersForIds(approvalIds);
     final manufacturingOrders = ordersForIds(manufacturingIds);
 
     final statusDist = <String, int>{};
@@ -458,11 +477,14 @@ class _DashboardPageState extends State<DashboardPage> {
       _statusQuantities = statusQuantities;
       _recentOrders = recent.take(8).toList();
       _ordersThisMonth = thisMonth;
-      _approachOrders = approachOrders;
+      _beforeApprovalOrders = approachOrders;
+      _approvalOrders = approvalOrders;
       _manufacturingOrders = manufacturingOrders;
-      _approachValue = sumValue(approachOrders);
+      _beforeApprovalValue = sumValue(approachOrders);
+      _approvalValue = sumValue(approvalOrders);
       _manufacturingValue = sumValue(manufacturingOrders);
-      _approachQuantity = sumQuantity(approachOrders);
+      _beforeApprovalQuantity = sumQuantity(approachOrders);
+      _approvalQuantity = sumQuantity(approvalOrders);
       _manufacturingQuantity = sumQuantity(manufacturingOrders);
       _isLoading = false;
     });
@@ -1117,44 +1139,28 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-            'Order Breakdown',
-            style: GoogleFonts.cairo(
-              fontSize: 20,
-              fontWeight: FontWeight.w700,
-              color: _textColor,
-            ),
-          ),
+          Text('Order Breakdown', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w700, color: _textColor)),
           const SizedBox(height: 20),
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-
-              // Approach Column
-              Expanded(
-                child: _buildComparisonColumn(
-                  title: 'Approval',
-                  icon: Icons.design_services,
-                  color: Colors.purple,
-                  orderCount: _approachOrders.length,
-                  totalValue: _approachValue,
-                  totalQuantity: _approachQuantity,
-                  statuses: _approachStatuses,
-                ),
-              ),
+              Expanded(child: _buildComparisonColumn(
+                title: 'Before Approval', icon: Icons.draw, color: Colors.purple,
+                orderCount: _beforeApprovalOrders.length, totalValue: _beforeApprovalValue,
+                totalQuantity: _beforeApprovalQuantity, statuses: _beforeApprovalStatuses,
+              )),
               const SizedBox(width: 16),
-              // Manufacturing Column
-              Expanded(
-                child: _buildComparisonColumn(
-                  title: 'Manufacturing',
-                  icon: Icons.precision_manufacturing,
-                  color: Colors.orange,
-                  orderCount: _manufacturingOrders.length,
-                  totalValue: _manufacturingValue,
-                  totalQuantity: _manufacturingQuantity,
-                  statuses: _manufacturingStatuses,
-                ),
-              ),
+              Expanded(child: _buildComparisonColumn(
+                title: 'Approval', icon: Icons.approval, color: Colors.green,
+                orderCount: _approvalOrders.length, totalValue: _approvalValue,
+                totalQuantity: _approvalQuantity, statuses: _approvalStatuses,
+              )),
+              const SizedBox(width: 16),
+              Expanded(child: _buildComparisonColumn(
+                title: 'Manufacturing', icon: Icons.precision_manufacturing, color: Colors.orange,
+                orderCount: _manufacturingOrders.length, totalValue: _manufacturingValue,
+                totalQuantity: _manufacturingQuantity, statuses: _manufacturingStatuses,
+              )),
             ],
           ),
         ],
@@ -1301,7 +1307,6 @@ class _DashboardPageState extends State<DashboardPage> {
       'مطلوب اكوادها الاسترشاديه',
       'تحت المراجعة',
       'Review',
-      'Master Data',
       'Sales',
       'As Built',
       'Tasks',
