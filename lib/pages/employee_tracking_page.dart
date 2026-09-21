@@ -376,42 +376,50 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
   // 1) Responsible Engineer has priority.
   // 2) If Responsible Engineer is empty, use Correspondence Engineer.
   // changed_by is NOT used to decide who receives the workload credit.
+  // Changes flow:
+  // 1) Determine the employee's orders from the CURRENT assignment.
+  // 2) Correspondence Engineer has priority. If it is empty, use
+  //    Responsible Engineer.
+  // 3) Once the employee's order IDs are known, search the audit log by
+  //    order_id and show ALL changes for those orders.
+  // 4) changed_by is NOT used to decide which employee owns the order.
   List<Map<String, dynamic>> _changesForEmployee(
       EmployeeAuth employee,
       ) {
     final cacheKey =
-        '${employee.id}|all-audit-changes|$_selectedRole|'
+        '${employee.id}|assigned-order-changes|$_selectedRole|'
         '${_startDate?.millisecondsSinceEpoch ?? ''}|'
         '${_endDate?.millisecondsSinceEpoch ?? ''}';
 
     final cached = _changesCache[cacheKey];
     if (cached != null) return cached;
 
+    final assignedOrders = _ordersForEmployee(employee);
+    final assignedOrderIds = assignedOrders
+        .map((order) => order.id.trim())
+        .where((id) => id.isNotEmpty)
+        .toSet();
+
     final result = <Map<String, dynamic>>[];
 
-    // The audit log is the source of truth for WHO made the change.
-    // Include ALL audit fields, not only status changes from specific stages.
+    if (assignedOrderIds.isEmpty) {
+      _changesCache[cacheKey] = result;
+      return result;
+    }
+
+    // Search the complete audit log by the assigned order IDs.
+    // Do not use changed_by / changed_by_id for ownership.
     for (final log in _auditLogs) {
-      final changedById = log['changed_by_id']?.toString().trim() ?? '';
-      final changedBy = log['changed_by']?.toString().trim() ?? '';
-
-      final madeByEmployee =
-          (changedById.isNotEmpty && changedById == employee.id.trim()) ||
-              (changedBy.isNotEmpty &&
-                  _samePerson(changedBy, employee.fullName));
-
-      if (!madeByEmployee) continue;
+      final orderId = log['order_id']?.toString().trim() ?? '';
+      if (orderId.isEmpty || !assignedOrderIds.contains(orderId)) {
+        continue;
+      }
 
       final changedAt = _parseDate(log['changed_at']);
       if (!_inDateRange(changedAt)) continue;
 
-      final orderId = log['order_id']?.toString().trim() ?? '';
-      if (orderId.isEmpty) continue;
-
       final order = _findOrder(orderId);
       if (order == null) continue;
-
-      if (!_matchesSelectedRole(log, order)) continue;
 
       result.add({
         'log': log,
@@ -435,18 +443,38 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return result;
   }
 
-
   List<SAPMainOrder> _ordersForEmployee(EmployeeAuth employee) {
-    final seen = <String>{};
     final result = <SAPMainOrder>[];
+    final employeeName = employee.fullName.trim();
 
-    for (final change in _changesForEmployee(employee)) {
-      final order = change['order'] as SAPMainOrder;
+    for (final order in _orders) {
+      final correspondence = order.correspondenceEngineer?.trim() ?? '';
 
-      if (seen.add(order.id.trim())) {
+      // Correspondence Engineer is the primary owner.
+      // Responsible Engineer is used only when Correspondence Engineer
+      // is empty.
+      final owner = correspondence.isNotEmpty
+          ? correspondence
+          : (order.responsibleEngineer?.trim() ?? '');
+
+      if (owner.isEmpty) continue;
+
+      if (_samePerson(owner, employeeName)) {
         result.add(order);
       }
     }
+
+    result.sort((a, b) {
+      final contractCompare =
+      a.contractNumber.toString().compareTo(b.contractNumber.toString());
+      if (contractCompare != 0) return contractCompare;
+
+      final itemCompare =
+      a.itemNumber.toString().compareTo(b.itemNumber.toString());
+      if (itemCompare != 0) return itemCompare;
+
+      return a.id.compareTo(b.id);
+    });
 
     return result;
   }

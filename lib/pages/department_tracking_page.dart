@@ -700,6 +700,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     final doneCount = _getEmployeeStatusCount(employee, 'Done');
     final taskDoneCount = _getEmployeeStatusCount(employee, 'Task Done');
     final planningCount = _getEmployeeStatusCount(employee, 'planning');
+    final masterDataCount = _getEmployeeStatusCount(employee, 'Master Data');
 
     final completed = doneCount + taskDoneCount + planningCount;
     final progress = tasks.isNotEmpty ? (completed / tasks.length * 100).round() : 0;
@@ -772,6 +773,13 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   style: GoogleFonts.cairo(
                     fontSize: 10,
                     color: Colors.orange,
+                  ),
+                ),
+                Text(
+                  'Master Data: $masterDataCount',
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: Colors.teal,
                   ),
                 ),
                 Icon(Icons.chevron_right, size: 16, color: _secondaryTextColor),
