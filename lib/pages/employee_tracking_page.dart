@@ -3055,7 +3055,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text(
-          'Employee Tracking',
+          'Departments Tracking',
           style: GoogleFonts.cairo(
             fontWeight: FontWeight.w600,
           ),

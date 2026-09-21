@@ -115,7 +115,7 @@ class _MainShellState extends State<MainShell> {
     _NavItem(
       icon: Icons.people_alt_outlined,
       activeIcon: Icons.people_alt,
-      label: 'employees',
+      label: 'Employees',
     ),
     _NavItem(
       icon: Icons.person_outline,
@@ -1190,10 +1190,10 @@ class _MainShellState extends State<MainShell> {
             widget.sapService,
           );
 
-        case 3:
+        case 4:
           return const DepartmentTrackingPage();
 
-        case 4:
+        case 3:
           return EmployeeTrackingPage(
             loggedInEmployee:
             widget.loggedInEmployee!,

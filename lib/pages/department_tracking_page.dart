@@ -518,7 +518,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return Scaffold(
       backgroundColor: _backgroundColor,
       appBar: AppBar(
-        title: Text('Departments', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+        title: Text('Employees', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
         backgroundColor: const Color(0xFF0F172A),
         foregroundColor: Colors.white,
       ),
