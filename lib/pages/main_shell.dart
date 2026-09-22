@@ -1190,10 +1190,10 @@ class _MainShellState extends State<MainShell> {
             widget.sapService,
           );
 
-        case 4:
+        case 3:
           return const DepartmentTrackingPage();
 
-        case 3:
+        case 4:
           return EmployeeTrackingPage(
             loggedInEmployee:
             widget.loggedInEmployee!,

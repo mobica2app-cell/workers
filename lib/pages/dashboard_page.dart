@@ -1145,7 +1145,7 @@ class _DashboardPageState extends State<DashboardPage> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Expanded(child: _buildComparisonColumn(
-                title: 'Before Approval', icon: Icons.draw, color: Colors.purple,
+                title: 'Submital', icon: Icons.draw, color: Colors.purple,
                 orderCount: _beforeApprovalOrders.length, totalValue: _beforeApprovalValue,
                 totalQuantity: _beforeApprovalQuantity, statuses: _beforeApprovalStatuses,
               )),

@@ -339,7 +339,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     debugPrint(
       '[ANALYTICS] SAP orders: ${orders.length} | '
-          'Before Approval: ${beforeApprovalIds.length} | '
+          'Submital: ${beforeApprovalIds.length} | '
           'Approval: ${approvalIds.length} | '
           'Manufacturing: ${manufacturingIds.length} | '
           'Order Date Range: ${_dateRangeLabel()}',
@@ -499,7 +499,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                   _buildOverviewCards(),
                   const SizedBox(height: 24),
                   _buildSection(
-                    title: 'Before Approval',
+                    title: 'Submital',
                     icon: Icons.draw_outlined,
                     sectionColor: Colors.purple,
                     orderCount: _beforeApprovalOrders,
@@ -559,7 +559,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
               ),
               const SizedBox(height: 2),
               Text(
-                'Before Approval, Approval & Manufacturing performance',
+                'Submital, Approval & Manufacturing performance',
                 style: GoogleFonts.cairo(
                   fontSize: 12,
                   color: _secondaryTextColor,
@@ -754,7 +754,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
   Widget _buildOverviewCards() {
     final cards = [
       _overviewCard(
-        'Before Approval Orders',
+        'Submital Orders',
         '$_beforeApprovalOrders',
         Icons.draw_outlined,
         Colors.purple,
@@ -772,7 +772,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         Colors.orange,
       ),
       _overviewCard(
-        'Before Approval Value',
+        'Submital Value',
         '\$${_formatNumber(_beforeApprovalValue)}',
         Icons.attach_money,
         Colors.deepPurple,

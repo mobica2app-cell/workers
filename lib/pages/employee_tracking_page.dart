@@ -272,10 +272,20 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     final oldValue = _normalize(log['old_value']?.toString() ?? '');
     final newValue = _normalize(log['new_value']?.toString() ?? '');
 
-    return field == 'status' &&
-        oldValue.isNotEmpty &&
-        newValue.isNotEmpty &&
-        oldValue != newValue;
+    if (field != 'status' ||
+        oldValue.isEmpty ||
+        newValue.isEmpty ||
+        oldValue == newValue) {
+      return false;
+    }
+
+    return (oldValue == 'tasks' && newValue == 'task done') ||
+        (oldValue == 'drawing submittal' && newValue == 'approval') ||
+        (oldValue == 'modifications submitted' && newValue == 'approval') ||
+        (oldValue == 'manufacturing drawing' && newValue == 'master data') ||
+        (oldValue == 'review' && newValue == 'master data') ||
+        (oldValue == 'partation master data' && newValue == 'done') ||
+        (oldValue == 'partition editing' && newValue == 'done');
   }
 
   String _transitionLabel(Map<String, dynamic> log) {
@@ -3083,7 +3093,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       backgroundColor: _backgroundColor,
       appBar: AppBar(
         title: Text(
-          'Departments Tracking',
+          'Employees',
           style: GoogleFonts.cairo(
             fontWeight: FontWeight.w600,
           ),
@@ -3178,8 +3188,6 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                     color: _textColor,
                   ),
                 ),
-                const SizedBox(height: 16),
-                _buildCurrentWorkloadGraph(compact),
                 const SizedBox(height: 16),
                 _buildFilterBar(compact),
                 const SizedBox(height: 16),
