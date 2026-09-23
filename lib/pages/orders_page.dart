@@ -700,8 +700,7 @@ class _OrdersPageState extends State<OrdersPage> {
   // Check if user can import/delete (admin role or specific username)
   bool get _canImportDelete {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
-    return role == 'manager' ||
-        role == 'software head' ||
+    return role == 'software head' ||
         role == 'head' ||
         _isDataEntry;
   }
