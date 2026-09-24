@@ -1579,6 +1579,16 @@ class _OrdersPageState extends State<OrdersPage> {
             .where((o) => o.id == orderId)
             .firstOrNull;
         if (selectedOrder != null) {
+          final selectedStatus =
+          selectedOrder.status.trim().toLowerCase();
+
+          if ((selectedStatus == 'imported' ||
+              selectedStatus == 'automated') &&
+              !_hasRequiredStatusChangeFields(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
           // Skip locked orders
           if (_isOrderLocked(selectedOrder)) {
             skipped++;
@@ -1695,6 +1705,21 @@ class _OrdersPageState extends State<OrdersPage> {
 
     final oldValue = order.designTeam;
 
+    // Imported/Automated orders cannot change Design Team until all
+    // required SAP fields are filled.
+    final currentStatusIsImportedOrAutomated =
+        order.status.trim().toLowerCase() == 'imported' ||
+            order.status.trim().toLowerCase() == 'automated';
+
+    if (currentStatusIsImportedOrAutomated &&
+        !_hasRequiredStatusChangeFields(order)) {
+      _showYellowWarning(
+        '⚠️ Complete these fields before changing Design Team: '
+            '${_missingRequiredStatusChangeFields(order)}',
+      );
+      return;
+    }
+
     // Auto-map status based on design team
     String getAutoStatus(String team) {
       switch (team) {
@@ -1782,7 +1807,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
       setState(() => _isLoading = false);
       if (skipped > 0) {
-        _showSnackBar('✅ Design Team updated for $updated rows, ⚠️ $skipped locked rows skipped');
+        _showSnackBar(
+          '✅ Design Team updated for $updated rows, '
+              '⚠️ $skipped rows skipped (locked or missing required fields)',
+        );
       } else {
         _showSnackBar('✅ Design Team & Status updated for $updated rows!');
       }
@@ -2285,9 +2313,78 @@ class _OrdersPageState extends State<OrdersPage> {
         order.responsibleEngineer!.trim().isNotEmpty;
   }
 
+  // Imported/Automated orders must have all SAP order details filled
+  // before their status can be changed.
+  bool _hasRequiredStatusChangeFields(SAPMainOrder order) {
+    final item = order.itemNumber.trim();
+    final productCode = order.productCode.trim();
+    final contractNumber = order.contractNumber.trim();
+    final description = order.description.trim();
+    final designOrder = order.designOrder.trim();
+    final unit = order.unitOfMeasure.trim();
+    final salesEngineer = order.salesEngineer.trim();
+    final orderDate = order.orderDate?.trim() ?? '';
+    final endDate = order.endDate?.trim() ?? '';
+    final deliveryDate = order.deliveryDate?.trim() ?? '';
+
+    // QTY and Value must contain an actual value, not zero/empty.
+    final hasQuantity = order.quantity > 0;
+    final hasValue = order.value > 0;
+
+    return item.isNotEmpty &&
+        productCode.isNotEmpty &&
+        contractNumber.isNotEmpty &&
+        description.isNotEmpty &&
+        designOrder.isNotEmpty &&
+        hasQuantity &&
+        unit.isNotEmpty &&
+        hasValue &&
+        salesEngineer.isNotEmpty &&
+        orderDate.isNotEmpty &&
+        endDate.isNotEmpty &&
+        deliveryDate.isNotEmpty;
+  }
+
+  String _missingRequiredStatusChangeFields(SAPMainOrder order) {
+    final missing = <String>[];
+
+    if (order.itemNumber.trim().isEmpty) missing.add('Item');
+    if (order.productCode.trim().isEmpty) missing.add('Product Code');
+    if (order.contractNumber.trim().isEmpty) missing.add('Contract Num');
+    if (order.description.trim().isEmpty) missing.add('Description');
+    if (order.designOrder.trim().isEmpty) missing.add('Design Order');
+    if (order.quantity <= 0) missing.add('QTY');
+    if (order.unitOfMeasure.trim().isEmpty) missing.add('Unit');
+    if (order.value <= 0) missing.add('Value');
+    if (order.salesEngineer.trim().isEmpty) missing.add('Sales Engineer');
+    if ((order.orderDate?.trim() ?? '').isEmpty) missing.add('O-Date');
+    if ((order.endDate?.trim() ?? '').isEmpty) missing.add('E-Date');
+    if ((order.deliveryDate?.trim() ?? '').isEmpty) {
+      missing.add('Del. Date');
+    }
+
+    return missing.join(', ');
+  }
+
   // Update order status with audit
   Future<void> _updateOrderStatus(SAPMainOrder order, String newStatus) async {
     final oldStatus = order.status;
+
+    // Imported and Automated rows cannot leave these statuses until
+    // all required SAP columns are filled.
+    final currentStatusIsImportedOrAutomated =
+        oldStatus.trim().toLowerCase() == 'imported' ||
+            oldStatus.trim().toLowerCase() == 'automated';
+
+    if (currentStatusIsImportedOrAutomated &&
+        !_hasRequiredStatusChangeFields(order)) {
+      _showYellowWarning(
+        '⚠️ Complete these fields before changing status: '
+            '${_missingRequiredStatusChangeFields(order)}',
+      );
+      return;
+    }
+
     final isHeader =
         order.responsibleEngineer?.trim().toLowerCase() == 'header';
     final isNoBodyDestination =
@@ -2354,6 +2451,36 @@ class _OrdersPageState extends State<OrdersPage> {
           .map((id) => _allOrders.where((o) => o.id == id).firstOrNull)
           .whereType<SAPMainOrder>()
           .toList();
+
+      final invalidRequiredFields = selectedOrders.where((selectedOrder) {
+        final currentStatus =
+        selectedOrder.status.trim().toLowerCase();
+
+        if (currentStatus != 'imported' && currentStatus != 'automated') {
+          return false;
+        }
+
+        return !_hasRequiredStatusChangeFields(selectedOrder);
+      }).toList();
+
+      if (invalidRequiredFields.isNotEmpty) {
+        final details = invalidRequiredFields
+            .map((selectedOrder) {
+          final missing =
+          _missingRequiredStatusChangeFields(selectedOrder);
+          return missing.isEmpty ? selectedOrder.designOrder : missing;
+        })
+            .take(3)
+            .join(' | ');
+
+        _showYellowWarning(
+          '⚠️ ${invalidRequiredFields.length} Imported/Automated '
+              'order(s) are missing required fields. '
+              'Complete them before changing status.'
+              '${details.isNotEmpty ? ' Missing: $details' : ''}',
+        );
+        return;
+      }
 
       final invalidTransition = selectedOrders.where((selectedOrder) {
         final selectedIsHeader =

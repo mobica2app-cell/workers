@@ -1446,15 +1446,15 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
               );
             },
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
-            'Each bar normally counts order rows. Use the checkbox under a bar to count unique contract numbers for that employee. Clicking a bar still opens all matching order rows.',
+            'Each bar normally counts order rows. Use the checkbox on top of a bar to count unique contract numbers for that employee. Clicking a bar still opens all matching order rows.',
             style: GoogleFonts.cairo(
               fontSize: 10,
               color: _secondaryTextColor,
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 18),
           Wrap(
             spacing: 12,
             runSpacing: 6,
@@ -1470,7 +1470,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                       borderRadius: BorderRadius.circular(3),
                     ),
                   ),
-                  const SizedBox(width: 5),
+                  const SizedBox(width: 12),
                   Text(
                     stage,
                     style: GoogleFonts.cairo(
@@ -1482,286 +1482,314 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
               );
             }).toList(),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 50),
           SizedBox(
             height: chartHeight,
-            child: BarChart(
-              BarChartData(
-                minY: 0,
-                maxY: (maxTotal + 1).toDouble(),
-                alignment: BarChartAlignment.spaceAround,
-                groupsSpace: compact ? 4 : 8,
-                gridData: FlGridData(
-                  show: true,
-                  drawVerticalLine: false,
-                  horizontalInterval: 2,
-                ),
-                borderData: FlBorderData(show: false),
-                barTouchData: BarTouchData(
-                  enabled: true,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                final plotHeight = math.max(0.0, chartHeight - (compact ? 92.0 : 100.0));
+                final plotWidth = math.max(0.0, constraints.maxWidth - 32.0);
+                final maxYValue = (maxTotal + 1).toDouble();
 
-                  // Hover shows the complete workload breakdown.
-                  // Hover never opens the orders dialog.
-                  touchTooltipData: BarTouchTooltipData(
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      if (groupIndex < 0 ||
-                          groupIndex >= employeeEntries.length) {
-                        return null;
-                      }
-
-                      final employee = employeeEntries[groupIndex];
-                      final orderStages = employee.value;
-                      final stages = _displayedWorkloadStages(
-                        employee.key,
-                        orderStages,
-                      );
-
-                      final drawing = stages['Drawing Submittal'] ?? 0;
-                      final task = stages['Task'] ?? 0;
-                      final modification = stages['Modification'] ?? 0;
-                      final manufacturing = stages['Manufacturing'] ?? 0;
-                      final review = stages['Review'] ?? 0;
-                      final partationMasterData =
-                          stages['partation  master data'] ?? 0;
-                      final displayedTotal =
-                          drawing +
-                              task +
-                              modification +
-                              manufacturing +
-                              review +
-                              partationMasterData;
-                      final totalOrders = orderStages.values.fold<int>(
-                        0,
-                            (sum, value) => sum + value,
-                      );
-                      final totalContracts =
-                      _contractCountForEmployee(employee.key);
-                      final contractMode = _contractCountEmployees.contains(
-                        _normalize(employee.key),
-                      );
-
-                      return BarTooltipItem(
-                        '${employee.key}\n'
-                            'Drawing Submittal: $drawing\n'
-                            'Task: $task\n'
-                            'Modification: $modification\n'
-                            'Manufacturing: $manufacturing\n'
-                            'Review: $review\n'
-                            'partation  master data: $partationMasterData\n'
-                            '${contractMode ? 'Displayed: $displayedTotal contracts\n' : ''}'
-                            'Total Orders: $totalOrders\n'
-                            'Total Contracts: $totalContracts',
-                        GoogleFonts.cairo(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          height: 1.4,
+                return Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    BarChart(
+                      BarChartData(
+                        minY: 0,
+                        maxY: (maxTotal + 1).toDouble(),
+                        alignment: BarChartAlignment.spaceAround,
+                        groupsSpace: compact ? 4 : 8,
+                        gridData: FlGridData(
+                          show: true,
+                          drawVerticalLine: false,
+                          horizontalInterval: 2,
                         ),
-                      );
-                    },
-                  ),
+                        borderData: FlBorderData(show: false),
+                        barTouchData: BarTouchData(
+                          enabled: true,
 
-                  // Only an actual click/tap opens the orders.
-                  touchCallback: (event, response) {
-                    if (event is! FlTapUpEvent ||
-                        response?.spot == null) {
-                      return;
-                    }
+                          // Hover shows the complete workload breakdown.
+                          // Hover never opens the orders dialog.
+                          touchTooltipData: BarTouchTooltipData(
+                            getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                              if (groupIndex < 0 ||
+                                  groupIndex >= employeeEntries.length) {
+                                return null;
+                              }
 
-                    final spot = response!.spot!;
-                    final groupIndex = spot.touchedBarGroupIndex;
-                    final stackIndex = spot.touchedStackItemIndex;
+                              final employee = employeeEntries[groupIndex];
+                              final orderStages = employee.value;
+                              final stages = _displayedWorkloadStages(
+                                employee.key,
+                                orderStages,
+                              );
 
-                    if (groupIndex < 0 ||
-                        groupIndex >= employeeEntries.length ||
-                        stackIndex < 0 ||
-                        stackIndex >= stageOrder.length) {
-                      return;
-                    }
+                              final drawing = stages['Drawing Submittal'] ?? 0;
+                              final task = stages['Task'] ?? 0;
+                              final modification = stages['Modification'] ?? 0;
+                              final manufacturing = stages['Manufacturing'] ?? 0;
+                              final review = stages['Review'] ?? 0;
+                              final partationMasterData =
+                                  stages['partation  master data'] ?? 0;
+                              final displayedTotal =
+                                  drawing +
+                                      task +
+                                      modification +
+                                      manufacturing +
+                                      review +
+                                      partationMasterData;
+                              final totalOrders = orderStages.values.fold<int>(
+                                0,
+                                    (sum, value) => sum + value,
+                              );
+                              final totalContracts =
+                              _contractCountForEmployee(employee.key);
+                              final contractMode = _contractCountEmployees.contains(
+                                _normalize(employee.key),
+                              );
 
-                    final employee = employeeEntries[groupIndex];
-                    final stage = stageOrder[stackIndex];
-                    final displayedStages = _displayedWorkloadStages(
-                      employee.key,
-                      employee.value,
-                    );
-                    final count = displayedStages[stage] ?? 0;
-
-                    if (count <= 0) return;
-
-                    final orders = _allOrdersForEmployeeStage(
-                      employee.key,
-                      stage,
-                    );
-
-                    _showWorkloadStageOrders(
-                      employee.key,
-                      stage,
-                      orders,
-                    );
-                  },
-                ),
-                titlesData: FlTitlesData(
-                  topTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  rightTitles: const AxisTitles(
-                    sideTitles: SideTitles(showTitles: false),
-                  ),
-                  leftTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: 32,
-                      interval: 1,
-                      getTitlesWidget: (value, meta) {
-                        final number = value.toInt();
-
-                        // Show 0, 1, 2, 4, 6, 8... instead of every number.
-                        if (number > 2 && number.isOdd) {
-                          return const SizedBox.shrink();
-                        }
-
-                        return Text(
-                          number.toString(),
-                          style: GoogleFonts.cairo(
-                            fontSize: 8,
-                            color: _secondaryTextColor,
+                              return BarTooltipItem(
+                                '${employee.key}\n'
+                                    'Drawing Submittal: $drawing\n'
+                                    'Task: $task\n'
+                                    'Modification: $modification\n'
+                                    'Manufacturing: $manufacturing\n'
+                                    'Review: $review\n'
+                                    'partation  master data: $partationMasterData\n'
+                                    '${contractMode ? 'Displayed: $displayedTotal contracts\n' : ''}'
+                                    'Total Orders: $totalOrders\n'
+                                    'Total Contracts: $totalContracts',
+                                GoogleFonts.cairo(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                  height: 1.4,
+                                ),
+                              );
+                            },
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      reservedSize: compact ? 92 : 100,
-                      getTitlesWidget: (value, meta) {
-                        final index = value.toInt();
-                        if (index < 0 || index >= employeeEntries.length) {
-                          return const SizedBox.shrink();
-                        }
 
-                        final employeeName = employeeEntries[index].key;
-                        final normalizedName = _normalize(employeeName);
-                        final checked =
-                        _contractCountEmployees.contains(normalizedName);
+                          // Only an actual click/tap opens the orders.
+                          touchCallback: (event, response) {
+                            if (event is! FlTapUpEvent ||
+                                response?.spot == null) {
+                              return;
+                            }
 
-                        return SideTitleWidget(
-                          meta: meta,
-                          space: 8,
-                          angle: -math.pi / 7,
-                          child: SizedBox(
-                            width: compact ? 90 : 120,
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Text(
-                                  employeeName,
-                                  textAlign: TextAlign.center,
-                                  maxLines: 2,
-                                  overflow: TextOverflow.ellipsis,
+                            final spot = response!.spot!;
+                            final groupIndex = spot.touchedBarGroupIndex;
+                            final stackIndex = spot.touchedStackItemIndex;
+
+                            if (groupIndex < 0 ||
+                                groupIndex >= employeeEntries.length ||
+                                stackIndex < 0 ||
+                                stackIndex >= stageOrder.length) {
+                              return;
+                            }
+
+                            final employee = employeeEntries[groupIndex];
+                            final stage = stageOrder[stackIndex];
+                            final displayedStages = _displayedWorkloadStages(
+                              employee.key,
+                              employee.value,
+                            );
+                            final count = displayedStages[stage] ?? 0;
+
+                            if (count <= 0) return;
+
+                            final orders = _allOrdersForEmployeeStage(
+                              employee.key,
+                              stage,
+                            );
+
+                            _showWorkloadStageOrders(
+                              employee.key,
+                              stage,
+                              orders,
+                            );
+                          },
+                        ),
+                        titlesData: FlTitlesData(
+                          topTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          rightTitles: const AxisTitles(
+                            sideTitles: SideTitles(showTitles: false),
+                          ),
+                          leftTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: 32,
+                              interval: 1,
+                              getTitlesWidget: (value, meta) {
+                                final number = value.toInt();
+
+                                // Show 0, 1, 2, 4, 6, 8... instead of every number.
+                                if (number > 2 && number.isOdd) {
+                                  return const SizedBox.shrink();
+                                }
+
+                                return Text(
+                                  number.toString(),
                                   style: GoogleFonts.cairo(
-                                    fontSize: compact ? 11 : 12,
-                                    fontWeight: FontWeight.w600,
-                                    color: _textColor,
+                                    fontSize: 8,
+                                    color: _secondaryTextColor,
                                   ),
-                                ),
-                                const SizedBox(height: 1),
-                                Transform.scale(
-                                  scale: compact ? 0.70 : 0.78,
-                                  child: Checkbox(
-                                    value: checked,
-                                    visualDensity: VisualDensity.compact,
-                                    materialTapTargetSize:
-                                    MaterialTapTargetSize.shrinkWrap,
-                                    onChanged: (value) {
-                                      setState(() {
-                                        if (value == true) {
-                                          _contractCountEmployees
-                                              .add(normalizedName);
-                                        } else {
-                                          _contractCountEmployees
-                                              .remove(normalizedName);
-                                        }
-                                      });
-                                    },
-                                  ),
-                                ),
-                              ],
+                                );
+                              },
                             ),
                           ),
-                        );
-                      },
-                    ),
-                  ),
-                ),
-                barGroups: employeeEntries.asMap().entries.map((entry) {
-                  final index = entry.key;
-                  final employeeName = entry.value.key;
-                  final stages = _displayedWorkloadStages(
-                    employeeName,
-                    entry.value.value,
-                  );
+                          bottomTitles: AxisTitles(
+                            sideTitles: SideTitles(
+                              showTitles: true,
+                              reservedSize: compact ? 92 : 100,
+                              getTitlesWidget: (value, meta) {
+                                final index = value.toInt();
+                                if (index < 0 || index >= employeeEntries.length) {
+                                  return const SizedBox.shrink();
+                                }
 
-                  final drawing = stages['Drawing Submittal'] ?? 0;
-                  final task = stages['Task'] ?? 0;
-                  final modification = stages['Modification'] ?? 0;
-                  final manufacturing = stages['Manufacturing'] ?? 0;
-                  final review = stages['Review'] ?? 0;
-                  final partationMasterData =
-                      stages['partation  master data'] ?? 0;
-                  final displayedTotal =
-                      drawing +
-                          task +
-                          modification +
-                          manufacturing +
-                          review +
-                          partationMasterData;
+                                final employeeName = employeeEntries[index].key;
+                                final normalizedName = _normalize(employeeName);
+                                return SideTitleWidget(
+                                  meta: meta,
+                                  space: 8,
+                                  angle: -math.pi / 7,
+                                  child: SizedBox(
+                                    width: compact ? 90 : 120,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Text(
+                                          employeeName,
+                                          textAlign: TextAlign.center,
+                                          maxLines: 2,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: compact ? 11 : 12,
+                                            fontWeight: FontWeight.w600,
+                                            color: _textColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ),
+                        barGroups: employeeEntries.asMap().entries.map((entry) {
+                          final index = entry.key;
+                          final employeeName = entry.value.key;
+                          final stages = _displayedWorkloadStages(
+                            employeeName,
+                            entry.value.value,
+                          );
 
-                  return BarChartGroupData(
-                    x: index,
-                    barRods: [
-                      BarChartRodData(
-                        toY: displayedTotal.toDouble(),
-                        width: compact ? 22 : 28,
-                        borderRadius: BorderRadius.circular(5),
-                        rodStackItems: [
-                          BarChartRodStackItem(
-                            0,
-                            drawing.toDouble(),
-                            stageColors['Drawing Submittal']!,
-                          ),
-                          BarChartRodStackItem(
-                            drawing.toDouble(),
-                            (drawing + task).toDouble(),
-                            stageColors['Task']!,
-                          ),
-                          BarChartRodStackItem(
-                            (drawing + task).toDouble(),
-                            (drawing + task + modification).toDouble(),
-                            stageColors['Modification']!,
-                          ),
-                          BarChartRodStackItem(
-                            (drawing + task + modification).toDouble(),
-                            (drawing + task + modification + manufacturing).toDouble(),
-                            stageColors['Manufacturing']!,
-                          ),
-                          BarChartRodStackItem(
-                            (drawing + task + modification + manufacturing).toDouble(),
-                            (drawing + task + modification + manufacturing + review).toDouble(),
-                            stageColors['Review']!,
-                          ),
-                          BarChartRodStackItem(
-                            (drawing + task + modification + manufacturing + review).toDouble(),
-                            displayedTotal.toDouble(),
-                            stageColors['partation  master data']!,
-                          ),
-                        ],
+                          final drawing = stages['Drawing Submittal'] ?? 0;
+                          final task = stages['Task'] ?? 0;
+                          final modification = stages['Modification'] ?? 0;
+                          final manufacturing = stages['Manufacturing'] ?? 0;
+                          final review = stages['Review'] ?? 0;
+                          final partationMasterData =
+                              stages['partation  master data'] ?? 0;
+                          final displayedTotal =
+                              drawing +
+                                  task +
+                                  modification +
+                                  manufacturing +
+                                  review +
+                                  partationMasterData;
+
+                          return BarChartGroupData(
+                            x: index,
+                            barRods: [
+                              BarChartRodData(
+                                toY: displayedTotal.toDouble(),
+                                width: compact ? 22 : 28,
+                                borderRadius: BorderRadius.circular(5),
+                                rodStackItems: [
+                                  BarChartRodStackItem(
+                                    0,
+                                    drawing.toDouble(),
+                                    stageColors['Drawing Submittal']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    drawing.toDouble(),
+                                    (drawing + task).toDouble(),
+                                    stageColors['Task']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    (drawing + task).toDouble(),
+                                    (drawing + task + modification).toDouble(),
+                                    stageColors['Modification']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    (drawing + task + modification).toDouble(),
+                                    (drawing + task + modification + manufacturing).toDouble(),
+                                    stageColors['Manufacturing']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    (drawing + task + modification + manufacturing).toDouble(),
+                                    (drawing + task + modification + manufacturing + review).toDouble(),
+                                    stageColors['Review']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    (drawing + task + modification + manufacturing + review).toDouble(),
+                                    displayedTotal.toDouble(),
+                                    stageColors['partation  master data']!,
+                                  ),
+                                ],
+                              ),
+                            ],
+                          );
+                        }).toList(),
                       ),
-                    ],
-                  );
-                }).toList(),
-              ),
+                    ),
+                    ...employeeEntries.asMap().entries.map((entry) {
+                      final index = entry.key;
+                      final employeeName = entry.value.key;
+                      final normalizedName = _normalize(employeeName);
+                      final checked = _contractCountEmployees.contains(normalizedName);
+                      final stages = _displayedWorkloadStages(
+                        employeeName,
+                        entry.value.value,
+                      );
+                      final total = stages.values.fold<int>(0, (sum, value) => sum + value);
+
+                      final centerX = 32.0 + ((index + 0.5) / employeeEntries.length) * plotWidth;
+                      final barTop = plotHeight * (1 - (total / maxYValue));
+
+                      return Positioned(
+                        left: (centerX - 15).clamp(0.0, math.max(0.0, constraints.maxWidth - 28.0)),
+                        top: (barTop - 25).clamp(0.0, math.max(0.0, plotHeight - 28.0)),
+                        child: Material(
+                          color: Colors.transparent,
+                          child: Transform.scale(
+                            scale: compact ? 0.72 : 0.78,
+                            child: Checkbox(
+                              value: checked,
+                              visualDensity: VisualDensity.compact,
+                              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              onChanged: (value) {
+                                setState(() {
+                                  if (value == true) {
+                                    _contractCountEmployees.add(normalizedName);
+                                  } else {
+                                    _contractCountEmployees.remove(normalizedName);
+                                  }
+                                });
+                              },
+                            ),
+                          ),
+                        ),
+                      );
+                    }),
+                  ],
+                );
+              },
             ),
           ),
         ],

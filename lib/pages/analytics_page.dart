@@ -6,6 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/sap_service.dart';
+import 'order_detail_page.dart';
 
 class AnalyticsPage extends StatefulWidget {
   final SAPMainService sapService;
@@ -959,6 +960,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       title: '$title by Factory',
                       data: factories,
                       color: sectionColor,
+                      sectionKey: title,
                     ),
                     const SizedBox(height: 18),
                     _buildSalesChart(
@@ -986,6 +988,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                           title: '$title by Factory',
                           data: factories,
                           color: sectionColor,
+                          sectionKey: title,
                         ),
                       ),
                       const SizedBox(width: 16),
@@ -1074,10 +1077,308 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     );
   }
 
+
+  List<SAPMainOrder> _ordersForSection({
+    String? factoryCode,
+    String? salesEngineer,
+    String? dateKey,
+    required String sectionKey,
+  }) {
+    bool matchesSection(SAPMainOrder order) {
+      if (sectionKey == 'Submital') return _isBeforeApproval(order.status);
+      if (sectionKey == 'Approval') return _isApproval(order.status);
+      if (sectionKey == 'Manufacturing') return _isManufacturing(order.status);
+      return false;
+    }
+
+    return _orders.where((order) {
+      if (!matchesSection(order)) return false;
+
+      final orderDate = _parseDate(order.orderDate);
+      if (orderDate == null) return false;
+      if ((_startDate != null || _endDate != null) && !_inDateRange(orderDate)) {
+        return false;
+      }
+
+      if (factoryCode != null &&
+          (order.factory ?? '').trim().toLowerCase() != factoryCode.trim().toLowerCase()) {
+        return false;
+      }
+
+      if (salesEngineer != null &&
+          order.salesEngineer.trim().toLowerCase() != salesEngineer.trim().toLowerCase()) {
+        return false;
+      }
+
+      if (dateKey != null && DateFormat('yyyy-MM-dd').format(orderDate) != dateKey) {
+        return false;
+      }
+
+      return true;
+    }).toList();
+  }
+
+  void _showOrdersDialog({
+    required List<SAPMainOrder> orders,
+    required String title,
+    required Color color,
+  }) {
+    orders.sort((a, b) => (b.orderDate ?? '').compareTo(a.orderDate ?? ''));
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return Dialog(
+          backgroundColor: _surfaceColor,
+          insetPadding: EdgeInsets.symmetric(
+            horizontal: _isMobile ? 12 : 40,
+            vertical: _isMobile ? 18 : 35,
+          ),
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(18)),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 900, maxHeight: 680),
+            child: Padding(
+              padding: EdgeInsets.all(_isMobile ? 14 : 20),
+              child: Column(
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(.10),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.receipt_long_rounded, color: color),
+                      ),
+                      const SizedBox(width: 11),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              title,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w800,
+                                color: _textColor,
+                              ),
+                            ),
+                            Text(
+                              '${orders.length} ${orders.length == 1 ? 'order' : 'orders'}',
+                              style: GoogleFonts.cairo(
+                                fontSize: 11,
+                                color: _secondaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        onPressed: () => Navigator.of(dialogContext).pop(),
+                        icon: Icon(Icons.close_rounded, color: _secondaryTextColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 14),
+                  Divider(height: 1, color: _borderColor),
+                  const SizedBox(height: 10),
+                  Expanded(
+                    child: orders.isEmpty
+                        ? Center(
+                      child: Text(
+                        'No orders found',
+                        style: GoogleFonts.cairo(color: _secondaryTextColor),
+                      ),
+                    )
+                        : ListView.separated(
+                      itemCount: orders.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 9),
+                      itemBuilder: (_, index) {
+                        final order = orders[index];
+                        final factory = (order.factory ?? '').trim();
+                        final date = _parseDate(order.orderDate);
+                        final dateText = date == null
+                            ? (order.orderDate ?? '-')
+                            : DateFormat('dd MMM yyyy').format(date);
+
+                        return Material(
+                          color: _isDark
+                              ? const Color(0xFF172033)
+                              : const Color(0xFFF8FAFC),
+                          borderRadius: BorderRadius.circular(13),
+                          child: InkWell(
+                            borderRadius: BorderRadius.circular(13),
+                            onTap: () {
+                              Navigator.of(dialogContext).pop();
+                              Navigator.push(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (_) => OrderDetailPage(
+                                    order: order,
+                                    sapService: widget.sapService,
+                                  ),
+                                ),
+                              );
+                            },
+                            child: Padding(
+                              padding: const EdgeInsets.all(13),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Container(
+                                    width: 42,
+                                    height: 42,
+                                    decoration: BoxDecoration(
+                                      color: color.withOpacity(.10),
+                                      borderRadius: BorderRadius.circular(11),
+                                    ),
+                                    child: Icon(
+                                      Icons.description_outlined,
+                                      color: color,
+                                      size: 21,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Expanded(
+                                              child: Text(
+                                                '${order.contractNumber}  •  ${order.itemNumber}',
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 13,
+                                                  fontWeight: FontWeight.w800,
+                                                  color: _textColor,
+                                                ),
+                                              ),
+                                            ),
+                                            const SizedBox(width: 8),
+                                            Container(
+                                              padding: const EdgeInsets.symmetric(
+                                                horizontal: 8,
+                                                vertical: 4,
+                                              ),
+                                              decoration: BoxDecoration(
+                                                color: color.withOpacity(.10),
+                                                borderRadius: BorderRadius.circular(7),
+                                              ),
+                                              child: Text(
+                                                order.status,
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
+                                                style: GoogleFonts.cairo(
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w700,
+                                                  color: color,
+                                                ),
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          order.description.isEmpty
+                                              ? order.productCode
+                                              : order.description,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w600,
+                                            color: _textColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 8),
+                                        Wrap(
+                                          spacing: 12,
+                                          runSpacing: 5,
+                                          children: [
+                                            _orderInfo(Icons.factory_outlined, factory.isEmpty ? '-' : _formatFactoryLabel(factory)),
+                                            _orderInfo(Icons.person_outline, order.salesEngineer.isEmpty ? '-' : order.salesEngineer),
+                                            _orderInfo(Icons.calendar_today_outlined, dateText),
+                                            _orderInfo(Icons.inventory_2_outlined, 'QTY ${order.quantity.toStringAsFixed(0)}'),
+                                            _orderInfo(Icons.attach_money_rounded, '\$${_formatNumber(order.value)}'),
+                                          ],
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Icon(Icons.chevron_right_rounded, color: _secondaryTextColor),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Widget _orderInfo(IconData icon, String text) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 13, color: _secondaryTextColor),
+        const SizedBox(width: 4),
+        ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 190),
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.cairo(fontSize: 9, color: _secondaryTextColor),
+          ),
+        ),
+      ],
+    );
+  }
+
+  void _showFactoryOrders(String factoryCode, String sectionKey, Color color) {
+    _showOrdersDialog(
+      orders: _ordersForSection(factoryCode: factoryCode, sectionKey: sectionKey),
+      title: '${_formatFactoryLabel(factoryCode)} — $sectionKey',
+      color: color,
+    );
+  }
+
+  void _showSalesOrders(String salesEngineer, String sectionKey, Color color) {
+    _showOrdersDialog(
+      orders: _ordersForSection(salesEngineer: salesEngineer, sectionKey: sectionKey),
+      title: '${salesEngineer.isEmpty ? 'Unknown Sales Engineer' : salesEngineer} — $sectionKey',
+      color: color,
+    );
+  }
+
+  void _showDateOrders(String dateKey, String sectionKey, Color color) {
+    final date = DateTime.tryParse(dateKey);
+    _showOrdersDialog(
+      orders: _ordersForSection(dateKey: dateKey, sectionKey: sectionKey),
+      title: '${date == null ? dateKey : DateFormat('dd MMM yyyy').format(date)} — $sectionKey',
+      color: color,
+    );
+  }
+
   Widget _buildFactoryChart({
     required String title,
     required Map<String, int> data,
     required Color color,
+    required String sectionKey,
   })
   {
     final entries = data.entries.toList()
@@ -1109,6 +1410,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
             // ==============================
             barTouchData: BarTouchData(
               enabled: true,
+              handleBuiltInTouches: true,
+              touchCallback: (event, response) {
+                if (!event.isInterestedForInteractions ||
+                    response == null ||
+                    response.spot == null) {
+                  return;
+                }
+
+                if (event is FlTapUpEvent) {
+                  final index = response.spot!.touchedBarGroupIndex;
+                  if (index >= 0 && index < entries.length) {
+                    _showFactoryOrders(entries[index].key, sectionKey, color);
+                  }
+                }
+              },
               touchTooltipData: BarTouchTooltipData(
                 getTooltipItem: (group, groupIndex, rod, rodIndex) {
                   if (groupIndex < 0 || groupIndex >= entries.length) {
@@ -1201,13 +1517,21 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                     return Padding(
                       padding: const EdgeInsets.only(top: 7),
-                      child: Text(
-                        entries[i].key, // Factory code only
-                        textAlign: TextAlign.center,
-                        style: GoogleFonts.cairo(
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: _secondaryTextColor,
+                      child: Transform.rotate(
+                        angle: -0.55,
+                        child: SizedBox(
+                          width: 58,
+                          child: Text(
+                            entries[i].key, // Factory code only
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.cairo(
+                              fontSize: 9,
+                              fontWeight: FontWeight.w700,
+                              color: _secondaryTextColor,
+                            ),
+                          ),
                         ),
                       ),
                     );
@@ -1265,6 +1589,27 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
             maxY: maxVal.toDouble() + (maxVal == 1 ? 1 : maxVal * .15),
+            barTouchData: BarTouchData(
+              enabled: true,
+              handleBuiltInTouches: true,
+              touchCallback: (event, response) {
+                if (event is FlTapUpEvent && response?.spot != null) {
+                  final index = response!.spot!.touchedBarGroupIndex;
+                  if (index >= 0 && index < visible.length) {
+                    _showSalesOrders(visible[index].key, title.split(' by ').first, color);
+                  }
+                }
+              },
+              touchTooltipData: BarTouchTooltipData(
+                getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                  if (groupIndex < 0 || groupIndex >= visible.length) return null;
+                  return BarTooltipItem(
+                    '${visible[groupIndex].key}\nOrders: ${visible[groupIndex].value}',
+                    GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w700),
+                  );
+                },
+              ),
+            ),
             barGroups: visible.asMap().entries.map((entry) {
               return BarChartGroupData(
                 x: entry.key,
@@ -1369,6 +1714,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           LineChartData(
             minY: 0,
             maxY: maxVal.toDouble() + (maxVal == 1 ? 1 : maxVal * .15),
+            lineTouchData: LineTouchData(
+              handleBuiltInTouches: true,
+              touchCallback: (event, response) {
+                if (event is FlTapUpEvent && response?.lineBarSpots?.isNotEmpty == true) {
+                  final spot = response!.lineBarSpots!.first;
+                  final index = spot.x.toInt();
+                  if (index >= 0 && index < entries.length) {
+                    _showDateOrders(entries[index].key, title.split(' by ').first, color);
+                  }
+                }
+              },
+              touchTooltipData: LineTouchTooltipData(
+                getTooltipItems: (spots) => spots.map((spot) {
+                  final index = spot.x.toInt();
+                  if (index < 0 || index >= entries.length) return null;
+                  return LineTooltipItem(
+                    '${entries[index].key}\nOrders: ${entries[index].value}',
+                    GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w700),
+                  );
+                }).toList(),
+              ),
+            ),
             lineBarsData: [
               LineChartBarData(
                 spots: entries.asMap().entries.map((entry) {

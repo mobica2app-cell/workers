@@ -599,9 +599,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          order.designOrder.isNotEmpty
-                              ? order.designOrder
-                              : order.id,
+                          order.contractNumber.isNotEmpty
+                              ? order.contractNumber
+                              : "no contract number for this",
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.cairo(
                             fontSize: 13,
@@ -620,7 +620,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${order.contractNumber} • ${order.customerName}',
+                    '${order.itemNumber} • ${order.customerName}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.cairo(
@@ -763,9 +763,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          order.designOrder.isNotEmpty
-                              ? order.designOrder
-                              : order.id,
+                          order.contractNumber.isNotEmpty
+                              ? order.contractNumber
+                              : "no contract number for this",
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.cairo(
                             fontSize: 13,
@@ -784,7 +784,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                   ),
                   const SizedBox(height: 3),
                   Text(
-                    '${order.contractNumber} • ${order.customerName}',
+                    '${order.itemNumber} • ${order.customerName}',
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.cairo(
