@@ -2329,7 +2329,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // QTY and Value must contain an actual value, not zero/empty.
     final hasQuantity = order.quantity > 0;
-    final hasValue = order.value > 0;
+    final hasValue = order.value >= 0;
 
     return item.isNotEmpty &&
         productCode.isNotEmpty &&
