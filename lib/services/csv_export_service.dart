@@ -2,16 +2,89 @@ import 'dart:io';
 import 'dart:typed_data';
 import 'package:excel/excel.dart';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:mobitem/services/sap_service.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:universal_html/html.dart' as html;
 
 class ExcelExportService {
+  /// Loads factory/SLoc descriptions using the same `factory_names`
+  /// mapping used by the Orders page.
+  static Future<Map<String, String>> _loadFactoryDescriptions() async {
+    try {
+      final response = await Supabase.instance.client
+          .from('factory_names')
+          .select('s_loc, description');
+
+      final descriptions = <String, String>{};
+
+      for (final row in response) {
+        final code = row['s_loc']?.toString().trim() ?? '';
+        final description = row['description']?.toString().trim() ?? '';
+
+        if (code.isNotEmpty) {
+          descriptions[code.toLowerCase()] = description;
+        }
+      }
+
+      return descriptions;
+    } catch (e) {
+      debugPrint('Error loading factory names for Excel export: $e');
+      return {};
+    }
+  }
+
+  /// Displays the factory code together with its description:
+  /// F001 -> F001 (Factory Description)
+  static String _formatFactoryLabel(
+      String? code,
+      Map<String, String> descriptions,
+      ) {
+    final trimmedCode = code?.trim() ?? '';
+    if (trimmedCode.isEmpty) return '';
+
+    final description =
+        descriptions[trimmedCode.toLowerCase()]?.trim() ?? '';
+
+    if (description.isEmpty) {
+      return trimmedCode;
+    }
+
+    return '$trimmedCode ($description)';
+  }
+
+  /// Formats numbers with a comma every three digits while preserving
+  /// meaningful decimal places.
+  /// Examples: 1000 -> 1,000 | 1250000.5 -> 1,250,000.5
+  static String _formatValue(num value) {
+    final fixed = value.toStringAsFixed(10);
+    final trimmed = fixed
+        .replaceFirst(RegExp(r'0+$'), '')
+        .replaceFirst(RegExp(r'\.$'), '');
+
+    final parts = trimmed.split('.');
+    final integerPart = parts[0];
+    final sign = integerPart.startsWith('-') ? '-' : '';
+    final digits = sign.isEmpty ? integerPart : integerPart.substring(1);
+
+    final formattedInteger = digits.replaceAllMapped(
+      RegExp(r'\B(?=(\d{3})+(?!\d))'),
+          (match) => ',',
+    );
+
+    if (parts.length == 1 || parts[1].isEmpty) {
+      return '$sign$formattedInteger';
+    }
+
+    return '$sign$formattedInteger.${parts[1]}';
+  }
+
   static Future<String> exportOrdersToExcel(
       List<SAPMainOrder> orders,
       ) async {
     final excel = Excel.createExcel();
     final sheet = excel['Orders'];
+    final factoryDescriptions = await _loadFactoryDescriptions();
 
     // ==========================================
     // HEADER STYLE
@@ -196,7 +269,7 @@ class ExcelExportService {
           order.salesEngineer,
           order.orderDate ?? '',
           order.deliveryDate ?? '',
-          order.factory ?? '',
+          _formatFactoryLabel(order.factory, factoryDescriptions),
           order.designTeam ?? '',
           order.responsibleEngineer ?? '',
           order.reviewer ?? '',
@@ -213,7 +286,11 @@ class ExcelExportService {
 
           final value = values[col];
 
-          if (value is num) {
+          // Keep quantities numeric, but export Value as formatted text
+          // so thousands separators are visible in Excel.
+          if (col == 9 && value is num) {
+            cell.value = TextCellValue(_formatValue(value));
+          } else if (value is num) {
             cell.value = DoubleCellValue(value.toDouble());
           } else {
             cell.value = TextCellValue(value.toString());
@@ -255,7 +332,7 @@ class ExcelExportService {
           cell.value = TextCellValue('Total for $status (${statusOrders.length} orders)');
         } else if (col == 9) {
           // Value column
-          cell.value = DoubleCellValue(sectionTotalValue);
+          cell.value = TextCellValue(_formatValue(sectionTotalValue));
           cell.cellStyle = CellStyle(
             bold: true,
             fontSize: 11,

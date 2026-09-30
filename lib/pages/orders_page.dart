@@ -376,14 +376,13 @@ class _OrdersPageState extends State<OrdersPage> {
     return order.responsibleEngineer?.trim().toLowerCase() == 'header';
   }
 
-  // Responsible Engineer = "No One" is locked after leaving Drawing Submittal.
-  // It can only be changed while the order is currently in Drawing Submittal.
+  // Responsible Engineer = "No One" behaves like a header row:
+  // normal users cannot change it; admins/heads can change it.
   bool _isNoOneResponsibleEngineerLocked(SAPMainOrder order) {
     final responsible =
         order.responsibleEngineer?.trim().toLowerCase() ?? '';
-    final status = order.status.trim().toLowerCase();
 
-    return responsible == 'no one' && status != 'drawing submittal';
+    return responsible == 'no one' && !_isAdmin;
   }
 
   String _getSortLabel() {
@@ -1066,7 +1065,7 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
-          // "No One" is locked unless the order is in Drawing Submittal.
+          // "No One" is locked for non-admin users, just like a header row.
           if (field == 'responsible_engineer' &&
               _isNoOneResponsibleEngineerLocked(order)) {
             skipped++;
@@ -1568,7 +1567,7 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    // "No One" can only be changed while the order is in Drawing Submittal.
+    // "No One" can only be changed by admins/heads, just like a header row.
     if (field == 'responsible_engineer' &&
         _isNoOneResponsibleEngineerLocked(order)) {
       _showYellowWarning(
@@ -1628,7 +1627,7 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
-          // "No One" is locked unless the order is in Drawing Submittal.
+          // "No One" is locked for non-admin users, just like a header row.
           if (field == 'responsible_engineer' &&
               _isNoOneResponsibleEngineerLocked(selectedOrder)) {
             skipped++;
@@ -2450,7 +2449,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // Planning permission remains unchanged.
     if (newStatus.trim().toLowerCase() == 'planning' &&
-        !_isHedOrManager &&
+        (!_isHedOrManager ||!_isDataEntry) &&
         !isHeader) {
       _showYellowWarning(
         'Sorry, only Head and Team Leader can send orders to Planning.',
@@ -3962,8 +3961,8 @@ class _OrdersPageState extends State<OrdersPage> {
       );
     }
 
-    // "No One" is locked for Responsible Engineer unless the order is
-    // currently in Drawing Submittal.
+    // "No One" is locked for Responsible Engineer for non-admin users,
+    // just like a header row.
     if (field == 'responsible_engineer' &&
         _isNoOneResponsibleEngineerLocked(order)) {
       return SizedBox(
@@ -6428,4 +6427,3 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
     );
   }
 }
-
