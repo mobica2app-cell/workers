@@ -376,6 +376,16 @@ class _OrdersPageState extends State<OrdersPage> {
     return order.responsibleEngineer?.trim().toLowerCase() == 'header';
   }
 
+  // Responsible Engineer = "No One" is locked after leaving Drawing Submittal.
+  // It can only be changed while the order is currently in Drawing Submittal.
+  bool _isNoOneResponsibleEngineerLocked(SAPMainOrder order) {
+    final responsible =
+        order.responsibleEngineer?.trim().toLowerCase() ?? '';
+    final status = order.status.trim().toLowerCase();
+
+    return responsible == 'no one' && status != 'drawing submittal';
+  }
+
   String _getSortLabel() {
     switch (_sortBy) {
       case 'value_asc':
@@ -1056,6 +1066,13 @@ class _OrdersPageState extends State<OrdersPage> {
             continue;
           }
 
+          // "No One" is locked unless the order is in Drawing Submittal.
+          if (field == 'responsible_engineer' &&
+              _isNoOneResponsibleEngineerLocked(order)) {
+            skipped++;
+            continue;
+          }
+
           try {
             await supabase
                 .from('sap_main_orders')
@@ -1551,6 +1568,15 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
+    // "No One" can only be changed while the order is in Drawing Submittal.
+    if (field == 'responsible_engineer' &&
+        _isNoOneResponsibleEngineerLocked(order)) {
+      _showYellowWarning(
+        '⚠️ Responsible Engineer is locked while assigned to "No One". ',
+      );
+      return;
+    }
+
     // Responsible Engineer cannot be cleared on a normal order.
     // The exception is based on the order's CURRENT status.
     if (field == 'responsible_engineer' &&
@@ -1598,6 +1624,13 @@ class _OrdersPageState extends State<OrdersPage> {
           // Header rows cannot have an Alternative Engineer.
           if (field == 'correspondence_engineer' &&
               _isHeaderResponsibleEngineerRow(selectedOrder)) {
+            skipped++;
+            continue;
+          }
+
+          // "No One" is locked unless the order is in Drawing Submittal.
+          if (field == 'responsible_engineer' &&
+              _isNoOneResponsibleEngineerLocked(selectedOrder)) {
             skipped++;
             continue;
           }
@@ -3914,6 +3947,44 @@ class _OrdersPageState extends State<OrdersPage> {
                 Flexible(
                   child: Text(
                     'header',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      fontWeight: FontWeight.w600,
+                      color: Colors.grey.shade700,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+
+    // "No One" is locked for Responsible Engineer unless the order is
+    // currently in Drawing Submittal.
+    if (field == 'responsible_engineer' &&
+        _isNoOneResponsibleEngineerLocked(order)) {
+      return SizedBox(
+        width: 130,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 3),
+            decoration: BoxDecoration(
+              color: Colors.grey.withOpacity(0.08),
+              borderRadius: BorderRadius.circular(4),
+              border: Border.all(color: Colors.grey.withOpacity(0.25)),
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(Icons.lock_outline, size: 11, color: Colors.grey),
+                const SizedBox(width: 4),
+                Flexible(
+                  child: Text(
+                    'No One',
                     overflow: TextOverflow.ellipsis,
                     style: GoogleFonts.cairo(
                       fontSize: 10,
