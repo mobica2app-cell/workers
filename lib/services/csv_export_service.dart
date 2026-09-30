@@ -46,11 +46,13 @@ class ExcelExportService {
     final description =
         descriptions[trimmedCode.toLowerCase()]?.trim() ?? '';
 
-    if (description.isEmpty) {
-      return trimmedCode;
+    // If the factory exists in Supabase, export its name.
+    // Otherwise, keep the original factory code.
+    if (description.isNotEmpty) {
+      return description;
     }
 
-    return '$trimmedCode ($description)';
+    return trimmedCode;
   }
 
   /// Formats numbers with a comma every three digits while preserving
@@ -501,3 +503,4 @@ class ExcelExportService {
     }
   }
 }
+
