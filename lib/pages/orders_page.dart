@@ -5765,7 +5765,9 @@ class _OrdersPageState extends State<OrdersPage> {
     // Enter commits the value from the cell currently being edited.
     // When multiple rows are selected, apply it to the selection and also
     // include the active cell's row in case it is not part of that selection.
-    if (_editMode && _selectedRowsIds.length > 1) {
+    // A multi-row selection is enough to trigger inline bulk editing.
+    // Do not require Edit Mode here: selection itself is the user's intent.
+    if (_selectedRowsIds.length > 1) {
       await _applyBulkEditToSelected(
         field,
         newValue,
