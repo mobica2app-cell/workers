@@ -5850,8 +5850,19 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    // Inline editing is per cell. Selection must not overwrite other rows:
-    // each cell is saved when Enter is pressed or focus leaves the cell.
+    // When multiple rows are selected in edit mode, propagate this cell's
+    // value to every selected row instead of saving only the active row.
+    // Include the active row in case it was not part of the selection set.
+    if (_editMode && _selectedRowsIds.length > 1) {
+      final activeRowAlreadySelected = _selectedRowsIds.contains(order.id);
+      await _applyBulkEditToSelected(
+        field,
+        newValue,
+        includeOrderId: activeRowAlreadySelected ? null : order.id,
+      );
+      _inlineLastSavedValues[editKey] = newValue;
+      return;
+    }
 
     if (newValue == oldValue ||
         (oldValue == '-' && newValue.isEmpty)) {
