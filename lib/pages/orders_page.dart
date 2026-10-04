@@ -2447,12 +2447,12 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
 
-    // Planning permission remains unchanged.
+    // Head/Manager and Data Entry users can send eligible orders to Planning.
     if (newStatus.trim().toLowerCase() == 'planning' &&
-        (!_isHedOrManager ||!_isDataEntry) &&
+        !(_isHedOrManager || _isDataEntry) &&
         !isHeader) {
       _showYellowWarning(
-        'Sorry, only Head and Team Leader can send orders to Planning.',
+        'Sorry, only Head, Manager, or Data Entry can send orders to Planning.',
       );
       return;
     }
@@ -5762,6 +5762,18 @@ class _OrdersPageState extends State<OrdersPage> {
       ) async {
     newValue = newValue.trim();
 
+    // Enter commits the value from the cell currently being edited.
+    // When multiple rows are selected, apply it to the selection and also
+    // include the active cell's row in case it is not part of that selection.
+    if (_editMode && _selectedRowsIds.length > 1) {
+      await _applyBulkEditToSelected(
+        field,
+        newValue,
+        includeOrderId: order.id,
+      );
+      return;
+    }
+
     if (newValue == oldValue ||
         (oldValue == '-' && newValue.isEmpty)) {
       return;
@@ -5822,10 +5834,17 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Apply bulk edit to all selected rows (inline)
-  Future<void> _applyBulkEditToSelected(String field, String newValue) async {
-    // Check if any selected order is locked
+  Future<void> _applyBulkEditToSelected(
+      String field,
+      String newValue, {
+        String? includeOrderId,
+      }) async {
+    final targetIds = <String>{..._selectedRowsIds};
+    if (includeOrderId != null) targetIds.add(includeOrderId);
+
+    // Check whether any target row is locked.
     final lockedOrders = _allOrders
-        .where((o) => _selectedRowsIds.contains(o.id) && _isOrderLocked(o))
+        .where((o) => targetIds.contains(o.id) && _isOrderLocked(o))
         .toList();
 
     if (lockedOrders.isNotEmpty) {
@@ -5847,7 +5866,7 @@ class _OrdersPageState extends State<OrdersPage> {
               0;
     }
 
-    for (var orderId in _selectedRowsIds) {
+    for (var orderId in targetIds) {
       final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
       if (order != null) {
         // Skip locked orders
@@ -5900,7 +5919,9 @@ class _OrdersPageState extends State<OrdersPage> {
     } else {
       _showSnackBar('✅ $updated rows updated!');
     }
-    _updateMultipleOrdersLocally(field, parsedValue);
+    for (final id in targetIds) {
+      _updateOrderLocally(id, field, parsedValue);
+    }
   }
 
   Widget _hdr(String text, double w, [TextAlign a = TextAlign.left]) =>
