@@ -5702,6 +5702,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                   ),
                 ),
+                // Commit the current cell when Enter is pressed.
                 onSubmitted: (value) async {
                   await _saveInlineEdit(
                     order,
@@ -5710,6 +5711,18 @@ class _OrdersPageState extends State<OrdersPage> {
                     text,
                     editKey,
                   );
+                  FocusManager.instance.primaryFocus?.unfocus();
+                },
+                // Also commit when the user clicks outside this cell.
+                onTapOutside: (_) async {
+                  await _saveInlineEdit(
+                    order,
+                    field,
+                    controller.text,
+                    text,
+                    editKey,
+                  );
+                  FocusManager.instance.primaryFocus?.unfocus();
                 },
               ),
             )
@@ -5762,19 +5775,8 @@ class _OrdersPageState extends State<OrdersPage> {
       ) async {
     newValue = newValue.trim();
 
-    // Enter commits the value from the cell currently being edited.
-    // When multiple rows are selected, apply it to the selection and also
-    // include the active cell's row in case it is not part of that selection.
-    // A multi-row selection is enough to trigger inline bulk editing.
-    // Do not require Edit Mode here: selection itself is the user's intent.
-    if (_selectedRowsIds.length > 1) {
-      await _applyBulkEditToSelected(
-        field,
-        newValue,
-        includeOrderId: order.id,
-      );
-      return;
-    }
+    // Inline editing is per cell. Selection must not overwrite other rows:
+    // each cell is saved when Enter is pressed or focus leaves the cell.
 
     if (newValue == oldValue ||
         (oldValue == '-' && newValue.isEmpty)) {
