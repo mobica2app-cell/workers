@@ -1,4 +1,5 @@
 // lib/pages/orders_page.dart
+import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -79,6 +80,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   String? _editingField; // Which field is being edited (orderId_field)
   final Map<String, TextEditingController> _editControllers = {};
+  // Per-cell debounce and save state for live inline editing.
+  final Map<String, Timer> _inlineSaveTimers = {};
+  final Map<String, String> _inlineLastSavedValues = {};
+  final Set<String> _inlineSavingKeys = {};
+
 
   // Filters
   String? _filterStatus;
@@ -598,6 +604,14 @@ class _OrdersPageState extends State<OrdersPage> {
     _leftVerticalScrollController.dispose();
     _rightVerticalScrollController.dispose();
     _searchController.dispose();
+    for (final timer in _inlineSaveTimers.values) {
+      timer.cancel();
+    }
+    _inlineSaveTimers.clear();
+    for (final controller in _editControllers.values) {
+      controller.dispose();
+    }
+    _editControllers.clear();
     super.dispose();
   }
 
@@ -5702,9 +5716,20 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                   ),
                 ),
-                // Commit the current cell when Enter is pressed.
+                // Save automatically while typing (debounced), without
+                // requiring Enter or leaving the cell.
+                onChanged: (value) {
+                  _scheduleInlineSave(
+                    order,
+                    field,
+                    value,
+                    text,
+                    editKey,
+                  );
+                },
+                // Enter flushes any pending change immediately.
                 onSubmitted: (value) async {
-                  await _saveInlineEdit(
+                  await _flushInlineSave(
                     order,
                     field,
                     value,
@@ -5713,9 +5738,9 @@ class _OrdersPageState extends State<OrdersPage> {
                   );
                   FocusManager.instance.primaryFocus?.unfocus();
                 },
-                // Also commit when the user clicks outside this cell.
+                // Leaving the cell also flushes the latest value.
                 onTapOutside: (_) async {
-                  await _saveInlineEdit(
+                  await _flushInlineSave(
                     order,
                     field,
                     controller.text,
@@ -5765,15 +5790,65 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  // Debounce database writes while the user is typing. Each cell has its
+  // own timer, so editing another cell/row cannot overwrite this value.
+  void _scheduleInlineSave(
+      SAPMainOrder order,
+      String field,
+      String newValue,
+      String originalValue,
+      String editKey,
+      ) {
+    _inlineSaveTimers[editKey]?.cancel();
+    _inlineSaveTimers[editKey] = Timer(const Duration(milliseconds: 650), () {
+      _inlineSaveTimers.remove(editKey);
+      _saveInlineEdit(
+        order,
+        field,
+        newValue,
+        _inlineLastSavedValues[editKey] ?? originalValue,
+        editKey,
+        showFeedback: false,
+      );
+    });
+  }
+
+  // Cancel the debounce and persist the latest value now.
+  Future<void> _flushInlineSave(
+      SAPMainOrder order,
+      String field,
+      String newValue,
+      String originalValue,
+      String editKey,
+      ) async {
+    _inlineSaveTimers.remove(editKey)?.cancel();
+    await _saveInlineEdit(
+      order,
+      field,
+      newValue,
+      _inlineLastSavedValues[editKey] ?? originalValue,
+      editKey,
+      showFeedback: true,
+    );
+  }
+
   // Save inline edit
   Future<void> _saveInlineEdit(
       SAPMainOrder order,
       String field,
       String newValue,
       String oldValue,
-      String editKey,
-      ) async {
+      String editKey, {
+        bool showFeedback = true,
+      }) async {
     newValue = newValue.trim();
+
+    if (_inlineSavingKeys.contains(editKey)) {
+      // A previous write is still in flight. Queue the newest value after it
+      // completes instead of allowing out-of-order updates.
+      _scheduleInlineSave(order, field, newValue, oldValue, editKey);
+      return;
+    }
 
     // Inline editing is per cell. Selection must not overwrite other rows:
     // each cell is saved when Enter is pressed or focus leaves the cell.
@@ -5782,6 +5857,8 @@ class _OrdersPageState extends State<OrdersPage> {
         (oldValue == '-' && newValue.isEmpty)) {
       return;
     }
+
+    _inlineSavingKeys.add(editKey);
 
     try {
       final supabase = Supabase.instance.client;
@@ -5826,14 +5903,21 @@ class _OrdersPageState extends State<OrdersPage> {
         field,
         parsedValue,
       );
+      _inlineLastSavedValues[editKey] = newValue;
 
-      _showSnackBar(
-        '${_formatFieldName(field)} updated!',
-      );
+      if (showFeedback) {
+        _showSnackBar('${_formatFieldName(field)} updated!');
+      }
     } catch (e) {
-      _showSnackBar(
-        'Error updating: $e',
-      );
+      if (showFeedback) {
+        _showSnackBar('Error updating: $e');
+      } else {
+        debugPrint('Realtime inline save failed for $editKey: $e');
+      }
+    } finally {
+      _inlineSavingKeys.remove(editKey);
+      // If the user typed again while the request was running, the scheduled
+      // timer will persist that newer text.
     }
   }
 
