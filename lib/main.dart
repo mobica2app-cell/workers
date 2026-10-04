@@ -12,8 +12,7 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:universal_html/html.dart' as html;
 import 'services/sap_service.dart';
 
-final GlobalKey<NavigatorState> navigatorKey =
-GlobalKey<NavigatorState>();
+final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 
 // Global Theme Notifier for instant theme changes
 class ThemeNotifier extends ChangeNotifier {
@@ -364,7 +363,7 @@ class _SmartZoomWrapperState extends State<SmartZoomWrapper> {
   }
 }
 
-class EmployeeAuthService {
+class EmployeeAuthService  {
   final SupabaseClient _client;
 
   EmployeeAuthService(this._client);
@@ -682,7 +681,3 @@ git commit -m "Update"
 git push
 
 */
-
-
-
-
