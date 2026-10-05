@@ -264,6 +264,12 @@ class _MainShellState extends State<MainShell> {
                 ),
 
                 // ==============================================
+                // CELEBRATION BANNER
+                // ==============================================
+
+                _buildCelebrationBanner(),
+
+                // ==============================================
                 // USER
                 // ==============================================
 
@@ -861,6 +867,81 @@ class _MainShellState extends State<MainShell> {
                   ),
               ],
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ============================================================
+  // CELEBRATION BANNER
+  // ============================================================
+
+  Widget _buildCelebrationBanner() {
+    return Padding(
+      padding: EdgeInsets.symmetric(
+        horizontal: _isCollapsed ? 12 : 14,
+        vertical: 10,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 300),
+          width: double.infinity,
+          height: _isCollapsed ? 48 : 110,
+          decoration: BoxDecoration(
+            color: Colors.white.withOpacity(0.05),
+            border: Border.all(
+              color: Colors.white.withOpacity(0.08),
+            ),
+          ),
+          child: _isCollapsed
+              ? Tooltip(
+            message: '6th October Anniversary',
+            child: Image.network(
+              'https://tcztkkexgzxlurvhibmc.supabase.co/storage/v1/object/public/imagess/Egyptian%20Flag.png',
+              fit: BoxFit.cover,
+            ),
+          )
+              : Stack(
+            fit: StackFit.expand,
+            children: [
+              Image.network(
+                'https://tcztkkexgzxlurvhibmc.supabase.co/storage/v1/object/public/imagess/Egyptian%20Flag.png',
+                fit: BoxFit.cover,
+              ),
+              DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withOpacity(0.65),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+              Positioned(
+                left: 10,
+                right: 10,
+                bottom: 8,
+                child: Text(
+                  '6th October Anniversary',
+                  style: GoogleFonts.cairo(
+                    color: Colors.white,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    shadows: const [
+                      Shadow(
+                        blurRadius: 4,
+                        color: Colors.black54,
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
         ),
       ),
