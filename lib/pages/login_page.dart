@@ -200,15 +200,12 @@ class _LoginPageState extends State<LoginPage> {
       compact ? CrossAxisAlignment.center : CrossAxisAlignment.start,
       children: [
         Container(
-          width: compact ? 92 : 108,
-          height: compact ? 92 : 108,
-          padding: const EdgeInsets.all(12),
+          width: compact ? 240 : 360,
+          height: compact ? 240 : 360,
           decoration: BoxDecoration(
-            color: Colors.white,
+            color: Colors.transparent,
             borderRadius: BorderRadius.circular(26),
-            border: Border.all(
-              color: Colors.white.withOpacity(0.14),
-            ),
+
             boxShadow: [
               BoxShadow(
                 color: Colors.black.withOpacity(0.28),
@@ -218,68 +215,17 @@ class _LoginPageState extends State<LoginPage> {
             ],
           ),
           child: Image.asset(
-            'assets/images/mood_logo.png',
+            'assets/images/logo.png',
             fit: BoxFit.contain,
             errorBuilder: (_, __, ___) => const Icon(
               Icons.business_center_rounded,
-              size: 48,
               color: Color(0xFF0F172A),
             ),
           ),
         ),
-        const SizedBox(height: 24),
-        Text(
-          'MOOD',
-          textAlign: compact ? TextAlign.center : TextAlign.left,
-          style: GoogleFonts.cairo(
-            fontSize: compact ? 30 : 40,
-            fontWeight: FontWeight.w800,
-            height: 1,
-            letterSpacing: 3,
-            color: Colors.white,
-          ),
+        Padding(
+          padding: const EdgeInsets.all(18.0),
         ),
-        const SizedBox(height: 10),
-        Text(
-          'Mobica Office Operations & Documents',
-          textAlign: compact ? TextAlign.center : TextAlign.left,
-          style: GoogleFonts.cairo(
-            fontSize: compact ? 13 : 16,
-            fontWeight: FontWeight.w500,
-            color: Colors.white.withOpacity(0.78),
-            height: 1.5,
-          ),
-        ),
-        if (!compact) ...[
-          const SizedBox(height: 24),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.07),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white.withOpacity(0.10)),
-            ),
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  Icons.verified_user_outlined,
-                  size: 18,
-                  color: Colors.white.withOpacity(0.82),
-                ),
-                const SizedBox(width: 9),
-                Text(
-                  'Technical Office Workspace',
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    color: Colors.white.withOpacity(0.78),
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ],
       ],
     );
   }

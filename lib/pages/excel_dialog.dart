@@ -577,7 +577,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             label,
             style: GoogleFonts.cairo(
               fontSize: 14,
-              color: const Color(0xFFAAAAAA),
+              color: const Color(0xFF64748B),
             ),
           ),
         ),
@@ -602,7 +602,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         width: MediaQuery.of(context).size.width * 0.95,
         height: MediaQuery.of(context).size.height * 0.9,
         decoration: BoxDecoration(
-          color: Theme.of(context).brightness == Brightness.dark ? Colors.black : Colors.white,
+          color: Colors.white,
           borderRadius: BorderRadius.circular(16),
         ),
         child: Column(
@@ -620,12 +620,12 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     return Container(
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF000000),
+        color: const Color(0xFFF8FAFC),
         borderRadius: const BorderRadius.only(
           topLeft: Radius.circular(16),
           topRight: Radius.circular(16),
         ),
-        border: const Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
+        border: const Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
       ),
       child: Row(
         children: [
@@ -642,7 +642,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 if (_fileLoaded)
                   Text(
                     '$_fileName • $_totalRows rows • Status: imported',
-                    style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFFAAAAAA)),
+                    style: GoogleFonts.cairo(fontSize: 13, color: const Color(0xFF64748B)),
                   ),
               ],
             ),
@@ -674,7 +674,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           ],
           IconButton(
             onPressed: () => Navigator.pop(context),
-            icon: const Icon(Icons.close, color: Color(0xFFAAAAAA)),
+            icon: const Icon(Icons.close, color: Color(0xFF64748B)),
           ),
         ],
       ),
@@ -691,7 +691,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             const Icon(
               Icons.cloud_upload_outlined,
               size: 80,
-              color: Color(0xFFAAAAAA),
+              color: Color(0xFF94A3B8),
             ),
             const SizedBox(height: 24),
             Text(
@@ -759,7 +759,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         Container(
           margin: const EdgeInsets.symmetric(horizontal: 12),
           decoration: BoxDecoration(
-            color: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF121212) : const Color(0xFFF1F5F9),
+            color: const Color(0xFFF1F5F9),
             borderRadius: BorderRadius.circular(8),
           ),
           child: Row(
@@ -801,7 +801,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                   title,
                   style: GoogleFonts.cairo(
                     fontSize: 11,
-                    color: const Color(0xFFAAAAAA),
+                    color: const Color(0xFF64748B),
                   ),
                 ),
                 Text(
@@ -828,7 +828,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
         child: Container(
           padding: const EdgeInsets.symmetric(vertical: 8),
           decoration: BoxDecoration(
-            color: isSelected ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF000000) : Colors.white) : Colors.transparent,
+            color: isSelected ? Colors.white : Colors.transparent,
             borderRadius: BorderRadius.circular(8),
           ),
           child: Text(
@@ -837,7 +837,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             style: GoogleFonts.cairo(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: isSelected ? (Theme.of(context).brightness == Brightness.dark ? const Color(0xFFF5F5F5) : primaryColor) : const Color(0xFFAAAAAA),
+              color: isSelected ? primaryColor : const Color(0xFF64748B),
             ),
           ),
         ),
@@ -859,7 +859,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
       return Center(
         child: Text(
           'No data',
-          style: GoogleFonts.cairo(color: const Color(0xFFAAAAAA)),
+          style: GoogleFonts.cairo(color: const Color(0xFF64748B)),
         ),
       );
     }
@@ -874,7 +874,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
               height: 36,
               decoration: const BoxDecoration(
                 color: Color(0xFFF1F5F9),
-                border: Border(bottom: BorderSide(color: Color(0xFF2A2A2A))),
+                border: Border(bottom: BorderSide(color: Color(0xFFE2E8F0))),
               ),
               child: Row(
                 children: [
@@ -910,7 +910,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                     height: 40,
                     decoration: BoxDecoration(
                       border: const Border(
-                        bottom: BorderSide(color: Color(0xFF2A2A2A)),
+                        bottom: BorderSide(color: Color(0xFFE2E8F0)),
                       ),
                       color: _selectedTab == 1 ? Colors.orange.shade50 : null,
                     ),
@@ -984,7 +984,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
           style: GoogleFonts.cairo(
             fontSize: 10,
             fontWeight: FontWeight.w700,
-            color: const Color(0xFF000000),
+            color: const Color(0xFF0F172A),
           ),
           overflow: TextOverflow.ellipsis,
         ),
@@ -1018,7 +1018,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
             color: date != null ? orangeColor : Colors.grey.shade300,
           ),
           borderRadius: BorderRadius.circular(4),
-          color: date != null ? orangeColor.withOpacity(0.05) : (Theme.of(context).brightness == Brightness.dark ? const Color(0xFF000000) : Colors.white),
+          color: date != null ? orangeColor.withOpacity(0.05) : Colors.white,
         ),
         child: Row(
           children: [
@@ -1045,7 +1045,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
     return Container(
       padding: const EdgeInsets.all(16),
       decoration: const BoxDecoration(
-        border: Border(top: BorderSide(color: Color(0xFF2A2A2A))),
+        border: Border(top: BorderSide(color: Color(0xFFE2E8F0))),
       ),
       child: Row(
         children: [
@@ -1057,7 +1057,7 @@ class _ImportExcelDialogState extends State<ImportExcelDialog> {
                 : 'Select a file to begin',
             style: GoogleFonts.cairo(
               fontSize: 13,
-              color: const Color(0xFFAAAAAA),
+              color: const Color(0xFF64748B),
             ),
           ),
           const Spacer(),
