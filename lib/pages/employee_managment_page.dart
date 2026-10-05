@@ -133,6 +133,7 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
         content: Text(message, style: GoogleFonts.cairo()),
         backgroundColor: Colors.red,
         behavior: SnackBarBehavior.floating,
+        duration: const Duration(milliseconds: 1000),
       ),
     );
   }

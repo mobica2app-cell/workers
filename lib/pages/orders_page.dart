@@ -76,7 +76,7 @@ class _OrdersPageState extends State<OrdersPage> {
   // Caches
   Map<String, ProductTracking> _allTrackingCache = {};
   Map<String, List<JobAssignment>> _jobsCache = {};
-  Map<String, Employee?> _employeeCache = {};
+  final Map<String, Employee?> _employeeCache = {};
 
   String? _editingField; // Which field is being edited (orderId_field)
   final Map<String, TextEditingController> _editControllers = {};
@@ -84,7 +84,6 @@ class _OrdersPageState extends State<OrdersPage> {
   final Map<String, Timer> _inlineSaveTimers = {};
   final Map<String, String> _inlineLastSavedValues = {};
   final Set<String> _inlineSavingKeys = {};
-
 
   // Filters
   String? _filterStatus;
@@ -370,13 +369,11 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-
   // Add this method to check if user is admin
   bool get _isAdmin {
     final role = widget.loggedInEmployee?.role?.toLowerCase() ?? '';
     return role == 'admin' || role == 'software head' || role == 'head';
   }
-
 
   bool _isHeaderResponsibleEngineerRow(SAPMainOrder order) {
     return order.responsibleEngineer?.trim().toLowerCase() == 'header';
@@ -474,8 +471,6 @@ class _OrdersPageState extends State<OrdersPage> {
     });
   }
 
-  // ==================== COPY FUNCTIONALITY ====================
-
   // Copy a specific field value to clipboard
   void _copyFieldToClipboard(String label, String value) {
     if (value.isEmpty || value == '-') {
@@ -484,7 +479,7 @@ class _OrdersPageState extends State<OrdersPage> {
           content: Text('⚠️ No data to copy', style: GoogleFonts.cairo()),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 1),
+          duration: const Duration(milliseconds: 1000),
         ),
       );
       return;
@@ -500,7 +495,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(milliseconds: 1000),
       ),
     );
   }
@@ -541,7 +536,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(milliseconds: 1000),
       ),
     );
   }
@@ -581,7 +576,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 2),
+        duration: const Duration(milliseconds: 1000),
       ),
     );
   }
@@ -862,6 +857,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,
+                    duration: const Duration(milliseconds: 1000),
                   ),
                 );
                 return;
@@ -1735,7 +1731,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.amber.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(seconds: 3),
+        duration: const Duration(milliseconds: 1000),
         margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -2325,6 +2321,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(milliseconds: 1000),
           content: Text(
             '✅ $deleted deleted, ❌ $failed failed',
             style: GoogleFonts.cairo(),
@@ -2969,6 +2966,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
+          duration: const Duration(milliseconds: 1000),
           content: Text(message, style: GoogleFonts.cairo()),
           behavior: SnackBarBehavior.floating,
           backgroundColor: message.contains('Error')
