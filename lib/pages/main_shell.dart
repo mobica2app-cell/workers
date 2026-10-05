@@ -40,18 +40,18 @@ class _MainShellState extends State<MainShell> {
 
   Color get _backgroundColor =>
       _isDark
-          ? const Color(0xFF0F172A)
+          ? const Color(0xFF000000)
           : const Color(0xFFF8FAFC);
 
   Color get _surfaceColor =>
       _isDark
-          ? const Color(0xFF1E293B)
+          ? const Color(0xFF121212)
           : Colors.white;
 
   Color get _textColor =>
       _isDark
           ? const Color(0xFFE2E8F0)
-          : const Color(0xFF0F172A);
+          : const Color(0xFF000000);
 
   Color get _secondaryTextColor =>
       _isDark
@@ -60,7 +60,7 @@ class _MainShellState extends State<MainShell> {
 
   Color get _borderColor =>
       _isDark
-          ? const Color(0xFF334155)
+          ? const Color(0xFF2A2A2A)
           : const Color(0xFFE2E8F0);
 
   // ============================================================
@@ -207,7 +207,7 @@ class _MainShellState extends State<MainShell> {
                 : 240,
 
             color:
-            const Color(0xFF0F172A),
+            const Color(0xFF000000),
 
             child: Column(
               children: [
@@ -434,90 +434,25 @@ class _MainShellState extends State<MainShell> {
   Widget _buildExpandedHeader() {
     return Row(
       children: [
-
-        Container(
-          width: 40,
-          height: 40,
-
-          decoration:
-          BoxDecoration(
-            color:
-            Colors.white10,
-            borderRadius:
-            BorderRadius.circular(
-              10,
+        Expanded(
+          child: SizedBox(
+            height: 54,
+            child: Image.asset(
+              'assets/images/logo.png',
+              fit: BoxFit.contain,
+              alignment: Alignment.centerLeft,
             ),
           ),
-
-          child: const Icon(
-            Icons.factory,
-            color: Colors.white,
-            size: 24,
-          ),
         ),
-
-        const SizedBox(width: 12),
-
-        Expanded(
-          child: Column(
-            crossAxisAlignment:
-            CrossAxisAlignment.start,
-
-            mainAxisSize:
-            MainAxisSize.min,
-
-            children: [
-
-              const Text(
-                'MOBICA',
-
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 18,
-                  fontWeight:
-                  FontWeight.bold,
-                ),
-              ),
-
-              Text(
-                _isHead
-                    ? 'Admin view'
-                    : 'User view',
-
-                style: TextStyle(
-                  color:
-                  _isHead
-                      ? Colors.amber
-                      .withOpacity(
-                    0.7,
-                  )
-                      : Colors.white38,
-
-                  fontSize: 10,
-
-                  letterSpacing: 0.3,
-                ),
-              ),
-            ],
-          ),
-        ),
-
         IconButton(
-          onPressed:
-          _toggleSidebar,
-
-          icon:
-          const Icon(
+          onPressed: _toggleSidebar,
+          icon: const Icon(
             Icons.chevron_left,
-            color:
-            Colors.white54,
+            color: Colors.white54,
             size: 20,
           ),
-
           splashRadius: 20,
-
-          tooltip:
-          'Collapse',
+          tooltip: 'Collapse',
         ),
       ],
     );
@@ -530,49 +465,24 @@ class _MainShellState extends State<MainShell> {
   Widget _buildCollapsedHeader() {
     return Column(
       children: [
-
-        Container(
-          width: 40,
-          height: 40,
-
-          decoration:
-          BoxDecoration(
-            color:
-            Colors.white10,
-
-            borderRadius:
-            BorderRadius.circular(
-              10,
-            ),
-          ),
-
-          child: const Icon(
-            Icons.factory,
-            color: Colors.white,
-            size: 24,
+        SizedBox(
+          width: 48,
+          height: 48,
+          child: Image.asset(
+            'assets/images/logo.png',
+            fit: BoxFit.contain,
           ),
         ),
-
-        const SizedBox(
-          height: 12,
-        ),
-
+        const SizedBox(height: 8),
         IconButton(
-          onPressed:
-          _toggleSidebar,
-
-          icon:
-          const Icon(
+          onPressed: _toggleSidebar,
+          icon: const Icon(
             Icons.chevron_right,
-            color:
-            Colors.white54,
+            color: Colors.white54,
             size: 20,
           ),
-
           splashRadius: 20,
-
-          tooltip:
-          'Expand',
+          tooltip: 'Expand',
         ),
       ],
     );

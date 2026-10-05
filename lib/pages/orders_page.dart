@@ -123,13 +123,13 @@ class _OrdersPageState extends State<OrdersPage> {
   // Theme helper getters
   bool get _isDarkMode => Theme.of(context).brightness == Brightness.dark;
 
-  Color get _backgroundColor => _isDarkMode ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-  Color get _surfaceColor => _isDarkMode ? const Color(0xFF1E293B) : Colors.white;
-  Color get _textColor => _isDarkMode ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
-  Color get _secondaryTextColor => _isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-  Color get _borderColor => _isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-  Color get _hoverColor => _isDarkMode ? const Color(0xFF334155).withOpacity(0.3) : const Color(0xFFF1F5F9);
-  Color get _headerBgColor => _isDarkMode ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9);
+  Color get _backgroundColor => _isDarkMode ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDarkMode ? const Color(0xFF121212) : Colors.white;
+  Color get _textColor => _isDarkMode ? const Color(0xFFF5F5F5) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDarkMode ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _borderColor => _isDarkMode ? const Color(0xFF2A2A2A) : const Color(0xFFE2E8F0);
+  Color get _hoverColor => _isDarkMode ? const Color(0xFF242424).withOpacity(0.5) : const Color(0xFFF1F5F9);
+  Color get _headerBgColor => _isDarkMode ? const Color(0xFF101010) : const Color(0xFFF1F5F9);
 
   String get _userStatusKey {
     final userId = widget.loggedInEmployee?.id ?? 'default';
@@ -3780,7 +3780,7 @@ class _OrdersPageState extends State<OrdersPage> {
       height: 64,
       padding: const EdgeInsets.symmetric(horizontal: 20),
       decoration: BoxDecoration(
-        color: _surfaceColor,
+        color: _backgroundColor,
         border: Border(bottom: BorderSide(color: _borderColor)),
       ),
       child: Row(
@@ -6517,7 +6517,7 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
   @override
   Widget build(BuildContext context) {
     final isDarkMode = Theme.of(context).brightness == Brightness.dark;
-    final surfaceColor = isDarkMode ? const Color(0xFF1E293B) : Colors.white;
+    final surfaceColor = isDarkMode ? const Color(0xFF121212) : Colors.white;
     final textColor = isDarkMode ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
     final secondaryTextColor = isDarkMode ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
     final borderColor = isDarkMode ? const Color(0xFF334155) : const Color(0xFFE2E8F0);

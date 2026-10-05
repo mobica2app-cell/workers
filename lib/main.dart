@@ -83,7 +83,7 @@ class MyApp extends StatelessWidget {
 
             // Wrap with theme-aware container
             content = ColoredBox(
-              color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+              color: isDark ? const Color(0xFF000000) : const Color(0xFFF8FAFC),
               child: content,
             );
 
@@ -110,7 +110,7 @@ class MyApp extends StatelessWidget {
   // Light Theme
   ThemeData _buildLightTheme() {
     final ColorScheme colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0F172A),
+      seedColor: const Color(0xFF000000),
       brightness: Brightness.light,
       primary: const Color(0xFF0F172A),
       secondary: const Color(0xFF3B82F6),
@@ -206,36 +206,36 @@ class MyApp extends StatelessWidget {
   // Dark Theme
   ThemeData _buildDarkTheme() {
     final ColorScheme colorScheme = ColorScheme.fromSeed(
-      seedColor: const Color(0xFF0F172A),
+      seedColor: const Color(0xFF000000),
       brightness: Brightness.dark,
       primary: const Color(0xFF60A5FA),
       secondary: const Color(0xFF3B82F6),
-      surface: const Color(0xFF1E293B),
-      background: const Color(0xFF0F172A),
+      surface: const Color(0xFF121212),
+      background: const Color(0xFF000000),
       error: const Color(0xFFEF4444),
-      onPrimary: const Color(0xFF0F172A),
+      onPrimary: const Color(0xFF000000),
       onSecondary: const Color(0xFFFFFFFF),
-      onSurface: const Color(0xFFE2E8F0),
-      onBackground: const Color(0xFFE2E8F0),
+      onSurface: const Color(0xFFF5F5F5),
+      onBackground: const Color(0xFFF5F5F5),
       onError: const Color(0xFFFFFFFF),
     );
 
     return ThemeData(
       colorScheme: colorScheme,
-      scaffoldBackgroundColor: const Color(0xFF0F172A),
+      scaffoldBackgroundColor: const Color(0xFF000000),
       fontFamily: GoogleFonts.cairo().fontFamily,
       useMaterial3: true,
       textTheme: GoogleFonts.cairoTextTheme(
         ThemeData.dark().textTheme,
       ),
       appBarTheme: const AppBarTheme(
-        backgroundColor: Color(0xFF1E293B),
-        foregroundColor: Color(0xFFE2E8F0),
+        backgroundColor: Color(0xFF121212),
+        foregroundColor: Color(0xFFF5F5F5),
         elevation: 0,
         centerTitle: true,
       ),
       cardTheme: CardThemeData(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFF121212),
         elevation: 2,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(12),
@@ -243,14 +243,14 @@ class MyApp extends StatelessWidget {
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: const Color(0xFF1E293B),
+        fillColor: const Color(0xFF121212),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
         ),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
-          borderSide: const BorderSide(color: Color(0xFF334155)),
+          borderSide: const BorderSide(color: Color(0xFF2A2A2A)),
         ),
         focusedBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(8),
@@ -279,14 +279,14 @@ class MyApp extends StatelessWidget {
         ),
       ),
       popupMenuTheme: PopupMenuThemeData(
-        color: const Color(0xFF1E293B),
+        color: const Color(0xFF121212),
         surfaceTintColor: Colors.transparent,
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(8),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
-        backgroundColor: const Color(0xFF334155),
+        backgroundColor: const Color(0xFF000000),
         contentTextStyle: GoogleFonts.cairo(
           color: Colors.white,
           fontSize: 14,

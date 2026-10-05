@@ -71,15 +71,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
   Color get _backgroundColor =>
-      _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
+      _isDark ? const Color(0xFF000000) : const Color(0xFF000000);
   Color get _surfaceColor =>
-      _isDark ? const Color(0xFF1E293B) : Colors.white;
+      _isDark ? const Color(0xFF121212) : Colors.white;
   Color get _textColor =>
-      _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
+      _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF000000);
   Color get _secondaryTextColor =>
-      _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+      _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
   Color get _borderColor =>
-      _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+      _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
   double get _pageWidth => MediaQuery.sizeOf(context).width;
   bool get _isMobile => _pageWidth < 700;
 
@@ -708,7 +708,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         height: 48,
         padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
-          color: _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+          color: _isDark ? const Color(0xFF000000) : const Color(0xFF000000),
           borderRadius: BorderRadius.circular(9),
           border: Border.all(
             color: date != null
@@ -1055,7 +1055,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return Container(
       padding: EdgeInsets.all(_isMobile ? 10 : 14),
       decoration: BoxDecoration(
-        color: _isDark ? const Color(0xFF172033) : const Color(0xFFFAFBFD),
+        color: _isDark ? const Color(0xFF121212) : const Color(0xFFFAFBFD),
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: _borderColor),
       ),
@@ -1206,8 +1206,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                         return Material(
                           color: _isDark
-                              ? const Color(0xFF172033)
-                              : const Color(0xFFF8FAFC),
+                              ? const Color(0xFF121212)
+                              : const Color(0xFF000000),
                           borderRadius: BorderRadius.circular(13),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(13),

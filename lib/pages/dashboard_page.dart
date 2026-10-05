@@ -72,12 +72,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
-  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
-  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFF000000);
+  Color get _surfaceColor => _isDark ? const Color(0xFF121212) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF000000);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
+  Color get _cardColor => _isDark ? const Color(0xFF121212) : Colors.white;
 
   // Status lists
   static const List<String> _beforeApprovalStatuses = [
@@ -1270,7 +1270,7 @@ class _DashboardPageState extends State<DashboardPage> {
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
               color: _isDark
-                  ? const Color(0xFF334155).withOpacity(0.3)
+                  ? const Color(0xFF2A2A2A).withOpacity(0.3)
                   : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
             ),
@@ -1588,12 +1588,12 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
-  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
-  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
+  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFF000000);
+  Color get _surfaceColor => _isDark ? const Color(0xFF121212) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF000000);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
+  Color get _cardColor => _isDark ? const Color(0xFF121212) : Colors.white;
 
   // Status lists
   static const List<String> _beforeApprovalStatuses = [
@@ -2943,7 +2943,7 @@ class _DashboardPageState extends State<DashboardPage> {
             padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 12),
             decoration: BoxDecoration(
               color: _isDark
-                  ? const Color(0xFF334155).withOpacity(0.3)
+                  ? const Color(0xFF2A2A2A).withOpacity(0.3)
                   : Colors.grey.withOpacity(0.05),
               borderRadius: BorderRadius.circular(8),
             ),

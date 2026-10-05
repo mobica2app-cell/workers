@@ -41,13 +41,13 @@ class _ProfilePageState extends State<ProfilePage>
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _backgroundColor => _isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-  Color get _surfaceColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
-  Color get _textColor => _isDark ? const Color(0xFFE2E8F0) : const Color(0xFF0F172A);
-  Color get _secondaryTextColor => _isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-  Color get _borderColor => _isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-  Color get _cardColor => _isDark ? const Color(0xFF1E293B) : Colors.white;
-  Color get _chipBackground => _isDark ? const Color(0xFF334155) : Colors.grey.shade100;
+  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
+  Color get _surfaceColor => _isDark ? const Color(0xFF121212) : Colors.white;
+  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF000000);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
+  Color get _cardColor => _isDark ? const Color(0xFF121212) : Colors.white;
+  Color get _chipBackground => _isDark ? const Color(0xFF2A2A2A) : Colors.grey.shade100;
 
   @override
   void initState() {
@@ -83,7 +83,7 @@ class _ProfilePageState extends State<ProfilePage>
           value ? '🌙 Dark mode enabled' : '☀️ Light mode enabled',
           style: GoogleFonts.cairo(),
         ),
-        backgroundColor: value ? const Color(0xFF1E293B) : const Color(0xFF0F172A),
+        backgroundColor: const Color(0xFF000000),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 2),
       ),
@@ -324,13 +324,13 @@ class _ProfilePageState extends State<ProfilePage>
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
-            backgroundColor: const Color(0xFF0F172A),
+            backgroundColor: const Color(0xFF000000),
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF0F172A), Color(0xFF1E293B)])),
+                    colors: [Color(0xFF202020), Color(0xFF4E4E4E)])),
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
@@ -343,7 +343,7 @@ class _ProfilePageState extends State<ProfilePage>
                                 child: Text(_employee!.initials,
                                     style: GoogleFonts.cairo(fontSize: 32,
                                         fontWeight: FontWeight.bold,
-                                        color: const Color(0xFF0F172A)))),
+                                        color: const Color(0xFF000000)))),
                             const SizedBox(width: 16),
                             Expanded(child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,

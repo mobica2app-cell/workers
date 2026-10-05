@@ -65,33 +65,33 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
   Color get _backgroundColor =>
       _isDark
-          ? const Color(0xFF0F172A)
-          : const Color(0xFFF8FAFC);
+          ? const Color(0xFF000000)
+          : const Color(0xFF000000);
 
   Color get _surfaceColor =>
       _isDark
-          ? const Color(0xFF1E293B)
+          ? const Color(0xFF121212)
           : Colors.white;
 
   Color get _textColor =>
       _isDark
-          ? const Color(0xFFE2E8F0)
-          : const Color(0xFF0F172A);
+          ? const Color(0xFFF5F5F5)
+          : const Color(0xFF000000);
 
   Color get _secondaryTextColor =>
       _isDark
-          ? const Color(0xFF94A3B8)
+          ? const Color(0xFFAAAAAA)
           : const Color(0xFF64748B);
 
   Color get _borderColor =>
       _isDark
-          ? const Color(0xFF334155)
-          : const Color(0xFFE2E8F0);
+          ? const Color(0xFF2A2A2A)
+          : const Color(0xFFF5F5F5);
 
   Color get _mutedBackground =>
       _isDark
-          ? const Color(0xFF0B1220)
-          : const Color(0xFFF8FAFC);
+          ? const Color(0xFF080808)
+          : const Color(0xFF000000);
 
   // ============================================================
   // INIT
@@ -1238,7 +1238,7 @@ class _OrderDetailPageState extends State<OrderDetailPage> {
 
       appBar: AppBar(
         backgroundColor:
-        const Color(0xFF0F172A),
+        const Color(0xFF000000),
         foregroundColor:
         Colors.white,
         elevation: 0,
