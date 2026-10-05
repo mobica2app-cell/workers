@@ -4055,6 +4055,72 @@ class _OrdersPageState extends State<OrdersPage> {
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
+                if (hasValue)
+                  IconButton(
+                    tooltip: 'Clear ${_formatFieldName(field)}',
+                    onPressed: canEdit
+                        ? () async {
+                      final confirmed = await showDialog<bool>(
+                        context: context,
+                        builder: (dialogContext) => AlertDialog(
+                          title: Text(
+                            'Clear ${_formatFieldName(field)}?',
+                            style: GoogleFonts.cairo(
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                          content: Text(
+                            'Are you sure you want to clear the assigned engineer?',
+                            style: GoogleFonts.cairo(fontSize: 13),
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, false),
+                              child: Text(
+                                'Cancel',
+                                style: GoogleFonts.cairo(),
+                              ),
+                            ),
+                            ElevatedButton(
+                              onPressed: () =>
+                                  Navigator.pop(dialogContext, true),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red,
+                                foregroundColor: Colors.white,
+                              ),
+                              child: Text(
+                                'Clear',
+                                style: GoogleFonts.cairo(),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+
+                      if (confirmed == true) {
+                        await _updateOrderEngineer(
+                          order,
+                          field,
+                          null,
+                        );
+                      }
+                    }
+                        : null,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(
+                      minWidth: 20,
+                      minHeight: 20,
+                    ),
+                    splashRadius: 10,
+                    icon: Icon(
+                      Icons.close,
+                      size: 12,
+                      color: canEdit
+                          ? _secondaryTextColor
+                          : _secondaryTextColor.withOpacity(0.35),
+                    ),
+                  ),
                 Icon(
                   Icons.arrow_drop_down,
                   size: 12,
@@ -6206,6 +6272,9 @@ class _OrdersPageState extends State<OrdersPage> {
         'الادارة الهندسه',
         'ادارة تصميم المنتجات',
         'design studio',
+      ],
+      'tasks': [
+        'Task Done',
       ],
     };
 
