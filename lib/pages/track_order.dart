@@ -25,12 +25,12 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
   final ScrollController _processFlowController = ScrollController();
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFF000000);
+  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFFF8F9FA);
   Color get _surfaceColor => _isDark ? const Color(0xFF121212) : Colors.white;
-  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF000000);
-  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF777777);
-  Color get _tertiaryTextColor => _isDark ? const Color(0xFF777777) : const Color(0xFF45464D);
-  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFF5F5F5);
+  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _tertiaryTextColor => _isDark ? const Color(0xFF64748B) : const Color(0xFF45464D);
+  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF121212) : Colors.white;
 
   // Current employee is stored in the same employees_auth table used by
@@ -210,7 +210,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
           'Order Tracking',
           style: GoogleFonts.cairo(fontWeight: FontWeight.w600),
         ),
-        backgroundColor: const Color(0xFF000000),
+        backgroundColor: _isDark ? const Color(0xFF000000) : const Color(0xFF0F172A),
         foregroundColor: Colors.white,
         actions: [
           IconButton(

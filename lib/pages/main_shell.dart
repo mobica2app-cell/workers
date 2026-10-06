@@ -51,7 +51,7 @@ class _MainShellState extends State<MainShell> {
   Color get _textColor =>
       _isDark
           ? const Color(0xFFE2E8F0)
-          : const Color(0xFF000000);
+          : const Color(0xFF0F172A);
 
   Color get _secondaryTextColor =>
       _isDark
