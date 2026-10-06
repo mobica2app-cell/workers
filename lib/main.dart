@@ -69,7 +69,7 @@ class MyApp extends StatelessWidget {
       listenable: ThemeNotifier.instance,
       builder: (context, _) {
         return MaterialApp(
-          title: 'mobica',
+          title: 'Mood',
           debugShowCheckedModeBanner: false,
           theme: _buildLightTheme(),
           darkTheme: _buildDarkTheme(),
