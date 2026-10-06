@@ -407,8 +407,8 @@ class _MainShellState extends State<MainShell> {
       padding:
       EdgeInsets.all(
         _isCollapsed
-            ? 16
-            : 20,
+            ? 12
+            : 16,
       ),
 
       decoration:
@@ -436,7 +436,7 @@ class _MainShellState extends State<MainShell> {
       children: [
         Expanded(
           child: SizedBox(
-            height: 54,
+            height: 64,
             child: Image.asset(
               'assets/images/logo.png',
               fit: BoxFit.contain,
@@ -451,8 +451,10 @@ class _MainShellState extends State<MainShell> {
             color: Colors.white54,
             size: 20,
           ),
-          splashRadius: 20,
           tooltip: 'Collapse',
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+          visualDensity: VisualDensity.compact,
         ),
       ],
     );
