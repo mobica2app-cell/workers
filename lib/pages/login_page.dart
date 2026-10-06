@@ -217,10 +217,6 @@ class _LoginPageState extends State<LoginPage> {
           child: Image.asset(
             'assets/images/logo.png',
             fit: BoxFit.contain,
-            errorBuilder: (_, __, ___) => const Icon(
-              Icons.business_center_rounded,
-              color: Color(0xFF0F172A),
-            ),
           ),
         ),
         Padding(
