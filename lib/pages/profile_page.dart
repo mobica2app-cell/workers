@@ -324,13 +324,13 @@ class _ProfilePageState extends State<ProfilePage>
           SliverAppBar(
             expandedHeight: 220,
             pinned: true,
-            backgroundColor: _isDark ? const Color(0xFF000000) : const Color(0xFF0F172A),
+            backgroundColor: _isDark ? const Color(0xFF131313) : const Color(0xFF0F172A),
             flexibleSpace: FlexibleSpaceBar(
               background: Container(
                 decoration: const BoxDecoration(gradient: LinearGradient(
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
-                    colors: [Color(0xFF202020), Color(0xFF4E4E4E)])),
+                    colors: [Color(0xFF191919), Color(0xFF353535)])),
                 child: SafeArea(
                   child: Padding(
                     padding: const EdgeInsets.all(24),
