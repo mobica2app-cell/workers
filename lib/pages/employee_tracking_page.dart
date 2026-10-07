@@ -1978,20 +1978,219 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       );
     }
 
-    return Column(
-      children: visibleEmployees.map((employee) {
-        final changes = _changesForEmployee(employee);
-        final orders = _ordersForEmployee(employee);
+    // Keep the employee cards exactly as they are, but add one aggregated
+    // card for every department above them. Each department total is the sum
+    // of the employees belonging to that department.
+    final departmentGroups =
+    <String, List<EmployeeAuth>>{};
 
-        return _buildEmployeeCard(
-          employee,
-          orders,
-          changes,
-          compact,
-        );
-      }).toList(),
+    for (final employee in visibleEmployees) {
+      final department = employee.department?.trim() ?? '';
+      if (department.isEmpty) continue;
+
+      departmentGroups.putIfAbsent(department, () => []).add(employee);
+    }
+
+    final departmentEntries = departmentGroups.entries.toList()
+      ..sort((a, b) => a.key.compareTo(b.key));
+
+    return Column(
+      children: [
+        if (departmentEntries.isNotEmpty) ...[
+          ...departmentEntries.map((entry) {
+            final departmentEmployees = entry.value;
+
+            final departmentOrders = <SAPMainOrder>[];
+            final departmentChanges = <Map<String, dynamic>>[];
+
+            for (final employee in departmentEmployees) {
+              departmentOrders.addAll(_ordersForEmployee(employee));
+              departmentChanges.addAll(_changesForEmployee(employee));
+            }
+
+            // Do not show empty departments.
+            if (departmentOrders.isEmpty && departmentChanges.isEmpty) {
+              return const SizedBox.shrink();
+            }
+
+            return _buildDepartmentTotalCard(
+              department: entry.key,
+              employees: departmentEmployees,
+              orders: departmentOrders,
+              changes: departmentChanges,
+              compact: compact,
+            );
+          }),
+          const SizedBox(height: 8),
+        ],
+
+        // Existing employee section/cards remain unchanged.
+        ...visibleEmployees.map((employee) {
+          final changes = _changesForEmployee(employee);
+          final orders = _ordersForEmployee(employee);
+
+          return _buildEmployeeCard(
+            employee,
+            orders,
+            changes,
+            compact,
+          );
+        }),
+      ],
     );
   }
+
+  Widget _buildDepartmentTotalCard({
+    required String department,
+    required List<EmployeeAuth> employees,
+    required List<SAPMainOrder> orders,
+    required List<Map<String, dynamic>> changes,
+    required bool compact,
+  }) {
+    final average = _averageProgress(orders);
+
+    final uniqueOrders = <String>{};
+    for (final order in orders) {
+      final id = order.id.trim();
+      if (id.isNotEmpty) uniqueOrders.add(id);
+    }
+
+    final departmentKey = 'department:${_normalize(department)}';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.all(compact ? 12 : 16),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Column(
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              CircleAvatar(
+                radius: compact ? 20 : 23,
+                backgroundColor:
+                const Color(0xFF6366F1).withOpacity(0.12),
+                child: const Icon(
+                  Icons.business,
+                  color: Color(0xFF6366F1),
+                  size: 22,
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      department,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: compact ? 13 : 15,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 5,
+                      children: [
+                        _buildMiniStat(
+                          'Employees',
+                          '${employees.length}',
+                          Icons.people_alt_outlined,
+                          Colors.blue,
+                        ),
+                        _buildMiniStat(
+                          'Orders',
+                          '${uniqueOrders.length}',
+                          Icons.assignment_outlined,
+                          Colors.orange,
+                        ),
+                        _buildMiniStat(
+                          'Avg. Progress',
+                          '$average%',
+                          Icons.trending_up,
+                          Colors.green,
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Material(
+            color: _mutedColor,
+            borderRadius: BorderRadius.circular(10),
+            child: InkWell(
+              onTap: () {
+                setState(() {
+                  if (_expandedEmployees.contains(departmentKey)) {
+                    _expandedEmployees.remove(departmentKey);
+                  } else {
+                    _expandedEmployees.add(departmentKey);
+                  }
+                });
+              },
+              borderRadius: BorderRadius.circular(10),
+              child: Padding(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 8,
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      Icons.history,
+                      size: 16,
+                      color: _secondaryTextColor,
+                    ),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        'Department Total Changes (${changes.length})',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _textColor,
+                        ),
+                      ),
+                    ),
+                    Text(
+                      '$average%',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.green,
+                      ),
+                    ),
+                    const SizedBox(width: 7),
+                    Icon(
+                      _expandedEmployees.contains(departmentKey)
+                          ? Icons.keyboard_arrow_up
+                          : Icons.keyboard_arrow_down,
+                      color: _secondaryTextColor,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+          if (_expandedEmployees.contains(departmentKey)) ...[
+            const SizedBox(height: 10),
+            _buildTransitionBreakdown(changes, compact),
+          ],
+        ],
+      ),
+    );
+  }
+
 
   // Current workload graph:
   // Every order is assigned to Alternative Engineer when that field is filled.

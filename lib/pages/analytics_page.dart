@@ -6,7 +6,7 @@ import 'package:intl/intl.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../services/sap_service.dart';
-import 'order_detail_page.dart';
+import 'track_order.dart';
 
 class AnalyticsPage extends StatefulWidget {
   final SAPMainService sapService;
@@ -1216,9 +1216,8 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                               Navigator.push(
                                 context,
                                 MaterialPageRoute(
-                                  builder: (_) => OrderDetailPage(
+                                  builder: (_) => OrderTrackingPage(
                                     order: order,
-                                    sapService: widget.sapService,
                                   ),
                                 ),
                               );

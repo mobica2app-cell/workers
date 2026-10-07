@@ -1577,20 +1577,12 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    // "No One" can only be changed by admins/heads, just like a header row.
-    if (field == 'responsible_engineer' &&
-        _isNoOneResponsibleEngineerLocked(order)) {
-      _showYellowWarning(
-        '⚠️ Responsible Engineer is locked while assigned to "No One". ',
-      );
-      return;
-    }
-
-    // Responsible Engineer cannot be cleared on a normal order.
-    // The exception is based on the order's CURRENT status.
+    // Responsible Engineer may be cleared only when the CURRENT status is
+    // Drawing Submittal, Imported, or Automated. This check intentionally
+    // comes before the "No One" lock so those statuses can also be cleared.
     if (field == 'responsible_engineer' &&
         (newValue == null || newValue.trim().isEmpty) &&
-        _statusRequiresResponsibleEngineer(order.status)) {
+        !_canClearResponsibleEngineer(order.status)) {
       _showYellowWarning(
         '⚠️ Responsible Engineer cannot be empty for this order.',
       );
@@ -2346,6 +2338,13 @@ class _OrdersPageState extends State<OrdersPage> {
   //   Automated -> Approval            = allowed without Responsible Engineer
   //   Tasks -> Imported                = Responsible Engineer REQUIRED
   //   Tasks -> Automated               = Responsible Engineer REQUIRED
+  bool _canClearResponsibleEngineer(String currentStatus) {
+    final normalized = currentStatus.trim().toLowerCase();
+    return normalized == 'drawing submittal' ||
+        normalized == 'imported' ||
+        normalized == 'automated';
+  }
+
   bool _statusRequiresResponsibleEngineer(String currentStatus) {
     final normalized = currentStatus.trim().toLowerCase();
     return normalized != 'imported' && normalized != 'automated';
@@ -3889,6 +3888,10 @@ class _OrdersPageState extends State<OrdersPage> {
       String field,
       ) {
     final canEdit = _isOrderEditable(order);
+    final canClearResponsibleEngineer =
+        field == 'responsible_engineer' &&
+            _canClearResponsibleEngineer(order.status) &&
+            !_isOrderLocked(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
     // If Responsible Engineer is "header", Alternative Engineer is fully locked.
@@ -4058,7 +4061,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 if (hasValue)
                   IconButton(
                     tooltip: 'Clear ${_formatFieldName(field)}',
-                    onPressed: canEdit
+                    onPressed: (canEdit || canClearResponsibleEngineer)
                         ? () async {
                       final confirmed = await showDialog<bool>(
                         context: context,
@@ -4102,7 +4105,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         await _updateOrderEngineer(
                           order,
                           field,
-                          null,
+                          '',
                         );
                       }
                     }
@@ -4116,7 +4119,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     icon: Icon(
                       Icons.close,
                       size: 12,
-                      color: canEdit
+                      color: (canEdit || canClearResponsibleEngineer)
                           ? _secondaryTextColor
                           : _secondaryTextColor.withOpacity(0.35),
                     ),
