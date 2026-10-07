@@ -6,7 +6,18 @@ class SAPMainService {
 
   SAPMainService(this._client);
 
-  // Get all orders with pagination
+  static const Set<String> archivedStatuses = {
+    'done',
+    'task done',
+    'planning',
+    'master data',
+  };
+
+  bool isArchivedStatus(String? status) {
+    return archivedStatuses.contains((status ?? '').trim().toLowerCase());
+  }
+
+  // Get active/main orders from sap_main_orders.
   Future<List<SAPMainOrder>> getOrders({
     int page = 0,
     int pageSize = 1000,
@@ -21,28 +32,25 @@ class SAPMainService {
       if (searchTerm != null && searchTerm.isNotEmpty) {
         query = query.or(
           'customer_name.ilike.%$searchTerm%,'
-              'contract_number.ilike.%$searchTerm%,'
-              'design_order.ilike.%$searchTerm%,'
-              'description.ilike.%$searchTerm%,'
-              'sales_engineer.ilike.%$searchTerm%',
+          'contract_number.ilike.%$searchTerm%,'
+          'design_order.ilike.%$searchTerm%,'
+          'description.ilike.%$searchTerm%,'
+          'sales_engineer.ilike.%$searchTerm%',
         );
       }
 
       if (filterStatus != null && filterStatus.isNotEmpty) {
         query = query.eq('status', filterStatus);
       }
-
       if (filterFactory != null && filterFactory.isNotEmpty) {
         query = query.eq('factory', filterFactory);
       }
-
       if (filterDesignOrder != null && filterDesignOrder.isNotEmpty) {
         query = query.eq('design_order', filterDesignOrder);
       }
 
       final start = page * pageSize;
       final end = start + pageSize - 1;
-
       final response = await query
           .order('design_order', ascending: false)
           .range(start, end);
@@ -51,12 +59,80 @@ class SAPMainService {
           .map((json) => SAPMainOrder.fromJson(json as Map<String, dynamic>))
           .toList();
     } catch (e) {
-      print('Error fetching orders: $e');
+      print('Error fetching main orders: $e');
       return [];
     }
   }
 
-  // Get order by design order
+  Future<List<SAPMainOrder>> getDoneOrders({
+    int page = 0,
+    int pageSize = 1000,
+    String? searchTerm,
+    String? filterStatus,
+  }) async {
+    try {
+      var query = _client.from('sap_done_orders').select('*');
+
+      if (searchTerm != null && searchTerm.isNotEmpty) {
+        query = query.or(
+          'customer_name.ilike.%$searchTerm%,'
+          'contract_number.ilike.%$searchTerm%,'
+          'design_order.ilike.%$searchTerm%,'
+          'description.ilike.%$searchTerm%,'
+          'sales_engineer.ilike.%$searchTerm%',
+        );
+      }
+
+      if (filterStatus != null && filterStatus.isNotEmpty) {
+        query = query.eq('status', filterStatus);
+      }
+
+      final start = page * pageSize;
+      final end = start + pageSize - 1;
+      final response = await query
+          .order('order_date', ascending: true)
+          .range(start, end);
+
+      return (response as List)
+          .map((json) => SAPMainOrder.fromJson(json as Map<String, dynamic>))
+          .toList();
+    } catch (e) {
+      print('Error fetching SAP done orders: $e');
+      return [];
+    }
+  }
+
+  Future<List<SAPMainOrder>> getAllDoneOrders() async {
+    try {
+      final allData = <Map<String, dynamic>>[];
+      int page = 0;
+      const pageSize = 1000;
+
+      while (true) {
+        final start = page * pageSize;
+        final end = start + pageSize - 1;
+        final response = await _client
+            .from('sap_done_orders')
+            .select('*')
+            .order('order_date', ascending: true)
+            .range(start, end);
+        final batch = List<Map<String, dynamic>>.from(response);
+        if (batch.isEmpty) break;
+        allData.addAll(batch);
+        page++;
+        print('📦 Fetched done page $page: ${batch.length} records (total: ${allData.length})');
+        if (batch.length < pageSize) break;
+      }
+
+      print('✅ Total SAP done orders loaded: ${allData.length}');
+      return allData.map(SAPMainOrder.fromJson).toList();
+    } catch (e) {
+      print('Error fetching all SAP done orders: $e');
+      return [];
+    }
+  }
+
+  // Get order by design order from the active table first, then archived table.
   Future<SAPMainOrder?> getOrderByDesignOrder(String designOrder) async {
     try {
       final response = await _client
@@ -64,66 +140,61 @@ class SAPMainService {
           .select('*')
           .eq('design_order', designOrder)
           .maybeSingle();
+      if (response != null) {
+        return SAPMainOrder.fromJson(response as Map<String, dynamic>);
+      }
 
-      if (response == null) return null;
-      return SAPMainOrder.fromJson(response as Map<String, dynamic>);
+      final archived = await _client
+          .from('sap_done_orders')
+          .select('*')
+          .eq('design_order', designOrder)
+          .maybeSingle();
+      if (archived == null) return null;
+      return SAPMainOrder.fromJson(archived as Map<String, dynamic>);
     } catch (e) {
       print('Error fetching order: $e');
       return null;
     }
   }
 
-  // Get ALL orders (no pagination) - Loops through all pages
+  // Backward-compatible name. It now intentionally loads only active orders.
   Future<List<SAPMainOrder>> getAllOrders() async {
     try {
-      List<Map<String, dynamic>> allData = [];
+      final allData = <Map<String, dynamic>>[];
       int page = 0;
       const pageSize = 1000;
-      bool hasMore = true;
 
-      while (hasMore) {
+      while (true) {
         final start = page * pageSize;
         final end = start + pageSize - 1;
-
         final response = await _client
             .from('sap_main_orders')
             .select('*')
-            .order('order_date', ascending: true) // Oldest first
+            .order('order_date', ascending: true)
             .range(start, end);
-
         final batch = List<Map<String, dynamic>>.from(response);
-
-        if (batch.isEmpty || batch.length < pageSize) {
-          hasMore = false;
-        }
-
+        if (batch.isEmpty) break;
         allData.addAll(batch);
         page++;
-
-        print('📦 Fetched page $page: ${batch.length} records (total: ${allData.length})');
+        print('📦 Fetched active page $page: ${batch.length} records (total: ${allData.length})');
+        if (batch.length < pageSize) break;
       }
 
-      print('✅ Total orders loaded: ${allData.length}');
-
-      return allData
-          .map((json) => SAPMainOrder.fromJson(json))
-          .toList();
+      print('✅ Total active orders loaded: ${allData.length}');
+      return allData.map(SAPMainOrder.fromJson).toList();
     } catch (e) {
-      print('Error fetching all orders: $e');
+      print('Error fetching active orders: $e');
       return [];
     }
   }
 
-  // Search orders
   Future<List<SAPMainOrder>> searchOrders(String query) async {
     return getOrders(searchTerm: query, pageSize: 100);
   }
 
-  // Get statistics - also needs to fetch ALL records
   Future<Map<String, dynamic>> getStatistics() async {
     try {
       final orders = await getAllOrders();
-
       double totalValue = 0;
       double totalQty = 0;
       final factories = <String>{};
@@ -148,8 +219,33 @@ class SAPMainService {
       return {};
     }
   }
+
+  // Move an active order into the archived SAP table.
+  // The insert is completed before the source row is deleted so an error never
+  // silently loses the order.
+  Future<void> moveOrderToDone(SAPMainOrder order, String newStatus) async {
+    if (!isArchivedStatus(newStatus)) {
+      throw ArgumentError('Status "$newStatus" is not an archived status.');
+    }
+
+    final payload = order.toJson();
+    payload['status'] = newStatus;
+    if (order.createdAt != null) {
+      payload['created_at'] = order.createdAt!.toIso8601String();
+    }
+
+    await _client.from('sap_done_orders').upsert(payload, onConflict: 'id');
+    try {
+      await _client.from('sap_main_orders').delete().eq('id', order.id);
+    } catch (e) {
+      // Best-effort rollback so a failed move does not leave a duplicate.
+      try {
+        await _client.from('sap_done_orders').delete().eq('id', order.id);
+      } catch (_) {}
+      rethrow;
+    }
+  }
 }
-// lib/models/sap_main_order.dart
 
 class SAPMainOrder {
   final String id;
@@ -246,6 +342,7 @@ class SAPMainOrder {
       'responsible_engineer': responsibleEngineer,
       'reviewer': reviewer,
       'correspondence_engineer': correspondenceEngineer,
+      'created_at': createdAt?.toIso8601String(),
     };
   }
 }
