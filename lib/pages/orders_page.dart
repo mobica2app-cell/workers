@@ -19,7 +19,6 @@ import '../services/employee_service.dart';
 import '../services/sap_service.dart';
 import 'excel_dialog.dart';
 import 'order_detail_page.dart';
-import 'done_orders_page.dart';
 
 extension FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -42,10 +41,6 @@ class OrdersPage extends StatefulWidget {
 class _OrdersPageState extends State<OrdersPage> {
   // Data - Using SAPMainOrder instead of SAPOrderHeader
   List<SAPMainOrder> _allOrders = [];
-  List<SAPMainOrder> _doneOrders = [];
-  bool _doneOrdersExpanded = false;
-  bool _doneOrdersLoading = false;
-  bool _doneOrdersLoaded = false;
   bool _isLoading = false;
   String _searchQuery = '';
   String? _filterDesignTeam;
@@ -596,11 +591,6 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _initializePageData() async {
     await _loadFactoryNames();
     await _loadAllDataOnce();
-    // Load the large archived table only after the active table is ready,
-    // so the main Orders UI becomes usable first.
-    if (mounted && !_doneOrdersLoaded) {
-      _toggleDoneOrders();
-    }
   }
 
   @override
@@ -1600,7 +1590,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
 
     if (_isOrderLocked(order)) {
-      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", "Planning", or "Master Data" orders');
+      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
       return;
     }
 
@@ -1790,7 +1780,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final autoStatus = getAutoStatus(newValue);
 
     if (_isOrderLocked(order)) {
-      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", "Planning", or "Master Data" orders');
+      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", or "Planning" orders');
       return;
     }
 
@@ -2059,39 +2049,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
   bool _initialLoadDone = false;
 
-  Future<void> _toggleDoneOrders() async {
-    if (_doneOrdersExpanded) {
-      setState(() => _doneOrdersExpanded = false);
-      return;
-    }
-
-    setState(() => _doneOrdersExpanded = true);
-    if (_doneOrdersLoaded || _doneOrdersLoading) return;
-
-    setState(() => _doneOrdersLoading = true);
-    try {
-      final orders = await widget.sapService.getAllDoneOrders();
-      if (!mounted) return;
-      setState(() {
-        _doneOrders = orders;
-        _doneOrdersLoaded = true;
-        _doneOrdersLoading = false;
-      });
-    } catch (e) {
-      if (!mounted) return;
-      setState(() => _doneOrdersLoading = false);
-      _showSnackBar('Error loading SAP done orders: $e');
-    }
-  }
-
-  void _refreshDoneOrdersLater() {
-    if (!_doneOrdersLoaded) return;
-    widget.sapService.getAllDoneOrders().then((orders) {
-      if (!mounted) return;
-      setState(() => _doneOrders = orders);
-    });
-  }
-
   void _rebuildGroups() {
     final filtered = _getFilteredOrders();
     _groupedOrders = {};
@@ -2201,7 +2158,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Add this method near _isOrderEditable
   bool _isOrderLocked(SAPMainOrder order) {
-    final lockedStatuses = ['task done', 'done', 'planning', 'master data'];
+    final lockedStatuses = ['task done', 'done', 'planning'];
     return lockedStatuses.contains(order.status.toLowerCase());
   }
 
@@ -2221,7 +2178,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final hasLockedOrders = selectedOrders.any((o) => _isOrderLocked(o));
 
     if (hasLockedOrders) {
-      _showSnackBar('⚠️ Cannot delete orders with status "Done", "Task Done", "Planning", or "Master Data"');
+      _showSnackBar('⚠️ Cannot delete orders with status "Done", "Task Done", or "Planning"');
       return;
     }
 
@@ -2513,7 +2470,7 @@ class _OrdersPageState extends State<OrdersPage> {
     // Done, Task Done, and Planning cannot be moved FROM.
     if (_isOrderLocked(order)) {
       _showYellowWarning(
-        '⚠️ Cannot change status for "Done", "Task Done", "Planning", or "Master Data" orders',
+        '⚠️ Cannot change status for "Done", "Task Done", or "Planning" orders',
       );
       return;
     }
@@ -2625,7 +2582,6 @@ class _OrdersPageState extends State<OrdersPage> {
       final supabase = Supabase.instance.client;
       int updated = 0;
       int skipped = 0;
-      final archivedIds = <String>{};
 
       for (final selectedOrder in selectedOrders) {
         if (_isOrderLocked(selectedOrder)) {
@@ -2639,14 +2595,10 @@ class _OrdersPageState extends State<OrdersPage> {
         // Header can move anywhere allowed and remains "header".
         // No-body orders must remain assigned to No One.
         try {
-          if (widget.sapService.isArchivedStatus(newStatus)) {
-            await widget.sapService.moveOrderToDone(selectedOrder, newStatus);
-          } else {
-            await supabase
-                .from('sap_main_orders')
-                .update({'status': newStatus})
-                .eq('id', selectedOrder.id);
-          }
+          await supabase
+              .from('sap_main_orders')
+              .update({'status': newStatus})
+              .eq('id', selectedOrder.id);
 
           await _auditService.logChange(
             orderId: selectedOrder.id,
@@ -2660,9 +2612,6 @@ class _OrdersPageState extends State<OrdersPage> {
           );
 
           updated++;
-          if (widget.sapService.isArchivedStatus(newStatus)) {
-            archivedIds.add(selectedOrder.id);
-          }
         } catch (e) {
           print('Failed to update ${selectedOrder.id}: $e');
         }
@@ -2678,22 +2627,10 @@ class _OrdersPageState extends State<OrdersPage> {
         _showSnackBar('✅ Status updated for $updated rows!');
       }
 
-      if (widget.sapService.isArchivedStatus(newStatus)) {
-        setState(() {
-          _allOrders.removeWhere((o) => archivedIds.contains(o.id));
-          _selectedRowsIds.removeAll(archivedIds);
-          _orderIndexMap = {
-            for (int i = 0; i < _allOrders.length; i++) _allOrders[i]: i,
-          };
-          _rebuildGroups();
-        });
-        _refreshDoneOrdersLater();
-      } else {
-        _updateMultipleOrdersLocally('status', newStatus);
-        setState(() {
-          _clearSelection();
-        });
-      }
+      _updateMultipleOrdersLocally('status', newStatus);
+      setState(() {
+        _clearSelection();
+      });
       return;
     }
 
@@ -2701,14 +2638,10 @@ class _OrdersPageState extends State<OrdersPage> {
     try {
       final supabase = Supabase.instance.client;
 
-      if (widget.sapService.isArchivedStatus(newStatus)) {
-        await widget.sapService.moveOrderToDone(order, newStatus);
-      } else {
-        await supabase
-            .from('sap_main_orders')
-            .update({'status': newStatus})
-            .eq('id', order.id);
-      }
+      await supabase
+          .from('sap_main_orders')
+          .update({'status': newStatus})
+          .eq('id', order.id);
 
       await _auditService.logChange(
         orderId: order.id,
@@ -2721,19 +2654,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('Status updated!');
-      if (widget.sapService.isArchivedStatus(newStatus)) {
-        setState(() {
-          _allOrders.removeWhere((o) => o.id == order.id);
-          _selectedRowsIds.remove(order.id);
-          _orderIndexMap = {
-            for (int i = 0; i < _allOrders.length; i++) _allOrders[i]: i,
-          };
-          _rebuildGroups();
-        });
-        _refreshDoneOrdersLater();
-      } else {
-        _updateOrderLocally(order.id, 'status', newStatus);
-      }
+      _updateOrderLocally(order.id, 'status', newStatus);
     } catch (e) {
       _showSnackBar('Error updating status: $e');
     }
@@ -3837,15 +3758,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     _buildHeaderRow(),
                     const SizedBox(height: 16),
                     if (_selectedRowsIds.isNotEmpty) _buildSelectionToolbar(),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(child: _buildTableContainer()),
-                          const SizedBox(height: 10),
-                          _buildDoneOrdersSection(),
-                        ],
-                      ),
-                    ),
+                    Expanded(child: _buildTableContainer()),
                   ],
                 ),
               ),
@@ -4273,15 +4186,6 @@ class _OrdersPageState extends State<OrdersPage> {
                 if (_allOrders.isNotEmpty)
                   await _saveOrders(_allOrders, 'Orders');
               }),
-              const SizedBox(width: 8),
-              _buildActionBtn(Icons.inventory_2_outlined, 'SAP Done', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DoneOrdersPage(),
-                  ),
-                );
-              }),
               // Only show Import for admin or abd.elmoen
               if (_canImportDelete) ...[
                 const SizedBox(width: 8),
@@ -4310,14 +4214,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   _buildActionBtn(Icons.download, 'Export', () async {
                     if (_allOrders.isNotEmpty)
                       await _saveOrders(_allOrders, 'Orders');
-                  }),
-                  _buildActionBtn(Icons.inventory_2_outlined, 'SAP Done', () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DoneOrdersPage(),
-                      ),
-                    );
                   }),
                   // Only show Import for admin or abd.elmoen
                   if (_canImportDelete) _buildImportButton(),
@@ -4787,175 +4683,6 @@ class _OrdersPageState extends State<OrdersPage> {
           ],
           _buildSmallBtn(Icons.close, 'Clear', _clearSelection),
         ],
-      ),
-    );
-  }
-
-  Widget _buildDoneOrdersSection() {
-    return Container(
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: _borderColor),
-      ),
-      child: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          InkWell(
-            onTap: _toggleDoneOrders,
-            borderRadius: BorderRadius.circular(10),
-            child: Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              child: Row(
-                children: [
-                  Icon(
-                    _doneOrdersExpanded
-                        ? Icons.keyboard_arrow_down
-                        : Icons.keyboard_arrow_up,
-                    size: 20,
-                    color: _secondaryTextColor,
-                  ),
-                  const SizedBox(width: 8),
-                  Icon(Icons.inventory_2_outlined, size: 18, color: Colors.cyan),
-                  const SizedBox(width: 8),
-                  Text(
-                    'SAP Done Orders',
-                    style: GoogleFonts.cairo(
-                      fontSize: 13,
-                      fontWeight: FontWeight.w700,
-                      color: _textColor,
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  if (_doneOrdersLoaded)
-                    Text(
-                      '${_doneOrders.length}',
-                      style: GoogleFonts.cairo(
-                        fontSize: 11,
-                        color: _secondaryTextColor,
-                      ),
-                    ),
-                  const Spacer(),
-                  Text(
-                    'Done • Task Done • Planning • Master Data',
-                    style: GoogleFonts.cairo(
-                      fontSize: 10,
-                      color: _secondaryTextColor,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-          if (_doneOrdersExpanded)
-            SizedBox(
-              height: 280,
-              child: _doneOrdersLoading
-                  ? Center(
-                      child: CircularProgressIndicator(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    )
-                  : _doneOrders.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No SAP done orders',
-                            style: GoogleFonts.cairo(
-                              color: _secondaryTextColor,
-                            ),
-                          ),
-                        )
-                      : _buildDoneOrdersTable(),
-            ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildDoneOrdersTable() {
-    final columns = <Map<String, dynamic>>[
-      {'key': 'status', 'label': 'Status', 'width': 120.0},
-      {'key': 'design_order', 'label': 'Design Order', 'width': 130.0},
-      {'key': 'contract_number', 'label': 'Contract Num', 'width': 120.0},
-      {'key': 'customer_name', 'label': 'Customer', 'width': 180.0},
-      {'key': 'product_code', 'label': 'Product Code', 'width': 150.0},
-      {'key': 'description', 'label': 'Description', 'width': 220.0},
-      {'key': 'quantity', 'label': 'QTY', 'width': 70.0},
-      {'key': 'value', 'label': 'Value', 'width': 110.0},
-      {'key': 'sales_engineer', 'label': 'Sales Engineer', 'width': 150.0},
-      {'key': 'factory', 'label': 'Factory', 'width': 100.0},
-    ];
-
-    String valueFor(SAPMainOrder o, String key) {
-      switch (key) {
-        case 'status': return o.status;
-        case 'design_order': return o.designOrder;
-        case 'contract_number': return o.contractNumber;
-        case 'customer_name': return o.customerName;
-        case 'product_code': return o.productCode;
-        case 'description': return o.description;
-        case 'quantity': return o.quantity.toString();
-        case 'value': return o.value.toString();
-        case 'sales_engineer': return o.salesEngineer;
-        case 'factory': return o.factory ?? '-';
-        default: return '-';
-      }
-    }
-
-    return Scrollbar(
-      thumbVisibility: true,
-      child: SingleChildScrollView(
-        scrollDirection: Axis.horizontal,
-        child: SingleChildScrollView(
-          child: DataTable(
-            headingRowHeight: 38,
-            dataRowMinHeight: 38,
-            dataRowMaxHeight: 48,
-            columnSpacing: 18,
-            headingTextStyle: GoogleFonts.cairo(
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: _textColor,
-            ),
-            dataTextStyle: GoogleFonts.cairo(
-              fontSize: 10,
-              color: _textColor,
-            ),
-            columns: columns
-                .map((c) => DataColumn(
-                      label: SizedBox(
-                        width: c['width'] as double,
-                        child: Text(c['label'] as String),
-                      ),
-                    ))
-                .toList(),
-            rows: _doneOrders.map((order) {
-              return DataRow(
-                cells: columns.map((c) {
-                  final key = c['key'] as String;
-                  return DataCell(
-                    SizedBox(
-                      width: c['width'] as double,
-                      child: Text(
-                        valueFor(order, key),
-                        overflow: TextOverflow.ellipsis,
-                        maxLines: 1,
-                      ),
-                    ),
-                    onTap: () {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => OrderTrackingPage(order: order),
-                        ),
-                      );
-                    },
-                  );
-                }).toList(),
-              );
-            }).toList(),
-          ),
-        ),
       ),
     );
   }
