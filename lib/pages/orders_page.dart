@@ -19,7 +19,6 @@ import '../services/employee_service.dart';
 import '../services/sap_service.dart';
 import 'excel_dialog.dart';
 import 'order_detail_page.dart';
-import 'done_orders_page.dart';
 
 extension FirstOrNull<T> on Iterable<T> {
   T? get firstOrNull => isEmpty ? null : first;
@@ -215,7 +214,7 @@ class _OrdersPageState extends State<OrdersPage> {
     {
       'key': 'factory',
       'label': 'Factory',
-      'width': 100.0,
+      'width': 120.0,
     },
     {
       'key': 'design_team',
@@ -4317,14 +4316,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   await _saveOrders(_allOrders, 'Orders');
               }),
               const SizedBox(width: 8),
-              _buildActionBtn(Icons.inventory_2_outlined, 'SAP Done', () {
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => const DoneOrdersPage(),
-                  ),
-                );
-              }),
               // Only show Import for admin or abd.elmoen
               if (_canImportDelete) ...[
                 const SizedBox(width: 8),
@@ -4353,14 +4344,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   _buildActionBtn(Icons.download, 'Export', () async {
                     if (_allOrders.isNotEmpty)
                       await _saveOrders(_allOrders, 'Orders');
-                  }),
-                  _buildActionBtn(Icons.inventory_2_outlined, 'SAP Done', () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => const DoneOrdersPage(),
-                      ),
-                    );
                   }),
                   // Only show Import for admin or abd.elmoen
                   if (_canImportDelete) _buildImportButton(),
@@ -4926,7 +4909,7 @@ class _OrdersPageState extends State<OrdersPage> {
       {'key': 'quantity', 'label': 'QTY', 'width': 70.0},
       {'key': 'value', 'label': 'Value', 'width': 110.0},
       {'key': 'sales_engineer', 'label': 'Sales Engineer', 'width': 150.0},
-      {'key': 'factory', 'label': 'Factory', 'width': 100.0},
+      {'key': 'factory', 'label': 'Factory', 'width': 120.0},
     ];
 
     String valueFor(SAPMainOrder o, String key) {
