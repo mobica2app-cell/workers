@@ -267,7 +267,7 @@ class _MainShellState extends State<MainShell> {
                 // CELEBRATION BANNER
                 // ==============================================
 
-                _buildCelebrationBanner(),
+                /*_buildCelebrationBanner(),*/
 
                 // ==============================================
                 // USER

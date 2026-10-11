@@ -2727,23 +2727,11 @@ class _OrdersPageState extends State<OrdersPage> {
         _showSnackBar('✅ Status updated for $updated rows!');
       }
 
-      if (widget.doneOrdersOnly) {
-        // This page displays both tables, so transferred rows remain visible;
-        // reload the combined source of truth to keep table membership correct.
-        await _loadAllDataOnce();
-        if (mounted) setState(_clearSelection);
-      } else if (widget.sapService.isArchivedStatus(newStatus)) {
-        setState(() {
-          _allOrders.removeWhere((o) => archivedIds.contains(o.id));
-          _selectedRowsIds.removeAll(archivedIds);
-          _orderIndexMap = {
-            for (int i = 0; i < _allOrders.length; i++) _allOrders[i]: i,
-          };
-          _rebuildGroups();
-        });
-        _refreshDoneOrdersLater();
-      } else {
-        _updateMultipleOrdersLocally('status', newStatus);
+      // Both routes display a combined in-memory list. Update the local rows
+      // immediately after the database transfer instead of removing archived
+      // rows and waiting for a refresh to make them appear again.
+      _updateMultipleOrdersLocally('status', newStatus);
+      if (mounted) {
         setState(() => _clearSelection());
       }
       return;
@@ -2788,19 +2776,9 @@ class _OrdersPageState extends State<OrdersPage> {
       );
 
       _showSnackBar('Status updated!');
-      if (widget.sapService.isArchivedStatus(newStatus)) {
-        setState(() {
-          _allOrders.removeWhere((o) => o.id == order.id);
-          _selectedRowsIds.remove(order.id);
-          _orderIndexMap = {
-            for (int i = 0; i < _allOrders.length; i++) _allOrders[i]: i,
-          };
-          _rebuildGroups();
-        });
-        _refreshDoneOrdersLater();
-      } else {
-        _updateOrderLocally(order.id, 'status', newStatus);
-      }
+      // Keep the order in the combined table and update its group immediately.
+      // The archived-ID set was updated above after the successful transfer.
+      _updateOrderLocally(order.id, 'status', newStatus);
     } catch (e) {
       _showSnackBar('Error updating status: $e');
     }
@@ -4917,20 +4895,20 @@ class _OrdersPageState extends State<OrdersPage> {
               height: 280,
               child: _doneOrdersLoading
                   ? Center(
-                      child: CircularProgressIndicator(
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                    )
+                child: CircularProgressIndicator(
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              )
                   : _doneOrders.isEmpty
-                      ? Center(
-                          child: Text(
-                            'No SAP done orders',
-                            style: GoogleFonts.cairo(
-                              color: _secondaryTextColor,
-                            ),
-                          ),
-                        )
-                      : _buildDoneOrdersTable(),
+                  ? Center(
+                child: Text(
+                  'No SAP done orders',
+                  style: GoogleFonts.cairo(
+                    color: _secondaryTextColor,
+                  ),
+                ),
+              )
+                  : _buildDoneOrdersTable(),
             ),
         ],
       ),
@@ -4988,11 +4966,11 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
             columns: columns
                 .map((c) => DataColumn(
-                      label: SizedBox(
-                        width: c['width'] as double,
-                        child: Text(c['label'] as String),
-                      ),
-                    ))
+              label: SizedBox(
+                width: c['width'] as double,
+                child: Text(c['label'] as String),
+              ),
+            ))
                 .toList(),
             rows: _doneOrders.map((order) {
               return DataRow(
