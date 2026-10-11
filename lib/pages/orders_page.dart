@@ -5818,12 +5818,20 @@ class _OrdersPageState extends State<OrdersPage> {
         );
 
       case 'factory':
+        final factoryCode = order.factory?.trim() ?? '';
+        final factoryName = _factoryDescriptions[factoryCode.toLowerCase()]?.trim();
         return _editableCell(
-          order.factory ?? '-',
+          factoryCode.isEmpty ? '-' : factoryCode,
           width,
           order,
           'factory',
           'Factory',
+          // Data Entry sees the SAP factory code. Other departments see the
+          // factory name, matching the Excel export. Keep the stored/edit value
+          // as the original code so displaying a name never overwrites the code.
+          displayText: _isDataEntry
+              ? (factoryCode.isEmpty ? '-' : factoryCode)
+              : (factoryName?.isNotEmpty == true ? factoryName! : (factoryCode.isEmpty ? '-' : factoryCode)),
         );
 
       case 'design_team':
@@ -5975,6 +5983,7 @@ class _OrdersPageState extends State<OrdersPage> {
         TextStyle? style,
         TextOverflow overflow = TextOverflow.ellipsis,
         int maxLines = 1,
+        String? displayText,
       }) {
     final canEdit = _isOrderEditable(order);
     final isDateField =
@@ -6158,7 +6167,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 ? Alignment.centerRight
                 : Alignment.centerLeft,
             child: Text(
-              text,
+              displayText ?? text,
               style: style ??
                   GoogleFonts.cairo(
                     fontSize: 12,
