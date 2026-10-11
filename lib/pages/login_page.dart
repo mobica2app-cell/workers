@@ -126,6 +126,19 @@ class _LoginPageState extends State<LoginPage> {
     }
   }
 
+  void _enterAsGuest() {
+    final sapService = SAPMainService(_supabase);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MainShell(
+          sapService: sapService,
+          guestMode: true,
+        ),
+      ),
+    );
+  }
+
   void _setLoggedInEmployee(EmployeeAuth employee) {
     // You can store this in a global state or pass it around
     print('Logged in: ${employee.fullName} (${employee.role})');
@@ -419,7 +432,47 @@ class _LoginPageState extends State<LoginPage> {
               ),
             ),
           ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: OutlinedButton.icon(
+              onPressed: _isLoading ? null : _enterAsGuest,
+              icon: const Icon(Icons.visibility_outlined, size: 18),
+              label: Text(
+                'Continue as Guest (View Only)',
+                style: GoogleFonts.cairo(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _isDark
+                    ? const Color(0xFF60A5FA)
+                    : const Color(0xFF2563EB),
+                side: BorderSide(
+                  color: _isDark
+                      ? const Color(0xFF60A5FA)
+                      : const Color(0xFF2563EB),
+                ),
+                padding: const EdgeInsets.symmetric(vertical: 13),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+            ),
+          ),
           const SizedBox(height: 20),
+          Center(
+            child: Text(
+              'Guest access is read-only',
+              textAlign: TextAlign.center,
+              style: GoogleFonts.cairo(
+                fontSize: 10.5,
+                color: _secondaryTextColor,
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Center(
             child: Text(
               '© 2026 MOBICA • Authorized access only',

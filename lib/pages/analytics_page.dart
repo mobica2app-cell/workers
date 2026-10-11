@@ -1396,7 +1396,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
     return _chartContainer(
       title: title,
       child: SizedBox(
-        height: 270,
+        height: 330,
         child: BarChart(
           BarChartData(
             alignment: BarChartAlignment.spaceAround,
@@ -1435,10 +1435,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
                   final description = _factoryDescriptions[factoryCode.trim().toLowerCase()]
                       ?.trim();
+                  final factoryName = description?.isNotEmpty == true
+                      ? description!
+                      : factoryCode;
 
                   return BarTooltipItem(
-                    '${description?.isNotEmpty == true ? description : factoryCode}\n'
-                        'Contract terms: $number',
+                    '$factoryName ($factoryCode)\n'
+                        'Orders: $number',
                     GoogleFonts.cairo(
                       fontSize: 12,
                       fontWeight: FontWeight.w700,
@@ -1500,13 +1503,11 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                 ),
               ),
 
-              // IMPORTANT:
-              // Don't show factory names here.
-              // The user will see them when hovering.
+              // Show the full factory name below each bar at a steeper angle.
               bottomTitles: AxisTitles(
                 sideTitles: SideTitles(
                   showTitles: true,
-                  reservedSize: 35,
+                  reservedSize: 105,
                   getTitlesWidget: (value, meta) {
                     final i = value.toInt();
 
@@ -1514,19 +1515,28 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                       return const SizedBox();
                     }
 
+                    final factoryCode = entries[i].key;
+                    final description =
+                    _factoryDescriptions[factoryCode.trim().toLowerCase()]?.trim();
+                    final factoryName = description?.isNotEmpty == true
+                        ? description!
+                        : factoryCode;
+                    // Keep only the first word under the bar to reduce clutter.
+                    final factoryFirstName = factoryName.trim().split(RegExp(r'\s+')).first;
+
                     return Padding(
-                      padding: const EdgeInsets.only(top: 7),
+                      padding: const EdgeInsets.only(top: 8),
                       child: Transform.rotate(
-                        angle: -0.55,
+                        angle: -0.55, // approximately 25 degrees
+                        alignment: Alignment.topCenter,
                         child: SizedBox(
-                          width: 58,
+                          width: 145,
                           child: Text(
-                            entries[i].key, // Factory code only
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
+                            factoryFirstName,
+                            softWrap: true,
                             textAlign: TextAlign.center,
                             style: GoogleFonts.cairo(
-                              fontSize: 9,
+                              fontSize: 10,
                               fontWeight: FontWeight.w700,
                               color: _secondaryTextColor,
                             ),

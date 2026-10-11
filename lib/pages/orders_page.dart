@@ -18,6 +18,7 @@ import '../services/csv_export_service.dart';
 import '../services/employee_service.dart';
 import '../services/sap_service.dart';
 import 'excel_dialog.dart';
+import 'login_page.dart';
 import 'order_detail_page.dart';
 
 extension FirstOrNull<T> on Iterable<T> {
@@ -29,12 +30,14 @@ class OrdersPage extends StatefulWidget {
   final EmployeeAuth? loggedInEmployee;
   /// When true, reuse the same full table UI and combine main + archived SAP orders.
   final bool doneOrdersOnly;
+  final bool readOnly;
 
   const OrdersPage({
     super.key,
     required this.sapService,
     this.loggedInEmployee,
     this.doneOrdersOnly = false,
+    this.readOnly = false,
   });
 
   @override
@@ -450,6 +453,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Update the _isOrderEditable method
   bool _isOrderEditable(SAPMainOrder order) {
+    if (widget.readOnly) return false;
     // Locked orders cannot be edited by anyone
     if (_isOrderLocked(order)) return false;
 
@@ -3921,6 +3925,25 @@ class _OrdersPageState extends State<OrdersPage> {
               color: _textColor,
             ),
           ),
+          if (widget.readOnly) ...[
+            const SizedBox(width: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: const Color(0xFF60A5FA).withOpacity(0.14),
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: const Color(0xFF60A5FA).withOpacity(0.45)),
+              ),
+              child: Text(
+                'VIEW ONLY',
+                style: GoogleFonts.cairo(
+                  fontSize: 10,
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF60A5FA),
+                ),
+              ),
+            ),
+          ],
           if (_selectedRowsIds.isNotEmpty) ...[
             const SizedBox(width: 16),
             Container(
@@ -3950,15 +3973,42 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
           ],
           const Spacer(),
+          if (widget.readOnly) ...[
+            OutlinedButton.icon(
+              onPressed: () {
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(builder: (_) => const LoginPage()),
+                  (route) => false,
+                );
+              },
+              icon: const Icon(Icons.login, size: 16),
+              label: Text(
+                'Back to Login',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: _textColor,
+                side: BorderSide(color: _borderColor),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(6),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+          ],
           // My Work button
-          _buildMyWorkButton(),
-          const SizedBox(width: 8),
-          // Edit Mode checkbox - beside My Work button
-          _buildEditModeButton(),
+          if (!widget.readOnly) _buildMyWorkButton(),
+          if (!widget.readOnly) const SizedBox(width: 8),
+          // Editing controls are hidden for guest viewers.
+          if (!widget.readOnly) _buildEditModeButton(),
 
-          const SizedBox(width: 8),
+          if (!widget.readOnly) const SizedBox(width: 8),
 
-          OutlinedButton.icon(
+          if (!widget.readOnly) OutlinedButton.icon(
             onPressed: _showAddTaskDialog,
             icon: const Icon(Icons.add_task, size: 16),
             label: Text(
@@ -5481,6 +5531,30 @@ class _OrdersPageState extends State<OrdersPage> {
 
 
   Widget _buildNameCell(SAPMainOrder order, int index) {
+    if (widget.readOnly) {
+      return Container(
+        height: 48,
+        padding: const EdgeInsets.symmetric(horizontal: 12),
+        alignment: Alignment.centerLeft,
+        decoration: BoxDecoration(
+          color: _surfaceColor,
+          border: Border(
+            bottom: BorderSide(color: _borderColor.withOpacity(0.3)),
+            right: BorderSide(color: _borderColor, width: 2),
+          ),
+        ),
+        child: Text(
+          order.customerName,
+          style: GoogleFonts.cairo(
+            fontSize: 13,
+            fontWeight: FontWeight.w500,
+            color: _textColor,
+          ),
+          overflow: TextOverflow.ellipsis,
+          maxLines: 2,
+        ),
+      );
+    }
     final isSelected = _selectedRowsIds.contains(order.id);
     return GestureDetector(
       onTap: () => _toggleRowSelection(order),
@@ -5659,11 +5733,57 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  String _readOnlyCellText(SAPMainOrder order, String key) {
+    // Guest viewers get plain text for every column: no dropdowns, status
+    // controls, inline editors, or assignment actions.
+    switch (key) {
+      case 'status': return order.status;
+      case 'item': return order.itemNumber;
+      case 'product_code': return order.productCode;
+      case 'contract_number': return order.contractNumber;
+      case 'description': return order.description;
+      case 'design_order': return order.designOrder;
+      case 'quantity': return order.quantity.toString();
+      case 'unit': return order.unitOfMeasure;
+      case 'value': return _formatNumber(order.value);
+      case 'sales_engineer': return order.salesEngineer;
+      case 'order_date': return order.orderDate ?? '-';
+      case 'end_date': return order.endDate ?? '-';
+      case 'delivery_date': return order.deliveryDate ?? '-';
+      case 'factory':
+        final code = order.factory?.trim() ?? '';
+        final name = _factoryDescriptions[code.toLowerCase()]?.trim();
+        return !_isDataEntry && name?.isNotEmpty == true
+            ? name!
+            : (code.isEmpty ? '-' : code);
+      case 'design_team': return order.designTeam ?? '-';
+      case 'responsible_engineer': return order.responsibleEngineer ?? '-';
+      case 'reviewer': return order.reviewer ?? '-';
+      case 'correspondence_engineer': return order.correspondenceEngineer ?? '-';
+      default: return '-';
+    }
+  }
+
   Widget _buildColumnCell(
       SAPMainOrder order,
       String key,
       double width,
       ) {
+    if (widget.readOnly) {
+      return Container(
+        width: width,
+        height: 48,
+        alignment: Alignment.centerLeft,
+        padding: const EdgeInsets.symmetric(horizontal: 8),
+        child: Text(
+          _readOnlyCellText(order, key),
+          maxLines: 2,
+          overflow: TextOverflow.ellipsis,
+          style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
+        ),
+      );
+    }
+
     switch (key) {
       case 'status':
         return SizedBox(

@@ -16,11 +16,13 @@ import 'orders_page.dart';
 class MainShell extends StatefulWidget {
   final SAPMainService sapService;
   final EmployeeAuth? loggedInEmployee;
+  final bool guestMode;
 
   const MainShell({
     Key? key,
     required this.sapService,
     this.loggedInEmployee,
+    this.guestMode = false,
   }) : super(key: key);
 
   @override
@@ -146,6 +148,7 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   List<_NavItem> get _navItems {
+    if (widget.guestMode) return [_headNavItems.first];
     return _isHead
         ? _headNavItems
         : _userNavItems;
@@ -1169,6 +1172,7 @@ class _MainShellState extends State<MainShell> {
             widget.sapService,
             loggedInEmployee:
             widget.loggedInEmployee,
+            readOnly: widget.guestMode,
           );
 
         case 1:
@@ -1204,6 +1208,7 @@ class _MainShellState extends State<MainShell> {
             widget.sapService,
             loggedInEmployee:
             widget.loggedInEmployee,
+            readOnly: widget.guestMode,
           );
       }
     }
@@ -1220,6 +1225,7 @@ class _MainShellState extends State<MainShell> {
           widget.sapService,
           loggedInEmployee:
           widget.loggedInEmployee,
+          readOnly: widget.guestMode,
         );
 
       case 1:
@@ -1234,6 +1240,7 @@ class _MainShellState extends State<MainShell> {
           widget.sapService,
           loggedInEmployee:
           widget.loggedInEmployee,
+          readOnly: widget.guestMode,
         );
     }
   }
