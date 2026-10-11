@@ -102,7 +102,56 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
     try {
       final employees = await _authService.getAllEmployees();
-      final orders = await _sapService.getAllOrders();
+
+      // Employee Tracking must include orders regardless of whether they
+      // currently live in the active or archived Supabase table.
+      // Page both tables to avoid Supabase's default response-size limit.
+      Future<List<SAPMainOrder>> loadOrdersFromTable(String tableName) async {
+        const orderPageSize = 1000;
+        final loaded = <SAPMainOrder>[];
+        var offset = 0;
+
+        while (true) {
+          final response = await _supabase
+              .from(tableName)
+              .select('*')
+              .order('order_date', ascending: true)
+              .range(offset, offset + orderPageSize - 1);
+
+          final rows = List<Map<String, dynamic>>.from(response);
+          loaded.addAll(
+            rows.map((row) => SAPMainOrder.fromJson(row)).toList(),
+          );
+
+          debugPrint(
+            '[EMPLOYEE TRACKING] $tableName: '
+                'loaded ${rows.length} rows (total ${loaded.length})',
+          );
+
+          if (rows.length < orderPageSize) break;
+          offset += orderPageSize;
+        }
+
+        return loaded;
+      }
+
+      final activeOrders = await loadOrdersFromTable('sap_main_orders');
+      final archivedOrders = await loadOrdersFromTable('sap_done_orders');
+
+      // Prefer the archived-table copy if a duplicate ID exists in both.
+      // This keeps the combined collection unique and avoids duplicate
+      // workload/audit entries.
+      final ordersById = <String, SAPMainOrder>{
+        for (final order in activeOrders) order.id.trim(): order,
+        for (final order in archivedOrders) order.id.trim(): order,
+      };
+      final orders = ordersById.values.toList();
+
+      debugPrint(
+        '[EMPLOYEE TRACKING] Combined orders: '
+            'active=${activeOrders.length}, archived=${archivedOrders.length}, '
+            'unique=${orders.length}',
+      );
 
       // Load ALL audit changes. Employee tracking is based on every
       // change made by the employee, not only Done/final status changes.
@@ -145,10 +194,6 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
 
       if (!mounted) return;
-
-      final ordersById = <String, SAPMainOrder>{
-        for (final order in orders) order.id.trim(): order,
-      };
 
       setState(() {
         _employees = employees;
@@ -3392,3 +3437,4 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     );
   }
 }
+
