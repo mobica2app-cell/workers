@@ -948,9 +948,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         value == 'drawing submitted') {
       return 'Drawing Submittal';
     }
-    if (value == 'task' || value == 'tasks' || value == 'task done') {
-      return 'Task';
-    }
     if (value == 'modification' ||
         value == 'modifications' ||
         value == 'modification submitted' ||
@@ -1011,7 +1008,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         _normalize(employee),
             () => <String, int>{
           'Drawing Submittal': 0,
-          'Task': 0,
           'Modification': 0,
           'Manufacturing': 0,
           'Review': 0,
@@ -1247,7 +1243,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   Map<String, int> _contractWorkloadByStage(String employeeName) {
     final stageContracts = <String, Set<String>>{
       'Drawing Submittal': <String>{},
-      'Task': <String>{},
       'Modification': <String>{},
       'Manufacturing': <String>{},
       'Review': <String>{},
@@ -1312,7 +1307,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
     final stageOrder = const [
       'Drawing Submittal',
-      'Task',
       'Modification',
       'Manufacturing',
       'Review',
@@ -1321,7 +1315,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
     final stageColors = <String, Color>{
       'Drawing Submittal': Colors.blue,
-      'Task': Colors.indigo,
       'Modification': Colors.orange,
       'Manufacturing': Colors.deepPurple,
       'Review': Colors.teal,
@@ -1526,7 +1519,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               );
 
                               final drawing = stages['Drawing Submittal'] ?? 0;
-                              final task = stages['Task'] ?? 0;
                               final modification = stages['Modification'] ?? 0;
                               final manufacturing = stages['Manufacturing'] ?? 0;
                               final review = stages['Review'] ?? 0;
@@ -1534,7 +1526,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                   stages['partation  master data'] ?? 0;
                               final displayedTotal =
                                   drawing +
-                                      task +
                                       modification +
                                       manufacturing +
                                       review +
@@ -1552,7 +1543,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               return BarTooltipItem(
                                 '${employee.key}\n'
                                     'Drawing Submittal: $drawing\n'
-                                    'Task: $task\n'
                                     'Modification: $modification\n'
                                     'Manufacturing: $manufacturing\n'
                                     'Review: $review\n'
@@ -1689,7 +1679,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                           );
 
                           final drawing = stages['Drawing Submittal'] ?? 0;
-                          final task = stages['Task'] ?? 0;
                           final modification = stages['Modification'] ?? 0;
                           final manufacturing = stages['Manufacturing'] ?? 0;
                           final review = stages['Review'] ?? 0;
@@ -1697,7 +1686,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               stages['partation  master data'] ?? 0;
                           final displayedTotal =
                               drawing +
-                                  task +
                                   modification +
                                   manufacturing +
                                   review +
@@ -1718,26 +1706,21 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                   ),
                                   BarChartRodStackItem(
                                     drawing.toDouble(),
-                                    (drawing + task).toDouble(),
-                                    stageColors['Task']!,
-                                  ),
-                                  BarChartRodStackItem(
-                                    (drawing + task).toDouble(),
-                                    (drawing + task + modification).toDouble(),
+                                    (drawing + modification).toDouble(),
                                     stageColors['Modification']!,
                                   ),
                                   BarChartRodStackItem(
-                                    (drawing + task + modification).toDouble(),
-                                    (drawing + task + modification + manufacturing).toDouble(),
+                                    (drawing + modification).toDouble(),
+                                    (drawing + modification + manufacturing).toDouble(),
                                     stageColors['Manufacturing']!,
                                   ),
                                   BarChartRodStackItem(
-                                    (drawing + task + modification + manufacturing).toDouble(),
-                                    (drawing + task + modification + manufacturing + review).toDouble(),
+                                    (drawing + modification + manufacturing).toDouble(),
+                                    (drawing + modification + manufacturing + review).toDouble(),
                                     stageColors['Review']!,
                                   ),
                                   BarChartRodStackItem(
-                                    (drawing + task + modification + manufacturing + review).toDouble(),
+                                    (drawing + modification + manufacturing + review).toDouble(),
                                     displayedTotal.toDouble(),
                                     stageColors['partation  master data']!,
                                   ),
