@@ -170,7 +170,8 @@ class _MainShellState extends State<MainShell> {
   bool get _canUseAi =>
       !widget.guestMode &&
           (widget.loggedInEmployee?.role ?? '').trim().toLowerCase() == 'head' &&
-          (widget.loggedInEmployee?.fullName ?? '').trim().toLowerCase() == 'admin' ;
+          (widget.loggedInEmployee?.fullName ?? '').trim().toLowerCase() == 'admin' ||
+          (widget.loggedInEmployee?.fullName ?? '').trim().toLowerCase() == 'mohamed saied' ;
 
   void _openAiAssistant() {
     if (!_canUseAi) return;
