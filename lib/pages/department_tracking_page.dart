@@ -1819,7 +1819,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
               ),
             ),
             const SizedBox(height: 16),
-            Padding(
+            /*Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
                 children: [
@@ -1883,7 +1883,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                     ),
                 ],
               ),
-            ),
+            ),*/
           ],
         ),
       ),

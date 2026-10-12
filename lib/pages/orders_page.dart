@@ -4072,6 +4072,10 @@ class _OrdersPageState extends State<OrdersPage> {
         field == 'responsible_engineer' &&
             _canClearResponsibleEngineer(order.status) &&
             !_isOrderLocked(order);
+    final canClearReviewer =
+        field == 'reviewer' &&
+            _canClearResponsibleEngineer(order.status) &&
+            !_isOrderLocked(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
     // If Responsible Engineer is "header", Alternative Engineer is fully locked.
@@ -4241,7 +4245,9 @@ class _OrdersPageState extends State<OrdersPage> {
                 if (hasValue)
                   IconButton(
                     tooltip: 'Clear ${_formatFieldName(field)}',
-                    onPressed: (canEdit || canClearResponsibleEngineer)
+                    onPressed: (canEdit ||
+                        canClearResponsibleEngineer ||
+                        canClearReviewer)
                         ? () async {
                       final confirmed = await showDialog<bool>(
                         context: context,
