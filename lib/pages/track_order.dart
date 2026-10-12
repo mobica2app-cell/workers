@@ -146,11 +146,64 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     try {
       final supabase = Supabase.instance.client;
 
-      // Update the order field back to old value
-      await supabase
+      // Find the order in its actual table. Orders can be in either the
+      // active table or the done table, so never assume sap_main_orders.
+      final mainLookup = await supabase
           .from('sap_main_orders')
-          .update({fieldName: oldValue})
-          .eq('id', widget.order.id);
+          .select('*')
+          .eq('id', widget.order.id)
+          .maybeSingle();
+      final doneLookup = await supabase
+          .from('sap_done_orders')
+          .select('*')
+          .eq('id', widget.order.id)
+          .maybeSingle();
+
+      if (mainLookup == null && doneLookup == null) {
+        throw Exception('Order was not found in either SAP orders table.');
+      }
+      if (mainLookup != null && doneLookup != null) {
+        throw Exception(
+          'Order exists in both SAP tables. Restore cancelled to avoid duplicates.',
+        );
+      }
+
+      final isCurrentlyInDone = doneLookup != null;
+      final currentRow = Map<String, dynamic>.from(
+        (isCurrentlyInDone ? doneLookup : mainLookup) as Map,
+      );
+      final targetRow = Map<String, dynamic>.from(currentRow)
+        ..[fieldName] = oldValue;
+
+      // The Done status belongs in sap_done_orders. Any other restored status
+      // belongs in sap_main_orders. Move the full row and remove the old copy.
+      final restoredStatus = (targetRow['status'] ?? '').toString().trim();
+      final targetIsDone = restoredStatus.toLowerCase() == 'done';
+
+      if (fieldName == 'status' && targetIsDone != isCurrentlyInDone) {
+        if (targetIsDone) {
+          await supabase
+              .from('sap_done_orders')
+              .upsert(targetRow, onConflict: 'id');
+          await supabase
+              .from('sap_main_orders')
+              .delete()
+              .eq('id', widget.order.id);
+        } else {
+          await supabase
+              .from('sap_main_orders')
+              .upsert(targetRow, onConflict: 'id');
+          await supabase
+              .from('sap_done_orders')
+              .delete()
+              .eq('id', widget.order.id);
+        }
+      } else {
+        await supabase
+            .from(isCurrentlyInDone ? 'sap_done_orders' : 'sap_main_orders')
+            .update({fieldName: oldValue})
+            .eq('id', widget.order.id);
+      }
 
       // Log the restoration in audit
       await _auditService.logChange(
