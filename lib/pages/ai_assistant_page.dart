@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:universal_html/html.dart' as html;
 
@@ -149,79 +150,91 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
         Expanded(
           child: _messages.isEmpty
               ? Center(child: Padding(
-                  padding: const EdgeInsets.all(18),
-                  child: Column(mainAxisSize: MainAxisSize.min, children: [
-                    Container(
-                      width: 58, height: 58,
-                      decoration: BoxDecoration(color: primary.withOpacity(.10), borderRadius: BorderRadius.circular(20)),
-                      child: Icon(Icons.auto_awesome_rounded, size: 29, color: primary),
-                    ),
-                    const SizedBox(height: 10),
-                    Text('MOOD AI is ready', style: TextStyle(color: fg.withOpacity(.7), fontWeight: FontWeight.w600)),
-                  ]),
-                ))
+            padding: const EdgeInsets.all(18),
+            child: Column(mainAxisSize: MainAxisSize.min, children: [
+              Container(
+                width: 58, height: 58,
+                decoration: BoxDecoration(color: primary.withOpacity(.10), borderRadius: BorderRadius.circular(20)),
+                child: Icon(Icons.auto_awesome_rounded, size: 29, color: primary),
+              ),
+              const SizedBox(height: 10),
+              Text('MOOD AI is ready', style: TextStyle(color: fg.withOpacity(.7), fontWeight: FontWeight.w600)),
+            ]),
+          ))
               : ListView.builder(
-                  controller: _scrollController,
-                  padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
-                  itemCount: _messages.length + (_busy ? 1 : 0),
-                  itemBuilder: (context, index) {
-                    if (_busy && index == _messages.length) {
-                      return Align(alignment: Alignment.centerLeft, child: Container(
-                        margin: const EdgeInsets.only(bottom: 12),
-                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        decoration: BoxDecoration(color: surface, border: Border.all(color: border), borderRadius: BorderRadius.circular(16)),
-                        child: Row(mainAxisSize: MainAxisSize.min, children: [
-                          SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: primary)),
-                          const SizedBox(width: 9),
-                          Text('Thinking…', style: TextStyle(color: fg.withOpacity(.7), fontSize: 12)),
-                        ]),
-                      ));
-                    }
-                    final m = _messages[index];
-                    return Align(
-                      alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
-                      child: Container(
-                        constraints: const BoxConstraints(maxWidth: 720),
-                        margin: const EdgeInsets.only(bottom: 10),
-                        padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
-                        decoration: BoxDecoration(
-                          color: m.isUser ? primary : surface,
-                          borderRadius: BorderRadius.only(
-                            topLeft: const Radius.circular(17),
-                            topRight: const Radius.circular(17),
-                            bottomLeft: Radius.circular(m.isUser ? 17 : 5),
-                            bottomRight: Radius.circular(m.isUser ? 5 : 17),
-                          ),
-                          border: m.isUser ? null : Border.all(color: border),
-                          boxShadow: m.isUser ? [] : [BoxShadow(color: Colors.black.withOpacity(dark ? .08 : .025), blurRadius: 8, offset: const Offset(0, 2))],
-                        ),
-                        child: SelectableText(m.text, style: TextStyle(color: m.isUser ? Colors.white : fg, height: 1.45, fontSize: 13)),
-                      ),
-                    );
-                  },
+            controller: _scrollController,
+            padding: const EdgeInsets.fromLTRB(14, 14, 14, 8),
+            itemCount: _messages.length + (_busy ? 1 : 0),
+            itemBuilder: (context, index) {
+              if (_busy && index == _messages.length) {
+                return Align(alignment: Alignment.centerLeft, child: Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(color: surface, border: Border.all(color: border), borderRadius: BorderRadius.circular(16)),
+                  child: Row(mainAxisSize: MainAxisSize.min, children: [
+                    SizedBox(width: 15, height: 15, child: CircularProgressIndicator(strokeWidth: 2, color: primary)),
+                    const SizedBox(width: 9),
+                    Text('Thinking…', style: TextStyle(color: fg.withOpacity(.7), fontSize: 12)),
+                  ]),
+                ));
+              }
+              final m = _messages[index];
+              return Align(
+                alignment: m.isUser ? Alignment.centerRight : Alignment.centerLeft,
+                child: Container(
+                  constraints: const BoxConstraints(maxWidth: 720),
+                  margin: const EdgeInsets.only(bottom: 10),
+                  padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 11),
+                  decoration: BoxDecoration(
+                    color: m.isUser ? primary : surface,
+                    borderRadius: BorderRadius.only(
+                      topLeft: const Radius.circular(17),
+                      topRight: const Radius.circular(17),
+                      bottomLeft: Radius.circular(m.isUser ? 17 : 5),
+                      bottomRight: Radius.circular(m.isUser ? 5 : 17),
+                    ),
+                    border: m.isUser ? null : Border.all(color: border),
+                    boxShadow: m.isUser ? [] : [BoxShadow(color: Colors.black.withOpacity(dark ? .08 : .025), blurRadius: 8, offset: const Offset(0, 2))],
+                  ),
+                  child: SelectableText(m.text, style: TextStyle(color: m.isUser ? Colors.white : fg, height: 1.45, fontSize: 13)),
                 ),
+              );
+            },
+          ),
         ),
         Container(
           padding: const EdgeInsets.fromLTRB(12, 9, 12, 12),
           decoration: BoxDecoration(color: surface, border: Border(top: BorderSide(color: border))),
           child: Row(crossAxisAlignment: CrossAxisAlignment.end, children: [
-            Expanded(child: TextField(
-              controller: _controller,
-              minLines: 1,
-              maxLines: 4,
-              onSubmitted: (_) => _send(),
-              style: TextStyle(color: fg, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Ask MOOD AI…',
-                hintStyle: TextStyle(color: fg.withOpacity(.45), fontSize: 13),
-                filled: true,
-                fillColor: dark ? const Color(0xFF0F1420) : const Color(0xFFF8FAFC),
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: border)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: border)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: primary, width: 1.4)),
-              ),
-            )),
+            Expanded(child: Focus(
+                onKeyEvent: (node, event) {
+                  if (event is KeyDownEvent &&
+                      event.logicalKey == LogicalKeyboardKey.enter &&
+                      !HardwareKeyboard.instance.isShiftPressed) {
+                    _send();
+                    return KeyEventResult.handled;
+                  }
+                  return KeyEventResult.ignored;
+                },
+                child: TextField(
+                  controller: _controller,
+                  minLines: 1,
+                  maxLines: 4,
+                  textInputAction: TextInputAction.send,
+                  onSubmitted: (_) => _send(),
+                  style: TextStyle(color: fg, fontSize: 13),
+                  decoration: InputDecoration(
+                    hintText: 'Ask MOOD AI…',
+                    hintStyle: TextStyle(color: fg.withOpacity(.45), fontSize: 13),
+                    filled: true,
+                    fillColor: dark ? const Color(0xFF0F1420) : const Color(0xFFF8FAFC),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: border)),
+                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: border)),
+                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: primary, width: 1.4)),
+                  ),
+                )),
+            ),
             const SizedBox(width: 8),
             SizedBox(height: 46, width: 46, child: FilledButton(
               onPressed: _busy ? null : () => _send(),
