@@ -1,6 +1,7 @@
 // lib/pages/orders_page.dart
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ui' as ui;
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -3978,7 +3979,7 @@ class _OrdersPageState extends State<OrdersPage> {
               onPressed: () {
                 Navigator.of(context).pushAndRemoveUntil(
                   MaterialPageRoute(builder: (_) => const LoginPage()),
-                  (route) => false,
+                      (route) => false,
                 );
               },
               icon: const Icon(Icons.login, size: 16),
@@ -5543,15 +5544,24 @@ class _OrdersPageState extends State<OrdersPage> {
             right: BorderSide(color: _borderColor, width: 2),
           ),
         ),
-        child: Text(
-          order.customerName,
-          style: GoogleFonts.cairo(
-            fontSize: 13,
-            fontWeight: FontWeight.w500,
-            color: _textColor,
+        child: ClipRect(
+          child: ImageFiltered(
+            // Keep the real customer name in the widget, but make it strongly
+            // blurred for guest/read-only viewers.
+            imageFilter: ui.ImageFilter.blur(sigmaX: 8, sigmaY: 8),
+            child: ExcludeSemantics(
+              child: Text(
+                order.customerName,
+                style: GoogleFonts.cairo(
+                  fontSize: 13,
+                  fontWeight: FontWeight.w600,
+                  color: _textColor,
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 2,
+              ),
+            ),
           ),
-          overflow: TextOverflow.ellipsis,
-          maxLines: 2,
         ),
       );
     }

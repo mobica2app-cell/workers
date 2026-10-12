@@ -12,6 +12,7 @@ import 'dashboard_page.dart';
 import 'department_tracking_page.dart';
 import 'login_page.dart';
 import 'orders_page.dart';
+import 'ai_assistant_page.dart';
 
 class MainShell extends StatefulWidget {
   final SAPMainService sapService;
@@ -32,6 +33,8 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _selectedIndex = 0;
   bool _isCollapsed = false;
+  bool _aiPanelVisible = false;
+  bool _aiMaximized = false;
 
   // ============================================================
   // THEME
@@ -164,6 +167,74 @@ class _MainShellState extends State<MainShell> {
     });
   }
 
+  bool get _canUseAi =>
+      !widget.guestMode &&
+          (widget.loggedInEmployee?.role ?? '').trim().toLowerCase() == 'head' &&
+          (widget.loggedInEmployee?.fullName ?? '').trim().toLowerCase() == 'admin' ;
+
+  void _openAiAssistant() {
+    if (!_canUseAi) return;
+    setState(() {
+      _aiPanelVisible = true;
+      _aiMaximized = false;
+    });
+  }
+
+  void _minimizeAiAssistant() {
+    setState(() => _aiPanelVisible = false);
+  }
+
+  void _toggleAiMaximized() {
+    setState(() => _aiMaximized = !_aiMaximized);
+  }
+
+  Widget _withAiOverlay(Widget content) {
+    if (!_canUseAi) return content;
+    final size = MediaQuery.of(context).size;
+    final mobile = size.width < 700;
+    final expanded = _aiMaximized;
+    final panelWidth = expanded
+        ? (mobile ? size.width - 24 : (size.width * .78).clamp(520.0, 980.0))
+        : (size.width - 32).clamp(300.0, 420.0);
+    final panelHeight = expanded
+        ? (size.height - 24).clamp(360.0, 1100.0)
+        : (size.height * .72).clamp(400.0, 650.0);
+
+    return Stack(fit: StackFit.expand, children: [
+      content,
+      Positioned(
+        right: expanded && mobile ? 12 : 20,
+        left: expanded && mobile ? 12 : null,
+        bottom: expanded ? 12 : 20,
+        top: expanded ? 12 : null,
+        width: expanded && mobile ? null : panelWidth,
+        height: expanded ? null : panelHeight,
+        child: Offstage(
+          offstage: !_aiPanelVisible,
+          child: AnimatedOpacity(
+            opacity: _aiPanelVisible ? 1 : 0,
+            duration: const Duration(milliseconds: 160),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(20),
+                boxShadow: [BoxShadow(color: Colors.black.withOpacity(.22), blurRadius: 34, offset: const Offset(0, 12))],
+              ),
+              child: AiAssistantPage(
+                key: const ValueKey('persistent_mood_ai_chat'),
+                embedded: true,
+                isMaximized: _aiMaximized,
+                onMinimize: _minimizeAiAssistant,
+                onToggleMaximize: _toggleAiMaximized,
+              ),
+            ),
+          ),
+        ),
+      ),
+    ]);
+  }
+
   // ============================================================
   // BUILD
   // ============================================================
@@ -192,7 +263,17 @@ class _MainShellState extends State<MainShell> {
   Widget _buildDesktopLayout() {
     return Scaffold(
       backgroundColor: _backgroundColor,
-      body: Row(
+      floatingActionButton: (_canUseAi && !_aiPanelVisible)
+          ? FloatingActionButton.extended(
+              heroTag: 'mood_ai_desktop',
+              onPressed: _openAiAssistant,
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('MOOD AI'),
+            )
+          : null,
+      body: _withAiOverlay(Row(
         children: [
 
           // ====================================================
@@ -295,7 +376,7 @@ class _MainShellState extends State<MainShell> {
             child: _buildPage(),
           ),
         ],
-      ),
+      )),
     );
   }
 
@@ -311,15 +392,25 @@ class _MainShellState extends State<MainShell> {
 
     return Scaffold(
       backgroundColor: _backgroundColor,
+      floatingActionButton: (_canUseAi && !_aiPanelVisible)
+          ? FloatingActionButton.extended(
+              heroTag: 'mood_ai_mobile',
+              onPressed: _openAiAssistant,
+              backgroundColor: const Color(0xFFDC2626),
+              foregroundColor: Colors.white,
+              icon: const Icon(Icons.auto_awesome),
+              label: const Text('MOOD AI'),
+            )
+          : null,
 
       // ========================================================
       // CONTENT
       // ========================================================
 
-      body: SafeArea(
+      body: _withAiOverlay(SafeArea(
         bottom: false,
         child: _buildPage(),
-      ),
+      )),
 
       // ========================================================
       // MOBILE BOTTOM NAVIGATION
@@ -364,7 +455,7 @@ class _MainShellState extends State<MainShell> {
             elevation: 0,
 
             indicatorColor:
-            const Color(0xFF6366F1)
+            const Color(0xFFDC2626)
                 .withOpacity(0.15),
 
             labelBehavior:
@@ -387,7 +478,7 @@ class _MainShellState extends State<MainShell> {
                     size: 23,
                     color:
                     const Color(
-                      0xFF6366F1,
+                      0xFFDC2626,
                     ),
                   ),
 
@@ -652,7 +743,7 @@ class _MainShellState extends State<MainShell> {
 
           splashColor:
           const Color(
-            0xFF6366F1,
+            0xFFDC2626,
           ).withOpacity(0.1),
 
           child:
@@ -946,7 +1037,7 @@ class _MainShellState extends State<MainShell> {
 
               backgroundColor:
               const Color(
-                0xFF6366F1,
+                0xFFDC2626,
               ).withOpacity(
                 0.3,
               ),
