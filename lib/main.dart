@@ -672,7 +672,6 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
 }
 
 /*
-aa
 flutter clean
 flutter pub get
 flutter build web --release
