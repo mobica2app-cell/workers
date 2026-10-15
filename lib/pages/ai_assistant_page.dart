@@ -55,19 +55,79 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
     _scrollToBottom();
 
     try {
-      final result = await Supabase.instance.client.functions.invoke(
-        'mood-ai',
-        body: {'username': username, 'password': password, 'question': question},
-      );
-      final data = result.data;
-      if (result.status < 200 || result.status >= 300) {
-        throw Exception(data is Map ? (data['error'] ?? 'Request failed') : 'Request failed');
+      // Retry transient server failures (especially HTTP 502) automatically.
+      // Keep the same question and credentials; do not add duplicate user messages.
+      const maxAttempts = 3;
+      Object? lastError;
+      String? finalAnswer;
+
+      for (var attempt = 1; attempt <= maxAttempts; attempt++) {
+        try {
+          final result = await Supabase.instance.client.functions.invoke(
+            'mood-ai',
+            body: {
+              'username': username,
+              'password': password,
+              'question': question,
+            },
+          );
+
+          final data = result.data;
+          if (result.status >= 200 && result.status < 300) {
+            final answer = data is Map ? (data['answer'] ?? '').toString() : '';
+            if (answer.trim().isEmpty) {
+              throw Exception('MOOD AI returned an empty answer.');
+            }
+            finalAnswer = answer;
+            break;
+          }
+
+          final errorText = data is Map
+              ? (data['error'] ?? 'Request failed').toString()
+              : 'Request failed';
+          lastError = Exception('HTTP ${result.status}: $errorText');
+
+          // Retry only gateway/server errors. Other statuses usually require
+          // a configuration, permission, or input fix.
+          if (result.status < 500 || result.status >= 600) {
+            break;
+          }
+        } catch (e) {
+          lastError = e;
+
+          // Supabase may throw FunctionException for non-2xx responses rather
+          // than returning a result. Retry only errors that look transient.
+          final errorText = e.toString().toLowerCase();
+          final retryable = errorText.contains('502') ||
+              errorText.contains('503') ||
+              errorText.contains('504') ||
+              errorText.contains('bad gateway') ||
+              errorText.contains('gateway timeout') ||
+              errorText.contains('internal server error') ||
+              errorText.contains('timed out') ||
+              errorText.contains('timeout');
+
+          if (!retryable || attempt == maxAttempts) {
+            break;
+          }
+        }
+
+        if (attempt < maxAttempts) {
+          // Exponential backoff: 700 ms, then 1400 ms.
+          await Future<void>.delayed(
+            Duration(milliseconds: 700 * (1 << (attempt - 1))),
+          );
+        }
       }
-      final answer = data is Map ? (data['answer'] ?? '').toString() : '';
-      _addMessage(_ChatMessage(
-        text: answer.isEmpty ? 'No answer was returned.' : answer,
-        isUser: false,
-      ));
+
+      if (finalAnswer != null) {
+        _addMessage(_ChatMessage(text: finalAnswer, isUser: false));
+      } else {
+        _addMessage(_ChatMessage(
+          text: 'MOOD AI could not answer after 3 attempts. Please try again.\n\nDetails: $lastError',
+          isUser: false,
+        ));
+      }
     } catch (e) {
       _addMessage(_ChatMessage(
         text: 'Could not contact MOOD AI. Please try again.\n\nDetails: $e',
