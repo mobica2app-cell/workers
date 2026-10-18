@@ -37,15 +37,6 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
   Future<void> _send([String? quickPrompt]) async {
     final question = (quickPrompt ?? _controller.text).trim();
     if (question.isEmpty || _busy) return;
-    final username = html.window.localStorage['remembered_username'] ?? '';
-    final password = html.window.localStorage['remembered_password'] ?? '';
-    if (username.isEmpty || password.isEmpty) {
-      _addMessage(const _ChatMessage(
-        text: 'Login credentials were not found. Please sign in again.',
-        isUser: false,
-      ));
-      return;
-    }
 
     setState(() {
       _messages.add(_ChatMessage(text: question, isUser: true));
@@ -63,13 +54,14 @@ class _AiAssistantPageState extends State<AiAssistantPage> {
 
       for (var attempt = 1; attempt <= maxAttempts; attempt++) {
         try {
+          final sessionToken = html.window.sessionStorage['mood_session_token'];
+          if (sessionToken == null || sessionToken.isEmpty) {
+            throw Exception('Your session has expired. Please sign in again.');
+          }
           final result = await Supabase.instance.client.functions.invoke(
             'mood-ai',
-            body: {
-              'username': username,
-              'password': password,
-              'question': question,
-            },
+            headers: {'Authorization': 'Bearer $sessionToken'},
+            body: {'question': question},
           );
 
           final data = result.data;

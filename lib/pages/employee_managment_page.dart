@@ -267,11 +267,11 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   );
                   return;
                 }
-                if (passwordController.text.length < 4) {
+                if (passwordController.text.length < 8) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
                       content: Text(
-                        'Password must be at least 4 characters',
+                        'Password must be at least 8 characters',
                         style: GoogleFonts.cairo(),
                       ),
                       backgroundColor: Colors.red,
@@ -460,20 +460,19 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
                   // Update all editable employee fields in one request,
                   // including username. The current employee is excluded from
                   // the duplicate check above, so keeping the same values is OK.
-                  await Supabase.instance.client
-                      .from('employees_auth')
-                      .update({
-                    'full_name': fullName,
-                    'username': username,
-                    'department': selectedDepartment.isNotEmpty
+                  final updated = await _authService.updateEmployee(
+                    id: employee.id,
+                    fullName: fullName,
+                    username: username,
+                    department: selectedDepartment.isNotEmpty
                         ? selectedDepartment
                         : null,
-                    'role': selectedRole.isNotEmpty ? selectedRole : null,
-                    'phone_number': phoneController.text.isNotEmpty
+                    role: selectedRole.isNotEmpty ? selectedRole : null,
+                    phoneNumber: phoneController.text.isNotEmpty
                         ? phoneController.text.trim()
                         : null,
-                  })
-                      .eq('id', employee.id);
+                  );
+                  if (!updated) throw Exception('Employee update was rejected.');
 
                   if (mounted) {
                     Navigator.pop(context);
@@ -767,11 +766,11 @@ class _EmployeeManagementPageState extends State<EmployeeManagementPage> {
           ),
           ElevatedButton(
             onPressed: () async {
-              if (passwordController.text.length < 4) {
+              if (passwordController.text.length < 8) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Password must be at least 4 characters',
+                      'Password must be at least 8 characters',
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,

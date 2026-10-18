@@ -51,19 +51,21 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         throw Exception('No logged-in employee username was found.');
       }
 
-      final response = await Supabase.instance.client
-          .from('employees_auth')
-          .select('id, full_name')
-          .eq('username', username)
-          .eq('is_active', true)
-          .maybeSingle();
-
+      final employees = await EmployeeAuthService(Supabase.instance.client)
+          .getAllEmployees();
+      EmployeeAuth? response;
+      for (final employee in employees) {
+        if (employee.username.trim().toLowerCase() == username.toLowerCase()) {
+          response = employee;
+          break;
+        }
+      }
       if (response == null) {
-        throw Exception('Employee not found in employees_auth.');
+        throw Exception('Employee not found or session expired.');
       }
 
-      final name = response['full_name']?.toString().trim();
-      final id = response['id']?.toString().trim();
+      final name = response.fullName.trim();
+      final id = response.id.trim();
 
       if (name == null || name.isEmpty || id == null || id.isEmpty) {
         throw Exception('Employee record is missing id or full_name.');

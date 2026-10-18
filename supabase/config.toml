@@ -1,0 +1,5 @@
+[functions.mood-auth]
+verify_jwt = false
+
+[functions.mood-ai]
+verify_jwt = false

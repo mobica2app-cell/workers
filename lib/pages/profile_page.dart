@@ -201,11 +201,11 @@ class _ProfilePageState extends State<ProfilePage>
                 );
                 return;
               }
-              if (newPasswordController.text.length < 4) {
+              if (newPasswordController.text.length < 8) {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(
-                      'Password must be at least 4 characters',
+                      'Password must be at least 8 characters',
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,

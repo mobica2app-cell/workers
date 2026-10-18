@@ -1,0 +1,4 @@
+-- DO NOT APPLY THIS LEGACY MIGRATION to the current MOOD schema.
+-- The deployed employees_auth table has password varchar NOT NULL and no password_hash column.
+-- The schema-compatible Edge Function now stores bcrypt hashes in the existing password column.
+-- This file is intentionally non-mutating. Review and create separate migrations only when needed.

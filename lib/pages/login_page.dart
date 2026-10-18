@@ -49,25 +49,21 @@ class _LoginPageState extends State<LoginPage> {
   void _loadSavedCredentials() {
     try {
       final savedUsername = html.window.localStorage['remembered_username'];
-      final savedPassword = html.window.localStorage['remembered_password'];
-      if (savedUsername != null && savedPassword != null) {
-        _usernameController.text = savedUsername;
-        _passwordController.text = savedPassword;
-        // Auto login if credentials are saved
-        _signIn();
-      }
+      if (savedUsername != null) _usernameController.text = savedUsername;
+      // Never persist passwords or auto-login from browser localStorage.
+      html.window.localStorage.remove('remembered_password');
     } catch (e) {
-      print('Error loading credentials: $e');
+      print('Error loading saved username: $e');
     }
   }
 
   void _saveCredentials(String username, String password) {
     try {
-      // Always save credentials (automatic remember me)
+      // The password argument is retained for call-site compatibility but is never stored.
       html.window.localStorage['remembered_username'] = username;
-      html.window.localStorage['remembered_password'] = password;
+      html.window.localStorage.remove('remembered_password');
     } catch (e) {
-      print('Error saving credentials: $e');
+      print('Error saving username: $e');
     }
   }
 

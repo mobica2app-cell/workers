@@ -363,34 +363,62 @@ class _SmartZoomWrapperState extends State<SmartZoomWrapper> {
   }
 }
 
-class EmployeeAuthService  {
+class EmployeeAuthService {
   final SupabaseClient _client;
+  static const String _sessionTokenKey = 'mood_session_token';
 
   EmployeeAuthService(this._client);
 
-  Future<EmployeeAuth?> login(String username, String password) async {
+  String? get sessionToken {
     try {
-      final response = await _client
-          .from('employees_auth')
-          .select('*')
-          .eq('username', username)
-          .eq('password', password)
-          .eq('is_active', true);
+      final value = html.window.sessionStorage[_sessionTokenKey];
+      return value == null || value.isEmpty ? null : value;
+    } catch (_) {
+      return null;
+    }
+  }
 
-      if (response == null || (response is List && response.isEmpty)) {
-        print('No employee found with username: $username');
+  Map<String, String> get _sessionHeaders => {
+        if (sessionToken != null) 'Authorization': 'Bearer $sessionToken',
+      };
+
+  Future<Map<String, dynamic>?> _invokeAuth(
+    Map<String, dynamic> body, {
+    bool requireSession = true,
+  }) async {
+    try {
+      final token = sessionToken;
+      if (requireSession && (token == null || token.isEmpty)) return null;
+      final response = await _client.functions.invoke(
+        'mood-auth',
+        body: body,
+        headers: requireSession ? {'Authorization': 'Bearer $token'} : const {},
+      );
+      if (response.status < 200 || response.status >= 300 || response.data is! Map) {
         return null;
       }
+      return Map<String, dynamic>.from(response.data as Map);
+    } catch (e) {
+      print('MOOD auth request failed: $e');
+      return null;
+    }
+  }
 
-      final data = (response as List).first as Map<String, dynamic>;
-
-      await _client
-          .from('employees_auth')
-          .update({'last_login': DateTime.now().toIso8601String()})
-          .eq('id', data['id']);
-
-      print('Login successful: ${data['full_name']}');
-      return EmployeeAuth.fromJson(data);
+  Future<EmployeeAuth?> login(String username, String password) async {
+    try {
+      final response = await _client.functions.invoke(
+        'mood-auth',
+        body: {'action': 'login', 'username': username, 'password': password},
+      );
+      if (response.status < 200 || response.status >= 300 || response.data is! Map) {
+        return null;
+      }
+      final payload = Map<String, dynamic>.from(response.data as Map);
+      final token = payload['token']?.toString();
+      final employeeData = payload['employee'];
+      if (token == null || token.isEmpty || employeeData is! Map) return null;
+      html.window.sessionStorage[_sessionTokenKey] = token;
+      return EmployeeAuth.fromJson(Map<String, dynamic>.from(employeeData));
     } catch (e) {
       print('Login error: $e');
       return null;
@@ -398,34 +426,20 @@ class EmployeeAuthService  {
   }
 
   Future<List<EmployeeAuth>> getAllEmployees() async {
-    try {
-      final response = await _client
-          .from('employees_auth')
-          .select('*')
-          .eq('is_active', true)
-          .order('full_name');
-
-      return (response as List)
-          .map((json) => EmployeeAuth.fromJson(json))
-          .toList();
-    } catch (e) {
-      print('Error fetching employees: $e');
-      return [];
-    }
+    final result = await _invokeAuth({'action': 'list_employees'});
+    final employees = result?['employees'];
+    if (employees is! List) return [];
+    return employees
+        .whereType<Map>()
+        .map((row) => EmployeeAuth.fromJson(Map<String, dynamic>.from(row)))
+        .toList();
   }
 
   Future<EmployeeAuth?> getEmployeeById(String id) async {
-    try {
-      final response = await _client
-          .from('employees_auth')
-          .select('*')
-          .eq('id', id)
-          .single();
-
-      return EmployeeAuth.fromJson(response);
-    } catch (e) {
-      return null;
-    }
+    final result = await _invokeAuth({'action': 'get_employee', 'id': id});
+    final employee = result?['employee'];
+    if (employee is! Map) return null;
+    return EmployeeAuth.fromJson(Map<String, dynamic>.from(employee));
   }
 
   Future<bool> addEmployee({
@@ -436,54 +450,53 @@ class EmployeeAuthService  {
     String? role,
     String? phoneNumber,
   }) async {
-    try {
-      await _client.from('employees_auth').insert({
-        'username': username,
-        'password': password,
-        'full_name': fullName,
-        'department': department,
-        'role': role,
-        'phone_number': phoneNumber,
-        'is_active': true,
-      });
-      return true;
-    } catch (e) {
-      print('Error adding employee: $e');
-      return false;
-    }
+    final result = await _invokeAuth({
+      'action': 'create_employee',
+      'username': username.trim(),
+      'password': password,
+      'full_name': fullName.trim(),
+      'department': department,
+      'role': role,
+      'phone_number': phoneNumber,
+    });
+    return result?['employee'] is Map;
   }
 
   Future<bool> updateEmployee({
     required String id,
     String? fullName,
+    String? username,
     String? department,
     String? role,
     String? phoneNumber,
     String? password,
     bool? isActive,
   }) async {
-    try {
-      final updates = <String, dynamic>{
-        'updated_at': DateTime.now().toIso8601String(),
-      };
-
-      if (fullName != null) updates['full_name'] = fullName;
-      if (department != null) updates['department'] = department;
-      if (role != null) updates['role'] = role;
-      if (phoneNumber != null) updates['phone_number'] = phoneNumber;
-      if (password != null) updates['password'] = password;
-      if (isActive != null) updates['is_active'] = isActive;
-
-      await _client.from('employees_auth').update(updates).eq('id', id);
-      return true;
-    } catch (e) {
-      print('Error updating employee: $e');
-      return false;
-    }
+    final updates = <String, dynamic>{'action': 'update_employee', 'id': id};
+    if (fullName != null) updates['full_name'] = fullName;
+    if (username != null) updates['username'] = username.trim();
+    if (department != null) updates['department'] = department;
+    if (role != null) updates['role'] = role;
+    if (phoneNumber != null) updates['phone_number'] = phoneNumber;
+    if (password != null && password.isNotEmpty) updates['password'] = password;
+    if (isActive != null) updates['is_active'] = isActive;
+    final result = await _invokeAuth(updates);
+    return result?['employee'] is Map;
   }
 
   Future<bool> changePassword(String id, String newPassword) async {
-    return updateEmployee(id: id, password: newPassword);
+    final result = await _invokeAuth({
+      'action': 'change_password',
+      'id': id,
+      'password': newPassword,
+    });
+    return result?['success'] == true;
+  }
+
+  void clearSession() {
+    try {
+      html.window.sessionStorage.remove(_sessionTokenKey);
+    } catch (_) {}
   }
 }
 
