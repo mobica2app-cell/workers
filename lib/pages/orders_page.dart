@@ -58,6 +58,7 @@ class _OrdersPageState extends State<OrdersPage> {
   String _searchQuery = '';
   String? _filterDesignTeam;
   bool _filterMyWork = false;
+  String? _selectedWorkEmployee; // Head-only employee work selector
   bool _editMode = false;
   String _sortBy = 'date_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
@@ -483,6 +484,80 @@ class _OrdersPageState extends State<OrdersPage> {
       }
       _rebuildGroups();
     });
+  }
+
+  bool get _isHeadRole =>
+      widget.loggedInEmployee?.role?.trim().toLowerCase() == 'head';
+
+  void _selectEmployeeWork(String? employeeName) {
+    setState(() {
+      _selectedWorkEmployee = employeeName;
+      _filterMyWork = false;
+
+      // Employee selection means show that employee's complete assigned work,
+      // not the union of this selection with any previously active filters.
+      _filterStatus = null;
+      _filterFactory = null;
+      _filterDesignTeam = null;
+      _filterSalesEngineer = null;
+      _filterResponsibleEngineer = null;
+      _filterReviewer = null;
+      _filterCorrespondenceEngineer = null;
+      _searchQuery = '';
+      _searchController.clear();
+      _rebuildGroups();
+    });
+  }
+
+  Widget _buildEmployeeWorkDropdown() {
+    final names = _allEmployees
+        .map((employee) => employee.fullName.trim())
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+
+    final selected = names.contains(_selectedWorkEmployee)
+        ? _selectedWorkEmployee
+        : null;
+
+    return SizedBox(
+      width: 150,
+      height: 34,
+      child: DropdownButtonFormField<String>(
+        value: selected,
+        isExpanded: true,
+        isDense: true,
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.groups_outlined, size: 16),
+          prefixIconConstraints: const BoxConstraints(minWidth: 34),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          filled: true,
+          fillColor: _surfaceColor,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: _borderColor),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF6366F1)),
+          ),
+        ),
+        hint: Text('Employee work', style: GoogleFonts.cairo(fontSize: 11)),
+        items: [
+          DropdownMenuItem<String>(
+            value: null,
+            child: Text('All orders', style: GoogleFonts.cairo(fontSize: 11)),
+          ),
+          ...names.map((name) => DropdownMenuItem<String>(
+            value: name,
+            child: Text(name, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.cairo(fontSize: 11)),
+          )),
+        ],
+        onChanged: _isLoading ? null : _selectEmployeeWork,
+      ),
+    );
   }
 
   // Copy a specific field value to clipboard
@@ -2881,7 +2956,8 @@ class _OrdersPageState extends State<OrdersPage> {
             (_filterResponsibleEngineer != null ? 1 : 0) +
             (_filterReviewer != null ? 1 : 0) +
             (_filterCorrespondenceEngineer != null ? 1 : 0) +
-            (_filterMyWork ? 1 : 0);
+            (_filterMyWork ? 1 : 0) +
+            (_selectedWorkEmployee != null ? 1 : 0);
 
     if (activeFilterCount > 0) {
       final myName = widget.loggedInEmployee?.fullName ?? '';
@@ -2919,14 +2995,23 @@ class _OrdersPageState extends State<OrdersPage> {
                     o.reviewer == myName ||
                     o.correspondenceEngineer == myName);
 
-        return matchesStatus ||
+        final selectedEmployee = _selectedWorkEmployee;
+        // Each row belongs to the Alternative Engineer when assigned; otherwise
+        // attribute it to the Responsible Engineer. Do not count both people.
+        final alternativeEngineer = o.correspondenceEngineer?.trim() ?? '';
+        final workOwner = alternativeEngineer.isNotEmpty
+            ? alternativeEngineer
+            : (o.responsibleEngineer?.trim() ?? '');
+        final matchesSelectedEmployee = selectedEmployee != null &&
+            workOwner == selectedEmployee;
+
+        return matchesSelectedEmployee || matchesMyWork || matchesStatus ||
             matchesFactory ||
             matchesDesignTeam ||
             matchesSalesEngineer ||
             matchesResponsibleEngineer ||
             matchesReviewer ||
-            matchesCorrespondenceEngineer ||
-            matchesMyWork;
+            matchesCorrespondenceEngineer;
       }).toList();
     }
 
@@ -2941,7 +3026,9 @@ class _OrdersPageState extends State<OrdersPage> {
           _filterSalesEngineer != null ||
           _filterResponsibleEngineer != null ||
           _filterReviewer != null ||
-          _filterCorrespondenceEngineer != null;
+          _filterCorrespondenceEngineer != null ||
+          _filterMyWork ||
+          _selectedWorkEmployee != null;
 
   Future<void> _showImportDialog() async {
     await showDialog<bool>(
@@ -4001,8 +4088,9 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
             const SizedBox(width: 8),
           ],
-          // My Work button
-          if (!widget.readOnly) _buildMyWorkButton(),
+          // Heads can inspect any employee's assigned work; other users keep My Work.
+          if (!widget.readOnly && _isHeadRole) _buildEmployeeWorkDropdown(),
+          if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
           if (!widget.readOnly) const SizedBox(width: 8),
           // Editing controls are hidden for guest viewers.
           if (!widget.readOnly) _buildEditModeButton(),
@@ -4448,6 +4536,8 @@ class _OrdersPageState extends State<OrdersPage> {
                 _filterResponsibleEngineer = null;
                 _filterReviewer = null;
                 _filterCorrespondenceEngineer = null;
+                _filterMyWork = false;
+                _selectedWorkEmployee = null;
               });
               _rebuildGroups();
             },
