@@ -37,6 +37,7 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _authService = EmployeeAuthService(_supabase);
     _loadSavedCredentials();
+    _restoreRememberedSession();
   }
 
   @override
@@ -48,23 +49,78 @@ class _LoginPageState extends State<LoginPage> {
 
   void _loadSavedCredentials() {
     try {
+      final rememberEnabled =
+          html.window.localStorage['remember_me_enabled'] == 'true';
       final savedUsername = html.window.localStorage['remembered_username'];
-      if (savedUsername != null) _usernameController.text = savedUsername;
-      // Never persist passwords or auto-login from browser localStorage.
+      if (rememberEnabled && savedUsername != null) {
+        _usernameController.text = savedUsername;
+      }
+      _rememberMe = rememberEnabled;
+      // Passwords must never be persisted in browser storage.
       html.window.localStorage.remove('remembered_password');
     } catch (e) {
-      print('Error loading saved username: $e');
+      print('Error loading remember-me preference: $e');
     }
   }
 
-  void _saveCredentials(String username, String password) {
+  void _saveRememberMe(String username, EmployeeAuth employee) {
     try {
-      // The password argument is retained for call-site compatibility but is never stored.
-      html.window.localStorage['remembered_username'] = username;
+      if (_rememberMe) {
+        html.window.localStorage['remembered_username'] = username;
+        html.window.localStorage['remembered_employee_id'] = employee.id;
+        html.window.localStorage['remember_me_enabled'] = 'true';
+      } else {
+        html.window.localStorage.remove('remembered_username');
+        html.window.localStorage.remove('remembered_employee_id');
+        html.window.localStorage.remove('remember_me_enabled');
+        html.window.localStorage.remove('mood_session_token');
+      }
       html.window.localStorage.remove('remembered_password');
     } catch (e) {
-      print('Error saving username: $e');
+      print('Error saving remember-me preference: $e');
     }
+  }
+
+  Future<void> _restoreRememberedSession() async {
+    try {
+      if (html.window.localStorage['remember_me_enabled'] != 'true') return;
+      final employeeId = html.window.localStorage['remembered_employee_id'];
+      final token = html.window.localStorage['mood_session_token'];
+      if (employeeId == null || employeeId.isEmpty || token == null || token.isEmpty) {
+        _authService.clearSession();
+        return;
+      }
+
+      if (mounted) setState(() => _isLoading = true);
+      // Ask the server to resolve the employee using the saved session token.
+      // This avoids trusting a locally cached employee profile after token expiry.
+      final employee = await _authService.getEmployeeById(employeeId);
+      if (!mounted) return;
+      if (employee == null || !employee.isActive) {
+        _authService.clearSession();
+        setState(() => _isLoading = false);
+        return;
+      }
+      _openMainShell(employee);
+    } catch (e) {
+      print('Could not restore remembered session: $e');
+      _authService.clearSession();
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _openMainShell(EmployeeAuth employee) {
+    _setLoggedInEmployee(employee);
+    final sapService = SAPMainService(_supabase);
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (context) => MainShell(
+          sapService: sapService,
+          loggedInEmployee: employee,
+        ),
+      ),
+    );
   }
 
   Future<void> _signIn() async {
@@ -84,29 +140,18 @@ class _LoginPageState extends State<LoginPage> {
     });
 
     try {
-      final employee = await _authService.login(username, password);
+      final employee = await _authService.login(
+        username,
+        password,
+        rememberMe: _rememberMe,
+      );
 
       print('Login result: ${employee?.fullName ?? "FAILED"}');
 
       if (employee != null && mounted) {
-        // Save credentials if remember me is checked
-        _saveCredentials(username, password);
-
-        _setLoggedInEmployee(employee);
-
-        final sapService = SAPMainService(_supabase);
-
+        _saveRememberMe(username, employee);
         if (!mounted) return;
-
-        Navigator.pushReplacement(
-          context,
-          MaterialPageRoute(
-            builder: (context) => MainShell(
-              sapService: sapService,
-              loggedInEmployee: employee,
-            ),
-          ),
-        );
+        _openMainShell(employee);
       } else {
         setState(() {
           _errorMessage = 'Invalid username or password';
@@ -369,7 +414,45 @@ class _LoginPageState extends State<LoginPage> {
             ),
             onSubmitted: (_) => _signIn(),
           ),
-          const SizedBox(height: 22),
+          const SizedBox(height: 8),
+          Row(
+            children: [
+              Checkbox(
+                value: _rememberMe,
+                onChanged: _isLoading
+                    ? null
+                    : (value) => setState(() => _rememberMe = value ?? false),
+                activeColor: _isDark ? Colors.white : const Color(0xFF0F172A),
+                checkColor: _isDark ? Colors.black : Colors.white,
+                side: BorderSide(color: _secondaryTextColor),
+              ),
+              GestureDetector(
+                onTap: _isLoading
+                    ? null
+                    : () => setState(() => _rememberMe = !_rememberMe),
+                child: Text(
+                  'Remember me',
+                  style: GoogleFonts.cairo(
+                    color: _secondaryTextColor,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+              const Spacer(),
+              Flexible(
+                child: Text(
+                  'Keep me signed in on this device',
+                  textAlign: TextAlign.end,
+                  style: GoogleFonts.cairo(
+                    color: _secondaryTextColor,
+                    fontSize: 10.5,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
 
           SizedBox(
             width: double.infinity,

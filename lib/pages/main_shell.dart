@@ -593,7 +593,10 @@ class _MainShellState extends State<MainShell> {
     try {
       html.window.localStorage.remove('remembered_username');
       html.window.localStorage.remove('remembered_password');
+      html.window.localStorage.remove('remembered_employee_id');
+      html.window.localStorage.remove('remember_me_enabled');
       html.window.localStorage.remove('mood_session_token');
+      html.window.sessionStorage.remove('mood_session_token');
     } catch (e) {
       print('Error clearing storage: $e');
     }

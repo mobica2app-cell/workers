@@ -371,8 +371,12 @@ class EmployeeAuthService {
 
   String? get sessionToken {
     try {
-      final value = html.window.sessionStorage[_sessionTokenKey];
-      return value == null || value.isEmpty ? null : value;
+      final sessionValue = html.window.sessionStorage[_sessionTokenKey];
+      if (sessionValue != null && sessionValue.isNotEmpty) return sessionValue;
+      final persistentValue = html.window.localStorage[_sessionTokenKey];
+      return (persistentValue == null || persistentValue.isEmpty)
+          ? null
+          : persistentValue;
     } catch (_) {
       return null;
     }
@@ -404,7 +408,11 @@ class EmployeeAuthService {
     }
   }
 
-  Future<EmployeeAuth?> login(String username, String password) async {
+  Future<EmployeeAuth?> login(
+    String username,
+    String password, {
+    bool rememberMe = false,
+  }) async {
     try {
       final response = await _client.functions.invoke(
         'mood-auth',
@@ -417,7 +425,14 @@ class EmployeeAuthService {
       final token = payload['token']?.toString();
       final employeeData = payload['employee'];
       if (token == null || token.isEmpty || employeeData is! Map) return null;
+      // Keep a token in sessionStorage for the current tab. If Remember me is
+      // enabled, also persist it across browser restarts. Never store passwords.
       html.window.sessionStorage[_sessionTokenKey] = token;
+      if (rememberMe) {
+        html.window.localStorage[_sessionTokenKey] = token;
+      } else {
+        html.window.localStorage.remove(_sessionTokenKey);
+      }
       return EmployeeAuth.fromJson(Map<String, dynamic>.from(employeeData));
     } catch (e) {
       print('Login error: $e');
@@ -496,6 +511,9 @@ class EmployeeAuthService {
   void clearSession() {
     try {
       html.window.sessionStorage.remove(_sessionTokenKey);
+      html.window.localStorage.remove(_sessionTokenKey);
+      html.window.localStorage.remove('remembered_employee_id');
+      html.window.localStorage.remove('remember_me_enabled');
     } catch (_) {}
   }
 }
@@ -662,8 +680,8 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                        color: Theme.of(context)
-                            .colorScheme
+                          color: Theme.of(context)
+                              .colorScheme
                             .onSurface,
                       ),
                     ),
@@ -682,6 +700,7 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
     );
   }
 }
+
 
 /*
 flutter clean
