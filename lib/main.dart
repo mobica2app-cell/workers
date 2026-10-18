@@ -573,7 +573,6 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Your existing application.
         widget.child,
 
         // Refresh warning.
