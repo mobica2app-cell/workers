@@ -970,6 +970,7 @@ class _MainShellState extends State<MainShell> {
 
           icon:
           const Icon(
+            size: 20,
             Icons.logout,
             color:
             Colors.white54,
