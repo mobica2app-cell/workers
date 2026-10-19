@@ -115,6 +115,7 @@ class _LoginPageState extends State<LoginPage> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
+        settings: const RouteSettings(name: '/main'),
         builder: (context) => MainShell(
           sapService: sapService,
           loggedInEmployee: employee,
@@ -172,6 +173,7 @@ class _LoginPageState extends State<LoginPage> {
     Navigator.pushReplacement(
       context,
       MaterialPageRoute(
+        settings: const RouteSettings(name: '/main'),
         builder: (context) => MainShell(
           sapService: sapService,
           guestMode: true,

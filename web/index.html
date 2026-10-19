@@ -45,6 +45,28 @@
   <!-- Manifest -->
 
   <link rel="manifest" href="manifest.json">
+
+  <!-- DevTools detector: best-effort only; false positives are possible. -->
+  <script src="https://cdn.jsdelivr.net/npm/devtools-detector@2.0.25/lib/devtools-detector.js"></script>
+  <script>
+    // Default to "closed" so a stale/early detector result cannot lock the app.
+    document.documentElement.setAttribute('data-devtools-open', 'false');
+
+    window.addEventListener('load', function () {
+      if (!window.devtoolsDetector) {
+        console.warn('devtools-detector did not load; app will remain accessible.');
+        return;
+      }
+
+      window.devtoolsDetector.addListener(function (isOpen) {
+        var open = isOpen === true;
+        document.documentElement.setAttribute('data-devtools-open', String(open));
+      });
+
+      // Start detection after the page has finished loading.
+      window.devtoolsDetector.launch();
+    });
+  </script>
 </head>
 
 <body>

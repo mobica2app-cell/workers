@@ -13,6 +13,29 @@ import 'package:universal_html/html.dart' as html;
 import 'services/sap_service.dart';
 
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
+final DevToolsRouteObserver devToolsRouteObserver = DevToolsRouteObserver();
+
+class DevToolsRouteObserver extends NavigatorObserver {
+  String? currentRouteName;
+
+  @override
+  void didPush(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    currentRouteName = route.settings.name;
+    super.didPush(route, previousRoute);
+  }
+
+  @override
+  void didReplace({Route<dynamic>? newRoute, Route<dynamic>? oldRoute}) {
+    if (newRoute != null) currentRouteName = newRoute.settings.name;
+    super.didReplace(newRoute: newRoute, oldRoute: oldRoute);
+  }
+
+  @override
+  void didPop(Route<dynamic> route, Route<dynamic>? previousRoute) {
+    currentRouteName = previousRoute?.settings.name;
+    super.didPop(route, previousRoute);
+  }
+}
 
 // Global Theme Notifier for instant theme changes
 class ThemeNotifier extends ChangeNotifier {
@@ -69,6 +92,8 @@ class MyApp extends StatelessWidget {
       listenable: ThemeNotifier.instance,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: navigatorKey,
+          navigatorObservers: [devToolsRouteObserver],
           title: 'Mood',
           debugShowCheckedModeBanner: false,
           theme: _buildLightTheme(),
@@ -536,12 +561,8 @@ void main() async {
   runApp(const MyApp());
 }
 
-/// Best-effort browser DevTools deterrent for Flutter Web.
-///
-/// Browser APIs do not provide a reliable way to know whether DevTools is open.
-/// This checks for the common docked-DevTools window-size difference and blocks
-/// several common keyboard shortcuts. It can produce false positives and can
-/// be bypassed, so it must not be treated as a security boundary.
+/// Listens for the status event emitted by the devtools-detector JavaScript
+/// library loaded from web/index.html.
 class DevToolsGuard extends StatefulWidget {
   final Widget child;
 
@@ -554,56 +575,88 @@ class DevToolsGuard extends StatefulWidget {
 class _DevToolsGuardState extends State<DevToolsGuard> {
   Timer? _checkTimer;
   bool _devToolsDetected = false;
+  bool _handledForCurrentOpen = false;
+
+  static const String _reloadOnceKey = 'mood_devtools_reload_once';
 
   @override
   void initState() {
     super.initState();
-
-    // Check immediately, then periodically because opening docked DevTools
-    // usually changes the browser's inner/outer dimensions.
-    _checkDevTools();
     _checkTimer = Timer.periodic(
-      const Duration(milliseconds: 900),
-          (_) => _checkDevTools(),
+      const Duration(milliseconds: 500),
+          (_) => _checkDevToolsStatus(),
     );
-
-    // Best-effort blocking of common DevTools / source-view shortcuts.
-    html.window.onKeyDown.listen(_handleKeyDown);
+    _checkDevToolsStatus();
   }
 
-  void _checkDevTools() {
+  void _clearRememberMeAndSession() {
     try {
-      final outerWidth = html.window.outerWidth;
-      final innerWidth = html.window.innerWidth;
-      final outerHeight = html.window.outerHeight;
-      final innerHeight = html.window.innerHeight;
+      // Clear the Remember Me preference and any saved identity/token.
+      html.window.localStorage.remove('remember_me_enabled');
+      html.window.localStorage.remove('remembered_username');
+      html.window.localStorage.remove('remembered_employee_id');
+      html.window.localStorage.remove('remembered_password');
+      html.window.localStorage.remove('mood_session_token');
 
-      final widthDifference = (outerWidth - innerWidth!).abs();
-      final heightDifference = (outerHeight - innerHeight!).abs();
-
-      // Thresholds reduce false positives from ordinary browser borders.
-      final detected =
-          widthDifference > 200 || heightDifference > 200;
-
-      if (mounted && detected != _devToolsDetected) {
-        setState(() => _devToolsDetected = detected);
-      }
+      // Also remove the active tab's token so a refresh returns to login.
+      html.window.sessionStorage.remove('mood_session_token');
     } catch (_) {
-      // If browser dimensions are unavailable, do not lock out the user.
+      // Continue safely if browser storage is unavailable.
     }
   }
 
-  void _handleKeyDown(html.KeyboardEvent event) {
-    final key = (event.key ?? '').toLowerCase();
-    final ctrlOrMeta = event.ctrlKey || event.metaKey;
-    final shift = event.shiftKey;
+  bool get _isLoginPage {
+    final routeName = devToolsRouteObserver.currentRouteName;
+    // MaterialApp's home route is '/'.
+    // MainShell routes are explicitly named '/main'.
+    return routeName != '/main';
+  }
 
-    final devToolsShortcut = key == 'f12' ||
-        (ctrlOrMeta && shift && <String>{'i', 'j', 'c'}.contains(key)) ||
-        (ctrlOrMeta && key == 'u');
+  void _checkDevToolsStatus() {
+    try {
+      final status = html.document.documentElement
+          ?.getAttribute('data-devtools-open');
+      final detected = status == 'true';
 
-    if (devToolsShortcut) {
-      event.preventDefault();
+      if (!detected) {
+        _handledForCurrentOpen = false;
+        try {
+          html.window.sessionStorage.remove(_reloadOnceKey);
+        } catch (_) {}
+        if (mounted && _devToolsDetected) {
+          setState(() => _devToolsDetected = false);
+        }
+        return;
+      }
+
+      if (_handledForCurrentOpen) return;
+      _handledForCurrentOpen = true;
+
+      // Always revoke remembered login state once DevTools is detected.
+      _clearRememberMeAndSession();
+
+      if (!_isLoginPage) {
+        // On any page other than LoginPage, refresh so the cleared session
+        // sends the user back to login. The session flag prevents reload loops.
+        try {
+          final alreadyReloaded =
+              html.window.sessionStorage[_reloadOnceKey] == 'true';
+          if (!alreadyReloaded) {
+            html.window.sessionStorage[_reloadOnceKey] = 'true';
+            html.window.location.reload();
+          } else if (mounted) {
+            setState(() => _devToolsDetected = true);
+          }
+        } catch (_) {
+          // If storage is blocked, show the blocker rather than reload forever.
+          if (mounted) setState(() => _devToolsDetected = true);
+        }
+      } else if (mounted) {
+        // On LoginPage, block the screen but do not keep refreshing.
+        setState(() => _devToolsDetected = true);
+      }
+    } catch (_) {
+      // If detector/browser APIs are unavailable, keep the app usable.
     }
   }
 
@@ -618,7 +671,6 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
     return Stack(
       fit: StackFit.expand,
       children: [
-        // Keep the app mounted underneath the blocking screen.
         widget.child,
         if (_devToolsDetected)
           Positioned.fill(
@@ -843,3 +895,4 @@ git commit -m "Update"
 git push
 
 */
+
