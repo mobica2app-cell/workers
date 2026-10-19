@@ -724,9 +724,7 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
 /*
 flutter clean
 flutter pub get
-flutter build web --release `
-  --dart-define=SUPABASE_URL=https://tcztkkexgzxlurvhibmc.supabase.co `
-  --dart-define=SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjenRra2V4Z3p4bHVydmhpYm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTExNTksImV4cCI6MjEwMTU4NzE1OX0.7XHX0uaC8YzRdd42Str__cyAK8Fpyhs7h-yv2pTaDBQ
+flutter build web --release
 git add .
 git commit -m "Update"
 git push
