@@ -385,13 +385,13 @@ class EmployeeAuthService {
   }
 
   Map<String, String> get _sessionHeaders => {
-        if (sessionToken != null) 'Authorization': 'Bearer $sessionToken',
-      };
+    if (sessionToken != null) 'Authorization': 'Bearer $sessionToken',
+  };
 
   Future<Map<String, dynamic>?> _invokeAuth(
-    Map<String, dynamic> body, {
-    bool requireSession = true,
-  }) async {
+      Map<String, dynamic> body, {
+        bool requireSession = true,
+      }) async {
     try {
       final token = sessionToken;
       if (requireSession && (token == null || token.isEmpty)) return null;
@@ -411,10 +411,10 @@ class EmployeeAuthService {
   }
 
   Future<EmployeeAuth?> login(
-    String username,
-    String password, {
-    bool rememberMe = false,
-  }) async {
+      String username,
+      String password, {
+        bool rememberMe = false,
+      }) async {
     try {
       final response = await _client.functions.invoke(
         'mood-auth',
@@ -526,9 +526,23 @@ class EmployeeAuthService {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Supply these at build time so they are not hardcoded in Dart source.
+  // NOTE: Flutter web embeds compile-time values in the built app; this does
+  // not make the URL or publishable/anon key secret from browser DevTools.
+  const supabaseUrl = String.fromEnvironment('SUPABASE_URL');
+  const supabasePublishableKey = String.fromEnvironment('SUPABASE_PUBLISHABLE_KEY');
+
+  if (supabaseUrl.isEmpty || supabasePublishableKey.isEmpty) {
+    throw StateError(
+      'Missing Supabase configuration. Build with '
+          '--dart-define=SUPABASE_URL=... and '
+          '--dart-define=SUPABASE_PUBLISHABLE_KEY=...',
+    );
+  }
+
   await Supabase.initialize(
-    url: 'https://tcztkkexgzxlurvhibmc.supabase.co',
-    anonKey: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjenRra2V4Z3p4bHVydmhpYm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTExNTksImV4cCI6MjEwMTU4NzE1OX0.7XHX0uaC8YzRdd42Str__cyAK8Fpyhs7h-yv2pTaDBQ',           // Your anon key
+    url: supabaseUrl,
+    anonKey: supabasePublishableKey,
   );
 
   runApp(const MyApp());
@@ -710,7 +724,9 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
 /*
 flutter clean
 flutter pub get
-flutter build web --release
+flutter build web --release `
+  --dart-define=SUPABASE_URL=https://tcztkkexgzxlurvhibmc.supabase.co `
+  --dart-define=SUPABASE_PUBLISHABLE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InRjenRra2V4Z3p4bHVydmhpYm1jIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMTExNTksImV4cCI6MjEwMTU4NzE1OX0.7XHX0uaC8YzRdd42Str__cyAK8Fpyhs7h-yv2pTaDBQ
 git add .
 git commit -m "Update"
 git push
