@@ -1116,120 +1116,23 @@ class _MainShellState extends State<MainShell> {
             ),
 
             // ==================================================
-            // MENU
+            // Logout
             // ==================================================
 
-            PopupMenuButton<String>(
-              color:
-              const Color(
-                0xFF1E293B,
-              ),
+            IconButton(
+              onPressed:
+              _showLogoutDialog,
 
-              shape:
-              RoundedRectangleBorder(
-                borderRadius:
-                BorderRadius.circular(
-                  12,
-                ),
-              ),
-
-              child:
+              icon:
               const Icon(
-                Icons.more_vert,
-
-                color:
-                Colors.white54,
-
                 size: 20,
+                Icons.logout,
+                color:
+                Colors.red,
               ),
 
-              onSelected:
-                  (value) {
-
-                if (value ==
-                    'profile') {
-                  setState(() {
-                    _selectedIndex =
-                        _navItems.indexWhere(
-                              (item) =>
-                          item.label ==
-                              'Profile',
-                        );
-                  });
-                }
-
-                if (value ==
-                    'logout') {
-                  _showLogoutDialog();
-                }
-              },
-
-              itemBuilder:
-                  (context) =>
-              [
-
-                PopupMenuItem(
-                  value:
-                  'profile',
-
-                  child: Row(
-                    children: [
-
-                      const Icon(
-                        Icons.person_outline,
-                        color:
-                        Colors.white70,
-                        size: 18,
-                      ),
-
-                      const SizedBox(
-                        width: 12,
-                      ),
-
-                      Text(
-                        'Profile',
-
-                        style:
-                        GoogleFonts.cairo(
-                          color:
-                          Colors.white,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
-                PopupMenuItem(
-                  value:
-                  'logout',
-
-                  child: Row(
-                    children: [
-
-                      const Icon(
-                        Icons.logout,
-                        color:
-                        Colors.red,
-                        size: 18,
-                      ),
-
-                      const SizedBox(
-                        width: 12,
-                      ),
-
-                      Text(
-                        'Logout',
-
-                        style:
-                        GoogleFonts.cairo(
-                          color:
-                          Colors.red,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
+              tooltip:
+              'Logout',
             ),
           ],
         ),
