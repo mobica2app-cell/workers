@@ -95,9 +95,11 @@ class MyApp extends StatelessWidget {
               );
             }
 
-            return AutoRefreshManager(
-              child: SmartZoomWrapper(
-                child: content,
+            return DevToolsGuard(
+              child: AutoRefreshManager(
+                child: SmartZoomWrapper(
+                  child: content,
+                ),
               ),
             );
           },
@@ -385,13 +387,13 @@ class EmployeeAuthService {
   }
 
   Map<String, String> get _sessionHeaders => {
-        if (sessionToken != null) 'Authorization': 'Bearer $sessionToken',
-      };
+    if (sessionToken != null) 'Authorization': 'Bearer $sessionToken',
+  };
 
   Future<Map<String, dynamic>?> _invokeAuth(
-    Map<String, dynamic> body, {
-    bool requireSession = true,
-  }) async {
+      Map<String, dynamic> body, {
+        bool requireSession = true,
+      }) async {
     try {
       final token = sessionToken;
       if (requireSession && (token == null || token.isEmpty)) return null;
@@ -411,10 +413,10 @@ class EmployeeAuthService {
   }
 
   Future<EmployeeAuth?> login(
-    String username,
-    String password, {
-    bool rememberMe = false,
-  }) async {
+      String username,
+      String password, {
+        bool rememberMe = false,
+      }) async {
     try {
       final response = await _client.functions.invoke(
         'mood-auth',
@@ -532,6 +534,131 @@ void main() async {
   );
 
   runApp(const MyApp());
+}
+
+/// Best-effort browser DevTools deterrent for Flutter Web.
+///
+/// Browser APIs do not provide a reliable way to know whether DevTools is open.
+/// This checks for the common docked-DevTools window-size difference and blocks
+/// several common keyboard shortcuts. It can produce false positives and can
+/// be bypassed, so it must not be treated as a security boundary.
+class DevToolsGuard extends StatefulWidget {
+  final Widget child;
+
+  const DevToolsGuard({super.key, required this.child});
+
+  @override
+  State<DevToolsGuard> createState() => _DevToolsGuardState();
+}
+
+class _DevToolsGuardState extends State<DevToolsGuard> {
+  Timer? _checkTimer;
+  bool _devToolsDetected = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Check immediately, then periodically because opening docked DevTools
+    // usually changes the browser's inner/outer dimensions.
+    _checkDevTools();
+    _checkTimer = Timer.periodic(
+      const Duration(milliseconds: 900),
+          (_) => _checkDevTools(),
+    );
+
+    // Best-effort blocking of common DevTools / source-view shortcuts.
+    html.window.onKeyDown.listen(_handleKeyDown);
+  }
+
+  void _checkDevTools() {
+    try {
+      final outerWidth = html.window.outerWidth;
+      final innerWidth = html.window.innerWidth;
+      final outerHeight = html.window.outerHeight;
+      final innerHeight = html.window.innerHeight;
+
+      final widthDifference = (outerWidth - innerWidth!).abs();
+      final heightDifference = (outerHeight - innerHeight!).abs();
+
+      // Thresholds reduce false positives from ordinary browser borders.
+      final detected =
+          widthDifference > 200 || heightDifference > 200;
+
+      if (mounted && detected != _devToolsDetected) {
+        setState(() => _devToolsDetected = detected);
+      }
+    } catch (_) {
+      // If browser dimensions are unavailable, do not lock out the user.
+    }
+  }
+
+  void _handleKeyDown(html.KeyboardEvent event) {
+    final key = (event.key ?? '').toLowerCase();
+    final ctrlOrMeta = event.ctrlKey || event.metaKey;
+    final shift = event.shiftKey;
+
+    final devToolsShortcut = key == 'f12' ||
+        (ctrlOrMeta && shift && <String>{'i', 'j', 'c'}.contains(key)) ||
+        (ctrlOrMeta && key == 'u');
+
+    if (devToolsShortcut) {
+      event.preventDefault();
+    }
+  }
+
+  @override
+  void dispose() {
+    _checkTimer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Keep the app mounted underneath the blocking screen.
+        widget.child,
+        if (_devToolsDetected)
+          Positioned.fill(
+            child: Material(
+              color: Theme.of(context).scaffoldBackgroundColor,
+              child: Center(
+                child: Padding(
+                  padding: const EdgeInsets.all(32),
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 480),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          Icons.lock_outline,
+                          size: 64,
+                          color: Theme.of(context).colorScheme.error,
+                        ),
+                        const SizedBox(height: 20),
+                        Text(
+                          'Developer Tools Detected',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall,
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          'Please close Developer Tools to continue using this app.',
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.bodyLarge,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
 }
 
 class AutoRefreshManager extends StatefulWidget {
