@@ -374,9 +374,11 @@ class EmployeeAuthService {
       final sessionValue = html.window.sessionStorage[_sessionTokenKey];
       if (sessionValue != null && sessionValue.isNotEmpty) return sessionValue;
       final persistentValue = html.window.localStorage[_sessionTokenKey];
-      return (persistentValue == null || persistentValue.isEmpty)
-          ? null
-          : persistentValue;
+      if (persistentValue == null || persistentValue.isEmpty) return null;
+      // Restore the persistent token into this browser session as well, so
+      // existing features that read sessionStorage continue to work.
+      html.window.sessionStorage[_sessionTokenKey] = persistentValue;
+      return persistentValue;
     } catch (_) {
       return null;
     }
@@ -416,7 +418,12 @@ class EmployeeAuthService {
     try {
       final response = await _client.functions.invoke(
         'mood-auth',
-        body: {'action': 'login', 'username': username, 'password': password},
+        body: {
+          'action': 'login',
+          'username': username,
+          'password': password,
+          'remember_me': rememberMe,
+        },
       );
       if (response.status < 200 || response.status >= 300 || response.data is! Map) {
         return null;
@@ -425,8 +432,6 @@ class EmployeeAuthService {
       final token = payload['token']?.toString();
       final employeeData = payload['employee'];
       if (token == null || token.isEmpty || employeeData is! Map) return null;
-      // Keep a token in sessionStorage for the current tab. If Remember me is
-      // enabled, also persist it across browser restarts. Never store passwords.
       html.window.sessionStorage[_sessionTokenKey] = token;
       if (rememberMe) {
         html.window.localStorage[_sessionTokenKey] = token;
@@ -680,8 +685,8 @@ class _AutoRefreshManagerState extends State<AutoRefreshManager> {
                       style: TextStyle(
                         fontSize: 14,
                         fontWeight: FontWeight.bold,
-                          color: Theme.of(context)
-                              .colorScheme
+                        color: Theme.of(context)
+                            .colorScheme
                             .onSurface,
                       ),
                     ),
