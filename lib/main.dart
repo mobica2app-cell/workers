@@ -576,7 +576,10 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
   Timer? _checkTimer;
   bool _devToolsDetected = false;
   bool _handledForCurrentOpen = false;
+  DateTime? _detectionStartedAt;
 
+  // Ignore short-lived false-positive signals during startup/rendering.
+  static const Duration _detectionGracePeriod = Duration(seconds: 3);
   static const String _reloadOnceKey = 'mood_devtools_reload_once';
 
   @override
@@ -619,20 +622,32 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
       final detected = status == 'true';
 
       if (!detected) {
+        // A positive signal must remain continuous for the grace period.
+        // Any false signal resets the timer and allows the app to continue.
+        _detectionStartedAt = null;
         _handledForCurrentOpen = false;
+
         try {
           html.window.sessionStorage.remove(_reloadOnceKey);
         } catch (_) {}
+
         if (mounted && _devToolsDetected) {
           setState(() => _devToolsDetected = false);
         }
         return;
       }
 
+      // Do not react to a brief detector signal during app startup.
+      _detectionStartedAt ??= DateTime.now();
+      if (DateTime.now().difference(_detectionStartedAt!) <
+          _detectionGracePeriod) {
+        return;
+      }
+
       if (_handledForCurrentOpen) return;
       _handledForCurrentOpen = true;
 
-      // Always revoke remembered login state once DevTools is detected.
+      // Clear remembered login only after a sustained positive signal.
       _clearRememberMeAndSession();
 
       if (!_isLoginPage) {
