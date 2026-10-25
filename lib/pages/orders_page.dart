@@ -4193,8 +4193,9 @@ class _OrdersPageState extends State<OrdersPage> {
                       if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
                         _buildEmployeeWorkDropdown(),
                         if (_isManagerRole) ...[
-                          _buildMyWorkButton(),
                           const SizedBox(width: 8),
+                          _buildMyWorkButton(),
+
                         ],
                         const SizedBox(width: 8),
                       ] else if (!widget.readOnly && _isEngineerRole) ...[
