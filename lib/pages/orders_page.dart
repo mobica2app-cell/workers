@@ -4191,11 +4191,11 @@ class _OrdersPageState extends State<OrdersPage> {
                       SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
                       if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
+                        _buildEmployeeWorkDropdown(),
                         if (_isManagerRole) ...[
                           _buildMyWorkButton(),
                           const SizedBox(width: 8),
                         ],
-                        _buildEmployeeWorkDropdown(),
                         const SizedBox(width: 8),
                       ] else if (!widget.readOnly && _isEngineerRole) ...[
                         _buildMyWorkButton(),
@@ -4257,9 +4257,9 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
               _buildSearchField(),
               _buildDesignTeamFilterButton(),
-              if (!widget.readOnly && _isManagerRole) _buildMyWorkButton(),
               if (!widget.readOnly && (_isHeadRole || _isManagerRole))
                 _buildEmployeeWorkDropdown(),
+              if (!widget.readOnly && _isManagerRole) _buildMyWorkButton(),
               if (!widget.readOnly && _isEngineerRole) _buildMyWorkButton(),
               _buildSortButton(),
               filtersButton,
