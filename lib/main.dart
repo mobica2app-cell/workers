@@ -594,14 +594,14 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
 
   // Require a continuous positive signal before refreshing. A short-lived
   // false positive blocks interaction briefly but never destroys the session.
-  static const Duration _detectionGracePeriod = Duration(seconds: 3);
+  static const Duration _detectionGracePeriod = Duration(milliseconds: 500);
   static const String _reloadOnceKey = 'mood_devtools_reload_once';
 
   @override
   void initState() {
     super.initState();
     _checkTimer = Timer.periodic(
-      const Duration(milliseconds: 400),
+      const Duration(milliseconds: 100),
       (_) => _checkDevToolsStatus(),
     );
     _checkDevToolsStatus();

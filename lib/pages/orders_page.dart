@@ -3706,9 +3706,9 @@ class _OrdersPageState extends State<OrdersPage> {
         : 'All';
 
     return SizedBox(
-      height: 38,
+      height: 50,
       child: InkWell(
-        borderRadius: BorderRadius.circular(7),
+        borderRadius: BorderRadius.circular(8),
         onTap: () => _showSearchableFilterPicker(
           label: label,
           value: value,
@@ -3719,15 +3719,15 @@ class _OrdersPageState extends State<OrdersPage> {
           decoration: InputDecoration(
             isDense: true,
             labelText: label,
-            labelStyle: GoogleFonts.cairo(fontSize: 9, height: 1),
+            labelStyle: GoogleFonts.cairo(fontSize: 10, height: 1.1),
             border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(7),
+              borderRadius: BorderRadius.circular(8),
             ),
             contentPadding: const EdgeInsets.symmetric(
               horizontal: 10,
-              vertical: 2,
+              vertical: 6,
             ),
-            constraints: const BoxConstraints.tightFor(height: 38),
+            constraints: const BoxConstraints.tightFor(height: 50),
           ),
           child: Row(
             children: [
@@ -3735,8 +3735,8 @@ class _OrdersPageState extends State<OrdersPage> {
                 child: Text(
                   displayValue,
                   style: GoogleFonts.cairo(
-                    fontSize: 11,
-                    height: 1,
+                    fontSize: 12,
+                    height: 1.1,
                     color: hasValue ? _textColor : _secondaryTextColor,
                   ),
                   overflow: TextOverflow.ellipsis,
@@ -3744,7 +3744,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
               Icon(
                 Icons.search,
-                size: 16,
+                size: 18,
                 color: hasValue
                     ? const Color(0xFF6366F1)
                     : _secondaryTextColor,
