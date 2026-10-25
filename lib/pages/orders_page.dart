@@ -521,45 +521,17 @@ class _OrdersPageState extends State<OrdersPage> {
         .toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    final selected = names.contains(_selectedWorkEmployee)
-        ? _selectedWorkEmployee
-        : null;
-
+    // Match the Design Team filter's size and searchable picker behavior.
+    // "All orders" clears the employee selection.
     return SizedBox(
-      width: 150,
-      height: 34,
-      child: DropdownButtonFormField<String>(
-        value: selected,
-        isExpanded: true,
-        isDense: true,
-        decoration: InputDecoration(
-          prefixIcon: const Icon(Icons.groups_outlined, size: 16),
-          prefixIconConstraints: const BoxConstraints(minWidth: 34),
-          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
-          filled: true,
-          fillColor: _surfaceColor,
-          enabledBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: BorderSide(color: _borderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(6),
-            borderSide: const BorderSide(color: Color(0xFF6366F1)),
-          ),
+      width: 175,
+      child: _buildToolbarFilterDropdown(
+        'All orders',
+        _selectedWorkEmployee ?? 'All orders',
+        ['All orders', ...names],
+            (value) => _selectEmployeeWork(
+          value == null || value == 'All orders' ? null : value,
         ),
-        hint: Text('Employee work', style: GoogleFonts.cairo(fontSize: 11)),
-        items: [
-          DropdownMenuItem<String>(
-            value: null,
-            child: Text('All orders', style: GoogleFonts.cairo(fontSize: 11)),
-          ),
-          ...names.map((name) => DropdownMenuItem<String>(
-            value: name,
-            child: Text(name, overflow: TextOverflow.ellipsis,
-                style: GoogleFonts.cairo(fontSize: 11)),
-          )),
-        ],
-        onChanged: _isLoading ? null : _selectEmployeeWork,
       ),
     );
   }
@@ -3733,46 +3705,52 @@ class _OrdersPageState extends State<OrdersPage> {
         : value!)
         : 'All';
 
-    return InkWell(
-      borderRadius: BorderRadius.circular(8),
-      onTap: () => _showSearchableFilterPicker(
-        label: label,
-        value: value,
-        items: items,
-        onChanged: onChanged,
-      ),
-      child: InputDecorator(
-        decoration: InputDecoration(
-          labelText: label,
-          labelStyle: GoogleFonts.cairo(fontSize: 12),
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-          ),
-          contentPadding: const EdgeInsets.symmetric(
-            horizontal: 12,
-            vertical: 10,
-          ),
+    return SizedBox(
+      height: 38,
+      child: InkWell(
+        borderRadius: BorderRadius.circular(7),
+        onTap: () => _showSearchableFilterPicker(
+          label: label,
+          value: value,
+          items: items,
+          onChanged: onChanged,
         ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Text(
-                displayValue,
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  color: hasValue ? _textColor : _secondaryTextColor,
+        child: InputDecorator(
+          decoration: InputDecoration(
+            isDense: true,
+            labelText: label,
+            labelStyle: GoogleFonts.cairo(fontSize: 9, height: 1),
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(7),
+            ),
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 2,
+            ),
+            constraints: const BoxConstraints.tightFor(height: 38),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Text(
+                  displayValue,
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    height: 1,
+                    color: hasValue ? _textColor : _secondaryTextColor,
+                  ),
+                  overflow: TextOverflow.ellipsis,
                 ),
-                overflow: TextOverflow.ellipsis,
               ),
-            ),
-            Icon(
-              Icons.search,
-              size: 17,
-              color: hasValue
-                  ? const Color(0xFF6366F1)
-                  : _secondaryTextColor,
-            ),
-          ],
+              Icon(
+                Icons.search,
+                size: 16,
+                color: hasValue
+                    ? const Color(0xFF6366F1)
+                    : _secondaryTextColor,
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -4111,7 +4089,7 @@ class _OrdersPageState extends State<OrdersPage> {
             ],
             child: Container(
               height: 38,
-              padding: const EdgeInsets.symmetric(horizontal: 12),
+              padding: const EdgeInsets.symmetric(horizontal: 10),
               decoration: BoxDecoration(
                 color: _surfaceColor,
                 border: Border.all(color: _borderColor),
@@ -4120,7 +4098,7 @@ class _OrdersPageState extends State<OrdersPage> {
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Icon(Icons.more_horiz, size: 18, color: _secondaryTextColor),
+                  Icon(Icons.more_horiz, size: 16, color: _secondaryTextColor),
                   const SizedBox(width: 6),
                   Text(
                     'Actions',
@@ -4131,7 +4109,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                   ),
                   const SizedBox(width: 4),
-                  Icon(Icons.arrow_drop_down, size: 18, color: _secondaryTextColor),
+                  Icon(Icons.arrow_drop_down, size: 16, color: _secondaryTextColor),
                 ],
               ),
             ),
@@ -4160,13 +4138,6 @@ class _OrdersPageState extends State<OrdersPage> {
                     children: [
                       _buildSearchField(anchorRight: true),
                       const SizedBox(width: 8),
-                      if (!widget.readOnly && _isHeadRole) ...[
-                        _buildEmployeeWorkDropdown(),
-                        const SizedBox(width: 8),
-                      ] else if (!widget.readOnly) ...[
-                        _buildMyWorkButton(),
-                        const SizedBox(width: 8),
-                      ],
                       if (widget.readOnly)
                         OutlinedButton.icon(
                           onPressed: () {
@@ -4185,7 +4156,9 @@ class _OrdersPageState extends State<OrdersPage> {
                             side: BorderSide(color: _borderColor),
                             backgroundColor: _surfaceColor,
                             minimumSize: const Size(0, 38),
-                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            maximumSize: const Size(double.infinity, 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                            tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                             shape: RoundedRectangleBorder(
                               borderRadius: BorderRadius.circular(7),
                             ),
@@ -4193,6 +4166,13 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                       SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
+                      if (!widget.readOnly && _isHeadRole) ...[
+                        _buildEmployeeWorkDropdown(),
+                        const SizedBox(width: 8),
+                      ] else if (!widget.readOnly) ...[
+                        _buildMyWorkButton(),
+                        const SizedBox(width: 8),
+                      ],
                       _buildSortButton(),
                       const SizedBox(width: 8),
                       filtersButton,
@@ -4203,9 +4183,11 @@ class _OrdersPageState extends State<OrdersPage> {
                         IconButton(
                           tooltip: 'Clear selection',
                           onPressed: _clearSelection,
-                          icon: const Icon(Icons.close, size: 18),
+                          icon: const Icon(Icons.close, size: 16),
                           color: _secondaryTextColor,
-                          visualDensity: VisualDensity.compact,
+                          constraints: const BoxConstraints.tightFor(width: 38, height: 38),
+                          padding: EdgeInsets.zero,
+                          visualDensity: VisualDensity.standard,
                         ),
                       ],
                     ],
@@ -4232,21 +4214,39 @@ class _OrdersPageState extends State<OrdersPage> {
                   icon: const Icon(Icons.login, size: 16),
                   label: Text('Back to Login',
                       style: GoogleFonts.cairo(fontSize: 11)),
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: _secondaryTextColor,
+                    side: BorderSide(color: _borderColor),
+                    backgroundColor: _surfaceColor,
+                    minimumSize: const Size(0, 38),
+                    maximumSize: const Size(double.infinity, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(7),
+                    ),
+                  ),
                 ),
+              _buildSearchField(),
+              _buildDesignTeamFilterButton(),
               if (!widget.readOnly && _isHeadRole)
                 _buildEmployeeWorkDropdown(),
               if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
-              _buildSearchField(),
-              _buildDesignTeamFilterButton(),
               _buildSortButton(),
               filtersButton,
               actionsMenu,
               if (_selectedRowsIds.isNotEmpty)
                 TextButton.icon(
                   onPressed: _clearSelection,
-                  icon: const Icon(Icons.close, size: 15),
+                  icon: const Icon(Icons.close, size: 16),
                   label: Text('Clear selection',
                       style: GoogleFonts.cairo(fontSize: 11)),
+                  style: TextButton.styleFrom(
+                    minimumSize: const Size(0, 38),
+                    maximumSize: const Size(double.infinity, 38),
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
                 ),
             ],
           );
@@ -4528,6 +4528,83 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  // Fixed-height toolbar dropdown used by Design Team and All orders.
+  // Avoids InputDecorator's intrinsic-height behavior shrinking these controls.
+  Widget _buildToolbarFilterDropdown(
+      String label,
+      String? value,
+      List<String> items,
+      Function(String?) onChanged,
+      ) {
+    final hasValue = value != null && value.isNotEmpty;
+    final displayValue = hasValue ? value! : 'All';
+
+    return SizedBox(
+      height: 38,
+      child: Material(
+        color: _surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(7),
+          side: BorderSide(color: _borderColor),
+        ),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showSearchableFilterPicker(
+            label: label,
+            value: value,
+            items: items,
+            onChanged: onChanged,
+          ),
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 9,
+                          height: 1,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        displayValue,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          height: 1,
+                          color: hasValue ? _textColor : _secondaryTextColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.search,
+                  size: 16,
+                  color: hasValue
+                      ? const Color(0xFF6366F1)
+                      : _secondaryTextColor,
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildDesignTeamFilterButton() {
     final designTeams = <String>{};
     for (final order in _allOrders) {
@@ -4539,7 +4616,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
     return SizedBox(
       width: 190,
-      child: _buildFilterDropdown(
+      child: _buildToolbarFilterDropdown(
         'Design Team',
         _filterDesignTeam,
         ['All', ...designTeams.toList()..sort()],
@@ -4721,27 +4798,27 @@ class _OrdersPageState extends State<OrdersPage> {
             _searchFocusNode.unfocus();
           }
         },
-        style: GoogleFonts.cairo(fontSize: 12, color: _textColor),
+        style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
         decoration: InputDecoration(
           hintText: 'Search orders...',
           hintStyle: GoogleFonts.cairo(
             color: _secondaryTextColor,
-            fontSize: 10,
+            fontSize: 11,
           ),
           prefixIcon: Icon(
             Icons.search_rounded,
             color: _secondaryTextColor,
-            size: 19,
+            size: 16,
           ),
           prefixIconConstraints: const BoxConstraints(
-            minWidth: 38,
-            minHeight: 38,
+            minWidth: 34,
+            minHeight: 34,
           ),
           suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
             tooltip: 'Clear search',
             visualDensity: VisualDensity.compact,
-            icon: const Icon(Icons.close_rounded, size: 17),
+            icon: const Icon(Icons.close_rounded, size: 16),
             onPressed: () {
               _searchController.clear();
               setState(() {
@@ -4787,7 +4864,7 @@ class _OrdersPageState extends State<OrdersPage> {
             child: Center(
               child: Icon(
                 Icons.search_rounded,
-                size: 19,
+                size: 16,
                 color: _secondaryTextColor,
               ),
             ),
@@ -4797,14 +4874,15 @@ class _OrdersPageState extends State<OrdersPage> {
     );
 
     if (anchorRight) {
-      // Give the expanded field its real layout width so the entire field
-      // remains hit-testable. Aligning it to the right makes it grow left
-      // into the available gap while keeping the controls to its right fixed.
+      // Reserve the expanded hit-test area in the layout. The parent toolbar
+      // is end-aligned, so the right-side action buttons stay in place while
+      // the search field grows to the left. Keeping this at 40px caused the
+      // visible overflow to fall outside the parent's hit-test bounds.
       return SizedBox(
         width: _searchExpanded ? expandedWidth : 40,
         height: 38,
         child: Align(
-          alignment: Alignment.centerRight,
+          alignment: AlignmentDirectional.centerEnd,
           child: searchControl,
         ),
       );
@@ -4822,7 +4900,8 @@ class _OrdersPageState extends State<OrdersPage> {
       },
       tooltip: 'Sort by',
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        height: 38,
+        padding: const EdgeInsets.symmetric(horizontal: 10),
         decoration: BoxDecoration(
           border: Border.all(color: _borderColor),
           borderRadius: BorderRadius.circular(6),
@@ -5719,8 +5798,11 @@ class _OrdersPageState extends State<OrdersPage> {
           color: const Color(0xFFE69D00),
         ),
         backgroundColor: _editMode ? const Color(0xFFE69D00) : _surfaceColor,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        minimumSize: const Size(0, 38),
+        maximumSize: const Size(double.infinity, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
       ),
     );
   }
@@ -5758,8 +5840,11 @@ class _OrdersPageState extends State<OrdersPage> {
           color: const Color(0xFF6366F1),
         ),
         backgroundColor: hasMyWork ? const Color(0xFF6366F1) : _surfaceColor,
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+        minimumSize: const Size(0, 38),
+        maximumSize: const Size(double.infinity, 38),
+        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
       ),
     );
   }
@@ -7198,8 +7283,11 @@ class _OrdersPageState extends State<OrdersPage> {
         style: OutlinedButton.styleFrom(
           foregroundColor: _secondaryTextColor,
           side: BorderSide(color: _borderColor),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
+          minimumSize: const Size(0, 38),
+          maximumSize: const Size(double.infinity, 38),
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
           backgroundColor: _surfaceColor,
         ),
       );
