@@ -266,13 +266,13 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: _backgroundColor,
       floatingActionButton: (_canUseAi && !_aiPanelVisible)
           ? FloatingActionButton.extended(
-              heroTag: 'mood_ai_desktop',
-              onPressed: _openAiAssistant,
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('MOOD AI'),
-            )
+        heroTag: 'mood_ai_desktop',
+        onPressed: _openAiAssistant,
+        backgroundColor: const Color(0xFFDC2626),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('MOOD AI'),
+      )
           : null,
       body: _withAiOverlay(Row(
         children: [
@@ -281,91 +281,101 @@ class _MainShellState extends State<MainShell> {
           // SIDEBAR
           // ====================================================
 
-          AnimatedContainer(
-            duration:
-            const Duration(milliseconds: 300),
-            curve: Curves.easeInOut,
+          Padding(
+            padding: const EdgeInsets.fromLTRB(10, 10, 0, 10),
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 300),
+              curve: Curves.easeInOut,
+              width: _isCollapsed ? 80 : 240,
+              decoration: BoxDecoration(
+                color: const Color(0xFF08090C),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: Colors.white.withOpacity(0.07),
+                  width: 1,
+                ),
+                boxShadow: [
+                  BoxShadow(
+                    color: Colors.black.withOpacity(0.16),
+                    blurRadius: 24,
+                    offset: const Offset(0, 8),
+                  ),
+                ],
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                children: [
 
-            width:
-            _isCollapsed
-                ? 80
-                : 240,
+                  // ==============================================
+                  // HEADER
+                  // ==============================================
 
-            color:
-            const Color(0xFF000000),
+                  _buildSidebarHeader(),
 
-            child: Column(
-              children: [
+                  const SizedBox(height: 16),
 
-                // ==============================================
-                // HEADER
-                // ==============================================
+                  // ==============================================
+                  // NAVIGATION
+                  // ==============================================
 
-                _buildSidebarHeader(),
+                  Expanded(
+                    child: ListView(
+                      padding:
+                      const EdgeInsets.symmetric(
+                        vertical: 8,
+                      ),
 
-                const SizedBox(height: 16),
+                      children:
+                      _navItems
+                          .asMap()
+                          .entries
+                          .map(
+                            (entry) {
+                          final itemIndex =
+                              entry.key;
 
-                // ==============================================
-                // NAVIGATION
-                // ==============================================
+                          final item =
+                              entry.value;
 
-                Expanded(
-                  child: ListView(
-                    padding:
-                    const EdgeInsets.symmetric(
-                      vertical: 8,
+                          return _buildNavItem(
+                            item,
+
+                            isSelected:
+                            itemIndex ==
+                                _selectedIndex,
+
+                            onTap: () {
+                              setState(() {
+                                _selectedIndex =
+                                    itemIndex;
+                              });
+                            },
+                          );
+                        },
+                      )
+                          .toList(),
+                    ),
+                  ),
+
+                  // ==============================================
+                  // CELEBRATION BANNER
+                  // ==============================================
+
+                  /*_buildCelebrationBanner(),*/
+
+                  // ==============================================
+                  // USER
+                  // ==============================================
+
+                  if (widget.loggedInEmployee != null) ...[
+                    const Divider(
+                      color: Colors.white10,
                     ),
 
-                    children:
-                    _navItems
-                        .asMap()
-                        .entries
-                        .map(
-                          (entry) {
-                        final itemIndex =
-                            entry.key;
-
-                        final item =
-                            entry.value;
-
-                        return _buildNavItem(
-                          item,
-
-                          isSelected:
-                          itemIndex ==
-                              _selectedIndex,
-
-                          onTap: () {
-                            setState(() {
-                              _selectedIndex =
-                                  itemIndex;
-                            });
-                          },
-                        );
-                      },
-                    )
-                        .toList(),
-                  ),
-                ),
-
-                // ==============================================
-                // CELEBRATION BANNER
-                // ==============================================
-
-                /*_buildCelebrationBanner(),*/
-
-                // ==============================================
-                // USER
-                // ==============================================
-
-                if (widget.loggedInEmployee != null) ...[
-                  const Divider(
-                    color: Colors.white10,
-                  ),
-
-                  _buildUserSection(),
+                    _buildUserSection(),
+                  ],
                 ],
-              ],
+              ),
             ),
           ),
 
@@ -374,7 +384,29 @@ class _MainShellState extends State<MainShell> {
           // ====================================================
 
           Expanded(
-            child: _buildPage(),
+            child: Padding(
+              padding: const EdgeInsets.all(10),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(22),
+                child: DecoratedBox(
+                  decoration: BoxDecoration(
+                    color: _surfaceColor,
+                    border: Border.all(
+                      color: _borderColor.withOpacity(0.75),
+                    ),
+                    borderRadius: BorderRadius.circular(22),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withOpacity(_isDark ? 0.20 : 0.04),
+                        blurRadius: 24,
+                        offset: const Offset(0, 6),
+                      ),
+                    ],
+                  ),
+                  child: _buildPage(),
+                ),
+              ),
+            ),
           ),
         ],
       )),
@@ -395,13 +427,13 @@ class _MainShellState extends State<MainShell> {
       backgroundColor: _backgroundColor,
       floatingActionButton: (_canUseAi && !_aiPanelVisible)
           ? FloatingActionButton.extended(
-              heroTag: 'mood_ai_mobile',
-              onPressed: _openAiAssistant,
-              backgroundColor: const Color(0xFFDC2626),
-              foregroundColor: Colors.white,
-              icon: const Icon(Icons.auto_awesome),
-              label: const Text('MOOD AI'),
-            )
+        heroTag: 'mood_ai_mobile',
+        onPressed: _openAiAssistant,
+        backgroundColor: const Color(0xFFDC2626),
+        foregroundColor: Colors.white,
+        icon: const Icon(Icons.auto_awesome),
+        label: const Text('MOOD AI'),
+      )
           : null,
 
       // ========================================================
@@ -719,7 +751,7 @@ class _MainShellState extends State<MainShell> {
 
         borderRadius:
         BorderRadius.circular(
-          10,
+          14,
         ),
 
         child: InkWell(
@@ -727,7 +759,7 @@ class _MainShellState extends State<MainShell> {
 
           borderRadius:
           BorderRadius.circular(
-            10,
+            14,
           ),
 
           hoverColor:
@@ -756,33 +788,17 @@ class _MainShellState extends State<MainShell> {
               vertical: 12,
             ),
 
-            decoration:
-            BoxDecoration(
-              color:
-              isSelected
-                  ? const Color(
-                0xFF131B2E,
-              )
+            decoration: BoxDecoration(
+              color: isSelected
+                  ? const Color(0xFFDC2626).withOpacity(0.14)
                   : Colors.transparent,
-
-              borderRadius:
-              BorderRadius.circular(
-                10,
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: isSelected
+                    ? const Color(0xFFDC2626).withOpacity(0.30)
+                    : Colors.transparent,
+                width: 1,
               ),
-
-              border:
-              isSelected
-                  ? const Border(
-                left:
-                BorderSide(
-                  color:
-                  Color(
-                    0xFFB7C8E1,
-                  ),
-                  width: 4,
-                ),
-              )
-                  : null,
             ),
 
             child:
@@ -800,8 +816,8 @@ class _MainShellState extends State<MainShell> {
 
                 color:
                 isSelected
-                    ? Colors.white
-                    : Colors.white54,
+                    ? const Color(0xFFFF6B6B)
+                    : Colors.white60,
 
                 size: 22,
               ),

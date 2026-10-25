@@ -15,6 +15,18 @@ import 'services/sap_service.dart';
 final GlobalKey<NavigatorState> navigatorKey = GlobalKey<NavigatorState>();
 final DevToolsRouteObserver devToolsRouteObserver = DevToolsRouteObserver();
 
+/// Shared state so LoginPage never restores/navigates into MainShell while the
+/// browser detector currently reports DevTools as open.
+final ValueNotifier<bool> devToolsBlockNotifier = ValueNotifier<bool>(false);
+
+bool get devToolsCurrentlyDetected {
+  try {
+    return html.document.documentElement?.getAttribute('data-devtools-open') == 'true';
+  } catch (_) {
+    return false;
+  }
+}
+
 class DevToolsRouteObserver extends NavigatorObserver {
   String? currentRouteName;
 
@@ -577,8 +589,11 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
   bool _devToolsDetected = false;
   bool _handledForCurrentOpen = false;
   DateTime? _detectionStartedAt;
+  DateTime? _closedSignalStartedAt;
+  bool _hasObservedPositiveSignal = false;
 
-  // Ignore short-lived false-positive signals during startup/rendering.
+  // Require a continuous positive signal before refreshing. A short-lived
+  // false positive blocks interaction briefly but never destroys the session.
   static const Duration _detectionGracePeriod = Duration(seconds: 3);
   static const String _reloadOnceKey = 'mood_devtools_reload_once';
 
@@ -586,89 +601,66 @@ class _DevToolsGuardState extends State<DevToolsGuard> {
   void initState() {
     super.initState();
     _checkTimer = Timer.periodic(
-      const Duration(milliseconds: 500),
-          (_) => _checkDevToolsStatus(),
+      const Duration(milliseconds: 400),
+      (_) => _checkDevToolsStatus(),
     );
     _checkDevToolsStatus();
   }
 
-  void _clearRememberMeAndSession() {
-    try {
-      // Clear the Remember Me preference and any saved identity/token.
-      html.window.localStorage.remove('remember_me_enabled');
-      html.window.localStorage.remove('remembered_username');
-      html.window.localStorage.remove('remembered_employee_id');
-      html.window.localStorage.remove('remembered_password');
-      html.window.localStorage.remove('mood_session_token');
-
-      // Also remove the active tab's token so a refresh returns to login.
-      html.window.sessionStorage.remove('mood_session_token');
-    } catch (_) {
-      // Continue safely if browser storage is unavailable.
-    }
-  }
-
-  bool get _isLoginPage {
-    final routeName = devToolsRouteObserver.currentRouteName;
-    // MaterialApp's home route is '/'.
-    // MainShell routes are explicitly named '/main'.
-    return routeName != '/main';
-  }
-
   void _checkDevToolsStatus() {
     try {
-      final status = html.document.documentElement
-          ?.getAttribute('data-devtools-open');
-      final detected = status == 'true';
+      final detected = devToolsCurrentlyDetected;
+      devToolsBlockNotifier.value = detected;
 
       if (!detected) {
-        // A positive signal must remain continuous for the grace period.
-        // Any false signal resets the timer and allows the app to continue.
         _detectionStartedAt = null;
         _handledForCurrentOpen = false;
-
-        try {
-          html.window.sessionStorage.remove(_reloadOnceKey);
-        } catch (_) {}
+        _closedSignalStartedAt ??= DateTime.now();
 
         if (mounted && _devToolsDetected) {
           setState(() => _devToolsDetected = false);
         }
+
+        // Keep the one-reload guard through brief startup gaps after refresh.
+        if (_hasObservedPositiveSignal &&
+            DateTime.now().difference(_closedSignalStartedAt!) >=
+                _detectionGracePeriod) {
+          try {
+            html.window.sessionStorage.remove(_reloadOnceKey);
+          } catch (_) {}
+          _hasObservedPositiveSignal = false;
+        }
         return;
       }
 
-      // Do not react to a brief detector signal during app startup.
+      _closedSignalStartedAt = null;
+      _hasObservedPositiveSignal = true;
+      // Lock immediately while the signal is positive; do not wait with the
+      // protected screen interactive during the detector grace period.
+      if (mounted && !_devToolsDetected) {
+        setState(() => _devToolsDetected = true);
+      }
+
       _detectionStartedAt ??= DateTime.now();
       if (DateTime.now().difference(_detectionStartedAt!) <
           _detectionGracePeriod) {
         return;
       }
-
       if (_handledForCurrentOpen) return;
       _handledForCurrentOpen = true;
 
-      // Clear remembered login only after a sustained positive signal.
-      _clearRememberMeAndSession();
-
-      if (!_isLoginPage) {
-        // On any page other than LoginPage, refresh so the cleared session
-        // sends the user back to login. The session flag prevents reload loops.
-        try {
-          final alreadyReloaded =
-              html.window.sessionStorage[_reloadOnceKey] == 'true';
-          if (!alreadyReloaded) {
-            html.window.sessionStorage[_reloadOnceKey] = 'true';
-            html.window.location.reload();
-          } else if (mounted) {
-            setState(() => _devToolsDetected = true);
-          }
-        } catch (_) {
-          // If storage is blocked, show the blocker rather than reload forever.
-          if (mounted) setState(() => _devToolsDetected = true);
+      // Refresh once when the signal persists, but preserve all login/session
+      // storage. After refresh, the guard will keep the lock visible if DevTools
+      // is still open. LoginPage itself prevents auto-restoring MainShell then.
+      try {
+        final alreadyReloaded =
+            html.window.sessionStorage[_reloadOnceKey] == 'true';
+        if (!alreadyReloaded) {
+          html.window.sessionStorage[_reloadOnceKey] = 'true';
+          html.window.location.reload();
         }
-      } else if (mounted) {
-        // On LoginPage, block the screen but do not keep refreshing.
-        setState(() => _devToolsDetected = true);
+      } catch (_) {
+        // Storage may be unavailable; the visible lock remains in place.
       }
     } catch (_) {
       // If detector/browser APIs are unavailable, keep the app usable.

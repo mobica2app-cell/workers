@@ -56,6 +56,8 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _doneOrdersLoaded = false;
   bool _isLoading = false;
   String _searchQuery = '';
+  bool _searchExpanded = false;
+  final FocusNode _searchFocusNode = FocusNode();
   String? _filterDesignTeam;
   bool _filterMyWork = false;
   String? _selectedWorkEmployee; // Head-only employee work selector
@@ -505,6 +507,8 @@ class _OrdersPageState extends State<OrdersPage> {
       _filterCorrespondenceEngineer = null;
       _searchQuery = '';
       _searchController.clear();
+      _searchExpanded = false;
+      _searchFocusNode.unfocus();
       _rebuildGroups();
     });
   }
@@ -691,6 +695,7 @@ class _OrdersPageState extends State<OrdersPage> {
     _leftVerticalScrollController.dispose();
     _rightVerticalScrollController.dispose();
     _searchController.dispose();
+    _searchFocusNode.dispose();
     for (final timer in _inlineSaveTimers.values) {
       timer.cancel();
     }
@@ -3969,8 +3974,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildHeaderRow(),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 8),
                     if (_selectedRowsIds.isNotEmpty) _buildSelectionToolbar(),
                     Expanded(
                       child: Column(
@@ -3996,157 +4000,250 @@ class _OrdersPageState extends State<OrdersPage> {
             widget.loggedInEmployee?.role?.toLowerCase() == 'software head' ||
             widget.loggedInEmployee?.role?.toLowerCase() == 'head';
 
+    // One full-width toolbar: the search field takes all remaining space.
     return Container(
-      height: 64,
-      padding: const EdgeInsets.symmetric(horizontal: 20),
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
       decoration: BoxDecoration(
         color: _backgroundColor,
         border: Border(bottom: BorderSide(color: _borderColor)),
       ),
-      child: Row(
-        children: [
-          SelectableText(
-            widget.doneOrdersOnly ? 'SAP Done Orders' : 'Orders',
-            style: GoogleFonts.cairo(
-              fontSize: 24,
-              fontWeight: FontWeight.w600,
-              color: _textColor,
+      child: LayoutBuilder(
+        builder: (context, constraints) {
+          final isWide = constraints.maxWidth >= 1050;
+
+          final title = SizedBox(
+            width: isWide ? 135 : 190,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  widget.doneOrdersOnly ? 'SAP Done Orders' : 'Orders',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.cairo(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                ),
+                Text(
+                  '${_allOrders.length} records${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}',
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    color: _secondaryTextColor,
+                  ),
+                ),
+              ],
             ),
-          ),
-          if (widget.readOnly) ...[
-            const SizedBox(width: 12),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+          );
+
+          final actionsMenu = PopupMenuButton<String>(
+            tooltip: 'More actions',
+            color: _surfaceColor,
+            onSelected: (action) {
+              switch (action) {
+                case 'arrange':
+                  _showStatusArrangementDialog();
+                  break;
+                case 'edit':
+                  setState(() => _editMode = !_editMode);
+                  break;
+                case 'add_task':
+                  _showAddTaskDialog();
+                  break;
+                case 'factories':
+                  _showFactorySearchDialog();
+                  break;
+                case 'employees':
+                  _navigateToEmployeeManagement();
+                  break;
+                case 'import':
+                  _showImportDialog();
+                  break;
+                case 'export_excel':
+                  if (_allOrders.isNotEmpty) {
+                    _saveOrders(_allOrders, 'Orders');
+                  }
+                  break;
+              }
+            },
+            itemBuilder: (context) => [
+              PopupMenuItem(
+                value: 'arrange',
+                child: _menuAction(Icons.swap_vert, 'Arrange'),
+              ),
+              if (!widget.readOnly)
+                PopupMenuItem(
+                  value: 'edit',
+                  child: _menuAction(
+                    _editMode ? Icons.edit_off : Icons.edit_outlined,
+                    _editMode ? 'Edit Mode (ON)' : 'Edit Mode',
+                    color: const Color(0xFFE69D00),
+                  ),
+                ),
+              if (!widget.readOnly)
+                PopupMenuItem(
+                  value: 'add_task',
+                  child: _menuAction(Icons.add_task, 'Add Task'),
+                ),
+              PopupMenuItem(
+                value: 'factories',
+                child: _menuAction(Icons.factory_outlined, 'Factories'),
+              ),
+              if (isAdmin)
+                PopupMenuItem(
+                  value: 'employees',
+                  child: _menuAction(Icons.people_outline, 'Employee Management'),
+                ),
+              if (!widget.readOnly && _canImportDelete)
+                PopupMenuItem(
+                  value: 'import',
+                  child: _menuAction(Icons.upload_file, 'Import Excel'),
+                ),
+              PopupMenuItem(
+                value: 'export_excel',
+                child: _menuAction(Icons.download, 'Export Excel'),
+              ),
+            ],
+            child: Container(
+              height: 38,
+              padding: const EdgeInsets.symmetric(horizontal: 12),
               decoration: BoxDecoration(
-                color: const Color(0xFF60A5FA).withOpacity(0.14),
-                borderRadius: BorderRadius.circular(20),
-                border: Border.all(color: const Color(0xFF60A5FA).withOpacity(0.45)),
+                color: _surfaceColor,
+                border: Border.all(color: _borderColor),
+                borderRadius: BorderRadius.circular(7),
               ),
-              child: Text(
-                'VIEW ONLY',
-                style: GoogleFonts.cairo(
-                  fontSize: 10,
-                  fontWeight: FontWeight.w700,
-                  color: const Color(0xFF60A5FA),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Icon(Icons.more_horiz, size: 18, color: _secondaryTextColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    'Actions',
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      color: _textColor,
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(Icons.arrow_drop_down, size: 18, color: _secondaryTextColor),
+                ],
+              ),
+            ),
+          );
+
+          final filtersButton =
+          _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog);
+
+          if (isWide) {
+            return Row(
+              children: [
+                title,
+                const SizedBox(width: 12),
+                if (widget.readOnly)
+                  OutlinedButton.icon(
+                    onPressed: () {
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const LoginPage()),
+                            (route) => false,
+                      );
+                    },
+                    icon: const Icon(Icons.login, size: 16),
+                    label: Text('Back to Login',
+                        style: GoogleFonts.cairo(fontSize: 11)),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: _secondaryTextColor,
+                      side: BorderSide(color: _borderColor),
+                      backgroundColor: _surfaceColor,
+                      minimumSize: const Size(0, 38),
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(7),
+                      ),
+                    ),
+                  ),
+                if (!widget.readOnly && _isHeadRole) ...[
+                  _buildEmployeeWorkDropdown(),
+                  const SizedBox(width: 8),
+                ] else if (!widget.readOnly) ...[
+                  _buildMyWorkButton(),
+                  const SizedBox(width: 8),
+                ],
+                _buildSearchField(),
+                const SizedBox(width: 8),
+                SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
+                const SizedBox(width: 8),
+                _buildSortButton(),
+                const SizedBox(width: 8),
+                filtersButton,
+                const SizedBox(width: 8),
+                actionsMenu,
+                if (_selectedRowsIds.isNotEmpty) ...[
+                  const SizedBox(width: 4),
+                  IconButton(
+                    tooltip: 'Clear selection',
+                    onPressed: _clearSelection,
+                    icon: const Icon(Icons.close, size: 18),
+                    color: _secondaryTextColor,
+                    visualDensity: VisualDensity.compact,
+                  ),
+                ],
+              ],
+            );
+          }
+
+          return Wrap(
+            crossAxisAlignment: WrapCrossAlignment.center,
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              title,
+              if (widget.readOnly)
+                OutlinedButton.icon(
+                  onPressed: () {
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const LoginPage()),
+                          (route) => false,
+                    );
+                  },
+                  icon: const Icon(Icons.login, size: 16),
+                  label: Text('Back to Login',
+                      style: GoogleFonts.cairo(fontSize: 11)),
                 ),
-              ),
-            ),
-          ],
-          if (_selectedRowsIds.isNotEmpty) ...[
-            const SizedBox(width: 16),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-              decoration: BoxDecoration(
-                color: const Color(0xFFE69D00).withOpacity(0.15),
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Text(
-                '${_selectedRowsIds.length} selected',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  fontWeight: FontWeight.w600,
-                  color: const Color(0xFFE69D00),
+              if (!widget.readOnly && _isHeadRole)
+                _buildEmployeeWorkDropdown(),
+              if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
+              _buildSearchField(),
+              _buildDesignTeamFilterButton(),
+              _buildSortButton(),
+              filtersButton,
+              actionsMenu,
+              if (_selectedRowsIds.isNotEmpty)
+                TextButton.icon(
+                  onPressed: _clearSelection,
+                  icon: const Icon(Icons.close, size: 15),
+                  label: Text('Clear selection',
+                      style: GoogleFonts.cairo(fontSize: 11)),
                 ),
-              ),
-            ),
-            TextButton(
-              onPressed: _clearSelection,
-              child: Text(
-                'Clear',
-                style: GoogleFonts.cairo(
-                  fontSize: 13,
-                  color: _secondaryTextColor,
-                ),
-              ),
-            ),
-          ],
-          const Spacer(),
-          if (widget.readOnly) ...[
-            OutlinedButton.icon(
-              onPressed: () {
-                Navigator.of(context).pushAndRemoveUntil(
-                  MaterialPageRoute(builder: (_) => const LoginPage()),
-                      (route) => false,
-                );
-              },
-              icon: const Icon(Icons.login, size: 16),
-              label: Text(
-                'Back to Login',
-                style: GoogleFonts.cairo(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: _textColor,
-                side: BorderSide(color: _borderColor),
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(6),
-                ),
-              ),
-            ),
-            const SizedBox(width: 8),
-          ],
-          // Heads can inspect any employee's assigned work; other users keep My Work.
-          if (!widget.readOnly && _isHeadRole) _buildEmployeeWorkDropdown(),
-          if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
-          if (!widget.readOnly) const SizedBox(width: 8),
-          // Editing controls are hidden for guest viewers.
-          if (!widget.readOnly) _buildEditModeButton(),
-
-          if (!widget.readOnly) const SizedBox(width: 8),
-
-          if (!widget.readOnly) OutlinedButton.icon(
-            onPressed: _showAddTaskDialog,
-            icon: const Icon(Icons.add_task, size: 16),
-            label: Text(
-              'Add Task',
-              style: GoogleFonts.cairo(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFDD4BFF),
-              side: const BorderSide(color: Color(0xFFDD4BFF)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(6),
-              ),
-              backgroundColor: _surfaceColor,
-            ),
-          ),
-
-          const SizedBox(width: 8),
-
-          OutlinedButton.icon(
-            onPressed: _showStatusArrangementDialog,
-            icon: const Icon(Icons.swap_vert, size: 16),
-            label: Text(
-              'Arrange',
-              style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
-            ),
-            style: OutlinedButton.styleFrom(
-              foregroundColor: const Color(0xFFD97706),
-              side: const BorderSide(color: Color(0xFFD97706)),
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-              backgroundColor: _surfaceColor,
-            ),
-          ),
-          const SizedBox(width: 8),
-
-          // Factory/SLoc search - directly to the left of Employee Management.
-          _buildIconBtn(Icons.factory_outlined, _showFactorySearchDialog),
-          const SizedBox(width: 4),
-
-          // Only show people icon for admin/head users
-          if (isAdmin)
-            _buildIconBtn(Icons.people_outline, _navigateToEmployeeManagement),
-          const SizedBox(width: 8),
-        ],
+            ],
+          );
+        },
       ),
+    );
+  }
+
+  Widget _menuAction(IconData icon, String label, {Color? color}) {
+    return Row(
+      children: [
+        Icon(icon, size: 18, color: color ?? _secondaryTextColor),
+        const SizedBox(width: 10),
+        Text(label, style: GoogleFonts.cairo(fontSize: 12, color: color ?? _textColor)),
+      ],
     );
   }
 
@@ -4456,10 +4553,6 @@ class _OrdersPageState extends State<OrdersPage> {
               const SizedBox(width: 12),
               _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
               const SizedBox(width: 8),
-              _buildActionBtn(Icons.download, 'Export', () async {
-                if (_allOrders.isNotEmpty)
-                  await _saveOrders(_allOrders, 'Orders');
-              }),
               const SizedBox(width: 8),
               // Only show Import for admin or abd.elmoen
               if (_canImportDelete) ...[
@@ -4486,10 +4579,6 @@ class _OrdersPageState extends State<OrdersPage> {
                     'Filters',
                     _showFilterDialog,
                   ),
-                  _buildActionBtn(Icons.download, 'Export', () async {
-                    if (_allOrders.isNotEmpty)
-                      await _saveOrders(_allOrders, 'Orders');
-                  }),
                   // Only show Import for admin or abd.elmoen
                   if (_canImportDelete) _buildImportButton(),
                 ],
@@ -4556,47 +4645,134 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  // Search field
+  // Compact search icon that expands on demand and collapses when cleared.
   Widget _buildSearchField() {
-    return SizedBox(
-      width: 260,
-      child: TextField(
+    final screenWidth = MediaQuery.of(context).size.width;
+    final expandedWidth = screenWidth < 700
+        ? (screenWidth - 40).clamp(180.0, 360.0).toDouble()
+        : 300.0;
+
+    void expandAndFocus() {
+      setState(() => _searchExpanded = true);
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && _searchExpanded) {
+          _searchFocusNode.requestFocus();
+        }
+      });
+    }
+
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 240),
+      curve: Curves.easeOutCubic,
+      width: _searchExpanded ? expandedWidth : 40,
+      height: 38,
+      decoration: BoxDecoration(
+        color: _surfaceColor,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: _searchExpanded && _searchFocusNode.hasFocus
+              ? const Color(0xFF6366F1)
+              : _borderColor,
+        ),
+        boxShadow: _searchExpanded && _searchFocusNode.hasFocus
+            ? [
+          BoxShadow(
+            color: const Color(0xFF6366F1).withOpacity(0.10),
+            blurRadius: 10,
+            spreadRadius: 1,
+          ),
+        ]
+            : null,
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: _searchExpanded
+          ? TextField(
         controller: _searchController,
-        onChanged: (v) {
-          _searchQuery = v;
+        focusNode: _searchFocusNode,
+        autofocus: true,
+        onChanged: (value) {
+          final hadQuery = _searchQuery.trim().isNotEmpty;
+          setState(() {
+            _searchQuery = value;
+            if (value.trim().isEmpty && hadQuery) {
+              _searchExpanded = false;
+            }
+          });
           _rebuildGroups();
+          if (value.trim().isEmpty && hadQuery) {
+            _searchFocusNode.unfocus();
+          }
         },
-        style: GoogleFonts.cairo(fontSize: 14, color: _textColor),
+        style: GoogleFonts.cairo(fontSize: 12, color: _textColor),
         decoration: InputDecoration(
-          hintText: 'Search by contract, name, design order', // Updated hint
+          hintText: 'Search orders...',
           hintStyle: GoogleFonts.cairo(
             color: _secondaryTextColor,
             fontSize: 10,
           ),
-          prefixIcon: Icon(Icons.search, color: _secondaryTextColor, size: 20),
-          suffixIcon: _searchQuery.isNotEmpty
+          prefixIcon: Icon(
+            Icons.search_rounded,
+            color: _secondaryTextColor,
+            size: 19,
+          ),
+          prefixIconConstraints: const BoxConstraints(
+            minWidth: 38,
+            minHeight: 38,
+          ),
+          suffixIcon: _searchController.text.isNotEmpty
               ? IconButton(
-            icon: const Icon(Icons.clear, size: 18),
+            tooltip: 'Clear search',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 17),
             onPressed: () {
               _searchController.clear();
-              _searchQuery = '';
+              setState(() {
+                _searchQuery = '';
+                _searchExpanded = false;
+              });
+              _searchFocusNode.unfocus();
               _rebuildGroups();
             },
           )
-              : null,
+              : IconButton(
+            tooltip: 'Close search',
+            visualDensity: VisualDensity.compact,
+            icon: const Icon(Icons.close_rounded, size: 16),
+            onPressed: () {
+              _searchController.clear();
+              setState(() {
+                _searchQuery = '';
+                _searchExpanded = false;
+              });
+              _searchFocusNode.unfocus();
+              _rebuildGroups();
+            },
+          ),
           filled: true,
-          fillColor: _surfaceColor,
-          border: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: BorderSide(color: _borderColor),
-          ),
-          focusedBorder: OutlineInputBorder(
-            borderRadius: BorderRadius.circular(8),
-            borderSide: const BorderSide(color: Color(0xFF6366F1)),
-          ),
+          fillColor: Colors.transparent,
+          border: InputBorder.none,
+          enabledBorder: InputBorder.none,
+          focusedBorder: InputBorder.none,
           contentPadding: const EdgeInsets.symmetric(
-            horizontal: 16,
+            horizontal: 4,
             vertical: 10,
+          ),
+        ),
+      )
+          : Material(
+        color: Colors.transparent,
+        child: InkWell(
+          onTap: expandAndFocus,
+          borderRadius: BorderRadius.circular(10),
+          child: Tooltip(
+            message: 'Search orders',
+            child: Center(
+              child: Icon(
+                Icons.search_rounded,
+                size: 19,
+                color: _secondaryTextColor,
+              ),
+            ),
           ),
         ),
       ),

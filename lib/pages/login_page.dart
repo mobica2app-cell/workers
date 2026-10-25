@@ -23,6 +23,7 @@ class _LoginPageState extends State<LoginPage> {
   bool _obscurePassword = true;
   String? _errorMessage;
   bool _rememberMe = false;
+  bool _restoreInProgress = false;
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -37,14 +38,24 @@ class _LoginPageState extends State<LoginPage> {
     super.initState();
     _authService = EmployeeAuthService(_supabase);
     _loadSavedCredentials();
+    devToolsBlockNotifier.addListener(_onDevToolsBlockChanged);
     _restoreRememberedSession();
   }
 
   @override
   void dispose() {
+    devToolsBlockNotifier.removeListener(_onDevToolsBlockChanged);
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
+  }
+
+  void _onDevToolsBlockChanged() {
+    if (!devToolsBlockNotifier.value && mounted) {
+      // When the detector confirms DevTools has closed, resume Remember Me
+      // restoration automatically without requiring a manual login.
+      _restoreRememberedSession();
+    }
   }
 
   void _loadSavedCredentials() {
@@ -82,20 +93,32 @@ class _LoginPageState extends State<LoginPage> {
   }
 
   Future<void> _restoreRememberedSession() async {
+    if (_restoreInProgress || devToolsBlockNotifier.value || devToolsCurrentlyDetected) {
+      return;
+    }
+
     try {
       if (html.window.localStorage['remember_me_enabled'] != 'true') return;
       final employeeId = html.window.localStorage['remembered_employee_id'];
       final token = html.window.localStorage['mood_session_token'];
       if (employeeId == null || employeeId.isEmpty || token == null || token.isEmpty) {
+        // Do not clear anything if DevTools became active while checking state.
+        if (devToolsBlockNotifier.value || devToolsCurrentlyDetected) return;
         _authService.clearSession();
         return;
       }
 
+      _restoreInProgress = true;
       if (mounted) setState(() => _isLoading = true);
-      // Ask the server to resolve the employee using the saved session token.
-      // This avoids trusting a locally cached employee profile after token expiry.
       final employee = await _authService.getEmployeeById(employeeId);
       if (!mounted) return;
+
+      // If DevTools opened during the request, preserve the token and wait for
+      // the guard's close notification to retry restoration.
+      if (devToolsBlockNotifier.value || devToolsCurrentlyDetected) {
+        setState(() => _isLoading = false);
+        return;
+      }
       if (employee == null || !employee.isActive) {
         _authService.clearSession();
         setState(() => _isLoading = false);
@@ -104,12 +127,20 @@ class _LoginPageState extends State<LoginPage> {
       _openMainShell(employee);
     } catch (e) {
       print('Could not restore remembered session: $e');
-      _authService.clearSession();
-      if (mounted) setState(() => _isLoading = false);
+      // Avoid wiping Remember Me on transient errors or while DevTools is open.
+      if (!devToolsBlockNotifier.value && !devToolsCurrentlyDetected) {
+        setState(() => _isLoading = false);
+      }
+    } finally {
+      _restoreInProgress = false;
     }
   }
 
   void _openMainShell(EmployeeAuth employee) {
+    if (devToolsBlockNotifier.value || devToolsCurrentlyDetected) {
+      if (mounted) setState(() => _isLoading = false);
+      return;
+    }
     _setLoggedInEmployee(employee);
     final sapService = SAPMainService(_supabase);
     Navigator.pushReplacement(
@@ -152,6 +183,10 @@ class _LoginPageState extends State<LoginPage> {
       if (employee != null && mounted) {
         _saveRememberMe(username, employee);
         if (!mounted) return;
+        if (devToolsBlockNotifier.value || devToolsCurrentlyDetected) {
+          setState(() => _isLoading = false);
+          return;
+        }
         _openMainShell(employee);
       } else {
         setState(() {
