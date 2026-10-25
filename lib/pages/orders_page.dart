@@ -3963,32 +3963,338 @@ class _OrdersPageState extends State<OrdersPage> {
         const SingleActivator(LogicalKeyboardKey.escape): _clearSelection,
       },
       child: Focus(
+        child: LayoutBuilder(
+          builder: (context, constraints) {
+            // Mobile gets a purpose-built card interface; desktop keeps the
+            // existing data-dense table and its full toolbar.
+            if (constraints.maxWidth < 700) {
+              return _buildMobileOrdersPage();
+            }
+            return Column(
+              children: [
+                _buildTopBar(),
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.all(18),
+                    color: _backgroundColor,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 8),
+                        if (_selectedRowsIds.isNotEmpty) _buildSelectionToolbar(),
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Expanded(child: _buildTableContainer()),
+                              const SizedBox(height: 10),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileOrdersPage() {
+    final primary = Theme.of(context).colorScheme.primary;
+    final isAdmin = _isAdmin;
+    return ColoredBox(
+      color: _backgroundColor,
+      child: SafeArea(
         child: Column(
           children: [
-            _buildTopBar(),
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.all(18),
-                color: _backgroundColor,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    const SizedBox(height: 8),
-                    if (_selectedRowsIds.isNotEmpty) _buildSelectionToolbar(),
-                    Expanded(
-                      child: Column(
-                        children: [
-                          Expanded(child: _buildTableContainer()),
-                          const SizedBox(height: 10),
-                        ],
-                      ),
+            // App-like compact header with quick actions and live search.
+            Container(
+              padding: const EdgeInsets.fromLTRB(16, 12, 12, 12),
+              decoration: BoxDecoration(
+                color: _surfaceColor,
+                border: Border(bottom: BorderSide(color: _borderColor)),
+              ),
+              child: Column(
+                children: [
+                  Row(children: [
+                    Container(
+                      width: 42, height: 42,
+                      decoration: BoxDecoration(color: primary.withOpacity(.12), borderRadius: BorderRadius.circular(14)),
+                      child: Icon(Icons.receipt_long_rounded, color: primary),
                     ),
-                  ],
-                ),
+                    const SizedBox(width: 12),
+                    Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                      Text(widget.doneOrdersOnly ? 'Done Orders' : 'Orders', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w800, color: _textColor)),
+                      Text('${_getFilteredOrders().length} orders${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}', style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+                    ])),
+                    if (!widget.readOnly)
+                      IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary)),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: _textColor),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'edit': setState(() => _editMode = !_editMode); break;
+                          case 'arrange': _showStatusArrangementDialog(); break;
+                          case 'factories': _showFactorySearchDialog(); break;
+                          case 'employees': _navigateToEmployeeManagement(); break;
+                          case 'import': _showImportDialog(); break;
+                          case 'export': if (_allOrders.isNotEmpty) _saveOrders(_allOrders, 'Orders'); break;
+                          case 'clear': _clearSelection(); break;
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        if (!widget.readOnly) PopupMenuItem(value: 'edit', child: Text(_editMode ? 'Turn edit mode off' : 'Turn edit mode on')),
+                        const PopupMenuItem(value: 'arrange', child: Text('Arrange statuses')),
+                        const PopupMenuItem(value: 'factories', child: Text('Factories')),
+                        if (isAdmin) const PopupMenuItem(value: 'employees', child: Text('Employees')),
+                        if (_canImportDelete) const PopupMenuItem(value: 'import', child: Text('Import orders')),
+                        const PopupMenuItem(value: 'export', child: Text('Export orders')),
+                        if (_selectedRowsIds.isNotEmpty) const PopupMenuItem(value: 'clear', child: Text('Clear selection')),
+                      ],
+                    ),
+                  ]),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _searchController,
+                    focusNode: _searchFocusNode,
+                    onChanged: (value) { setState(() => _searchQuery = value); _rebuildGroups(); },
+                    style: GoogleFonts.cairo(fontSize: 13, color: _textColor),
+                    decoration: InputDecoration(
+                      hintText: 'Search orders, customers, codes…',
+                      hintStyle: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor),
+                      prefixIcon: const Icon(Icons.search_rounded),
+                      suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }) : null,
+                      filled: true, fillColor: _backgroundColor,
+                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: _borderColor)),
+                      enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: _borderColor)),
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  SingleChildScrollView(
+                    scrollDirection: Axis.horizontal,
+                    child: Row(children: [
+                      _mobileToolChip(Icons.filter_list_rounded, 'Filters', _showFilterDialog),
+                      const SizedBox(width: 8),
+                      _mobileToolChip(Icons.sort_rounded, _getSortLabel(), () => _showMobileSortMenu()),
+                      if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
+                        const SizedBox(width: 8),
+                        _buildEmployeeWorkDropdown(),
+                      ],
+                      if (!widget.readOnly && (_isEngineerRole || _isManagerRole)) ...[
+                        const SizedBox(width: 8),
+                        _buildMyWorkButton(),
+                      ],
+                      const SizedBox(width: 8),
+                      _mobileToolChip(Icons.groups_2_outlined, 'Design team', _showFilterDialog),
+                    ]),
+                  ),
+                  if (_editMode) Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Icon(Icons.edit_note, size: 17, color: Colors.orange), const SizedBox(width: 6), Text('Edit mode is on', style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.w700))])),
+                ],
               ),
             ),
+            if (_selectedRowsIds.isNotEmpty)
+              Container(width: double.infinity, padding: const EdgeInsets.fromLTRB(12, 8, 12, 4), child: SingleChildScrollView(scrollDirection: Axis.horizontal, child: _buildSelectionToolbar())),
+            Expanded(child: _buildMobileOrderList()),
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _mobileToolChip(IconData icon, String label, VoidCallback onTap) =>
+      InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          height: 38,
+          padding: const EdgeInsets.symmetric(horizontal: 12),
+          decoration: BoxDecoration(color: _surfaceColor, border: Border.all(color: _borderColor), borderRadius: BorderRadius.circular(12)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 17, color: _secondaryTextColor), const SizedBox(width: 6), Text(label, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _textColor))]),
+        ),
+      );
+
+  void _showMobileSortMenu() {
+    showModalBottomSheet<void>(
+      context: context, backgroundColor: _surfaceColor, showDragHandle: true,
+      builder: (sheetContext) => SafeArea(child: Padding(
+        padding: const EdgeInsets.fromLTRB(16, 8, 16, 20),
+        child: Column(mainAxisSize: MainAxisSize.min, crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Text('Sort orders', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w800, color: _textColor)),
+          const SizedBox(height: 8),
+          for (final option in <MapEntry<String, String>>[
+            const MapEntry('default', 'Default order'), const MapEntry('date_asc', 'Date: oldest first'), const MapEntry('date_desc', 'Date: newest first'), const MapEntry('value_asc', 'Value: low to high'), const MapEntry('value_desc', 'Value: high to low'),
+          ]) ListTile(dense: true, title: Text(option.value, style: GoogleFonts.cairo(color: _textColor)), trailing: _sortBy == option.key ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary) : null, onTap: () { setState(() => _sortBy = option.key); _rebuildGroups(); Navigator.pop(sheetContext); }),
+        ]),
+      )),
+    );
+  }
+
+  Widget _buildMobileOrderList() {
+    if (_isLoading && !_initialLoadDone) return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
+    if (_allOrders.isEmpty || _getFilteredOrders().isEmpty) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.inbox_rounded, size: 44, color: _secondaryTextColor.withOpacity(.6)), const SizedBox(height: 10), Text(_allOrders.isEmpty ? 'No orders yet' : 'No matching orders', style: GoogleFonts.cairo(color: _secondaryTextColor, fontSize: 14)), if (_searchQuery.isNotEmpty) TextButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }, child: const Text('Clear search'))]));
+    return RefreshIndicator(
+      onRefresh: _loadAllDataOnce,
+      child: ListView.builder(
+        padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
+        itemCount: _sortedStatuses.length,
+        itemBuilder: (context, sectionIndex) {
+          final status = _sortedStatuses[sectionIndex];
+          final orders = _groupedOrders[status] ?? const <SAPMainOrder>[];
+          final expanded = _expandedSections.contains(status);
+          final statusColor = _getStatusColor(status);
+          return Container(
+            margin: const EdgeInsets.only(bottom: 12),
+            decoration: BoxDecoration(color: _surfaceColor, borderRadius: BorderRadius.circular(18), border: Border.all(color: _borderColor), boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDarkMode ? .08 : .025), blurRadius: 12, offset: const Offset(0, 4))]),
+            clipBehavior: Clip.antiAlias,
+            child: Column(children: [
+              InkWell(
+                onTap: () => _toggleSection(status),
+                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13), child: Row(children: [
+                  Container(width: 10, height: 34, decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(8))),
+                  const SizedBox(width: 11),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w800, color: _textColor)), Text('${orders.length} ${orders.length == 1 ? 'order' : 'orders'}', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor))])),
+                  Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: _secondaryTextColor),
+                ])),
+              ),
+              if (expanded) ...orders.map(_buildMobileOrderCard),
+            ]),
+          );
+        },
+      ),
+    );
+  }
+
+  String? _mobileFieldValue(SAPMainOrder order, String field) {
+    switch (field) {
+      case 'status': return order.status;
+      case 'design_order': return order.designOrder;
+      case 'contract_number': return order.contractNumber;
+      case 'item_number': return order.itemNumber;
+      case 'product_code': return order.productCode;
+      case 'description': return order.description;
+      case 'quantity': return order.quantity.toString();
+      case 'value': return order.value.toString();
+      case 'order_date': return order.orderDate;
+      case 'delivery_date': return order.deliveryDate;
+      case 'factory': return order.factory;
+      case 'design_team': return order.designTeam;
+      case 'responsible_engineer': return order.responsibleEngineer;
+      case 'reviewer': return order.reviewer;
+      case 'correspondence_engineer': return order.correspondenceEngineer;
+      default: return _getCurrentFieldValue(order, field);
+    }
+  }
+
+  Future<void> _showMobileEditMenu(SAPMainOrder order) async {
+    final fields = <MapEntry<String, String>>[
+      const MapEntry('status', 'Status'),
+      const MapEntry('design_order', 'Design order'),
+      const MapEntry('contract_number', 'Contract number'),
+      const MapEntry('item_number', 'Item'),
+      const MapEntry('product_code', 'Product code'),
+      const MapEntry('description', 'Description'),
+      const MapEntry('quantity', 'Quantity'),
+      const MapEntry('value', 'Value'),
+      const MapEntry('order_date', 'Order date'),
+      const MapEntry('delivery_date', 'Delivery date'),
+      const MapEntry('factory', 'Factory'),
+      const MapEntry('design_team', 'Design team'),
+      const MapEntry('responsible_engineer', 'Responsible engineer'),
+      const MapEntry('reviewer', 'Reviewer'),
+      const MapEntry('correspondence_engineer', 'Alternative engineer'),
+    ];
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _surfaceColor,
+      showDragHandle: true,
+      isScrollControlled: true,
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .72,
+          child: Column(children: [
+            Padding(padding: const EdgeInsets.fromLTRB(20, 4, 20, 12), child: Row(children: [
+              Expanded(child: Text('Edit order', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w800, color: _textColor))),
+              IconButton(onPressed: () => Navigator.pop(sheetContext), icon: Icon(Icons.close, color: _secondaryTextColor)),
+            ])),
+            Expanded(child: ListView.separated(
+              itemCount: fields.length,
+              separatorBuilder: (_, __) => Divider(height: 1, color: _borderColor),
+              itemBuilder: (context, index) {
+                final field = fields[index];
+                final current = _mobileFieldValue(order, field.key) ?? '';
+                return ListTile(
+                  leading: Icon(Icons.edit_outlined, color: Theme.of(context).colorScheme.primary),
+                  title: Text(field.value, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor)),
+                  subtitle: Text(current.isEmpty ? 'Not set' : current, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+                  trailing: Icon(Icons.chevron_right, color: _secondaryTextColor),
+                  onTap: () {
+                    Navigator.pop(sheetContext);
+                    if (field.key == 'order_date' || field.key == 'delivery_date') {
+                      _pickDateForEdit(order, field.key, current.isEmpty ? '-' : current);
+                    } else {
+                      _editOrderField(order, field.key, current.isEmpty ? '-' : current);
+                    }
+                  },
+                );
+              },
+            )),
+          ]),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMobileOrderCard(SAPMainOrder order) {
+    final selected = _selectedRowsIds.contains(order.id);
+    final statusColor = _getStatusColor(order.status);
+    final canEdit = _isOrderEditable(order);
+    String valueText;
+    try { valueText = _formatNumber(order.value); } catch (_) { valueText = order.value.toString(); }
+    Widget detail(IconData icon, String label, String value) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 15, color: _secondaryTextColor), const SizedBox(width: 7), Expanded(child: RichText(text: TextSpan(style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor), children: [TextSpan(text: '$label  ', style: const TextStyle(fontWeight: FontWeight.w700)), TextSpan(text: value.trim().isEmpty ? '—' : value, style: TextStyle(color: _textColor))])))]);
+    return Container(
+      margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
+      decoration: BoxDecoration(color: selected ? const Color(0xFF6366F1).withOpacity(.08) : _backgroundColor, borderRadius: BorderRadius.circular(15), border: Border.all(color: selected ? const Color(0xFF6366F1) : _borderColor.withOpacity(.75))),
+      child: InkWell(
+        borderRadius: BorderRadius.circular(15),
+        onTap: () => _toggleRowSelection(order),
+        onLongPress: () => _copyOrderData(order),
+        child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+          Row(crossAxisAlignment: CrossAxisAlignment.start, children: [
+            if (!widget.readOnly) Padding(padding: const EdgeInsets.only(right: 8), child: SizedBox(width: 22, height: 24, child: Checkbox(value: selected, onChanged: (_) => _toggleRowSelection(order), materialTapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact))),
+            Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+              Text(order.customerName.isEmpty ? 'Unnamed customer' : order.customerName, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 14, fontWeight: FontWeight.w800, color: _textColor)),
+              const SizedBox(height: 3),
+              Text('Order ${order.designOrder.isEmpty ? '—' : order.designOrder}', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor)),
+            ])),
+            Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: statusColor.withOpacity(.12), borderRadius: BorderRadius.circular(9)), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 105), child: Text(order.status, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.w700, color: statusColor)))),
+          ]),
+          const SizedBox(height: 12),
+          Container(height: 1, color: _borderColor.withOpacity(.65)),
+          const SizedBox(height: 10),
+          detail(Icons.qr_code_2_rounded, 'Product', order.productCode),
+          const SizedBox(height: 7),
+          detail(Icons.description_outlined, 'Description', order.description),
+          const SizedBox(height: 7),
+          Row(children: [Expanded(child: detail(Icons.inventory_2_outlined, 'Qty', '${order.quantity} ${order.unitOfMeasure}')), Expanded(child: detail(Icons.payments_outlined, 'Value', valueText))]),
+          const SizedBox(height: 7),
+          Row(children: [Expanded(child: detail(Icons.person_outline, 'Engineer', order.responsibleEngineer ?? 'Unassigned')), Expanded(child: detail(Icons.factory_outlined, 'Factory', order.factory ?? '—'))]),
+          const SizedBox(height: 7),
+          Row(children: [Expanded(child: detail(Icons.calendar_today_outlined, 'Order date', order.orderDate ?? '—')), Expanded(child: detail(Icons.local_shipping_outlined, 'Delivery', order.deliveryDate ?? '—'))]),
+          const SizedBox(height: 11),
+          Row(children: [
+            if (!widget.readOnly && canEdit) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileEditMenu(order), icon: const Icon(Icons.edit_outlined, size: 16), label: Text('Edit', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), foregroundColor: const Color(0xFF6366F1), side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))))),
+            if (!widget.readOnly && canEdit) const SizedBox(width: 7),
+            Expanded(child: OutlinedButton.icon(onPressed: () => _copyOrderData(order), icon: const Icon(Icons.copy_rounded, size: 15), label: Text('Copy details', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), foregroundColor: _secondaryTextColor, side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))))),
+            if (_isHedOrManager && !_isDataEntry) ...[
+              const SizedBox(width: 7),
+              IconButton.filledTonal(tooltip: 'Track order', onPressed: () => _navigateToOrderTracking(order), icon: const Icon(Icons.track_changes_rounded, size: 18)),
+            ],
+          ]),
+        ])),
       ),
     );
   }
