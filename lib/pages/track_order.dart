@@ -155,7 +155,20 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     }
   }
 
-  // Restore a field to its previous value
+  bool _isEngineerField(String? fieldName) {
+    if (fieldName == null) return false;
+    switch (_databaseFieldName(fieldName)) {
+      case 'responsible_engineer':
+      case 'reviewer':
+      case 'correspondence_engineer':
+      case 'sales_engineer':
+        return true;
+      default:
+        return false;
+    }
+  }
+
+  // Restore a field to its previous value, including null engineer assignments.
   Future<void> _restoreField(Map<String, dynamic> log) async {
     final fieldName = log['field_name']?.toString();
     final databaseFieldName =
@@ -163,7 +176,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     final oldValue = log['old_value'];
     final newValue = log['new_value'];
 
-    if (fieldName == null || oldValue == null) {
+    if (fieldName == null || (oldValue == null && !_isEngineerField(fieldName))) {
       _showSnackBar('Cannot restore this change', isError: true);
       return;
     }
@@ -256,7 +269,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         designOrder: widget.order.designOrder,
         fieldName: databaseFieldName!,
         oldValue: newValue?.toString(),
-        newValue: oldValue.toString(),
+        newValue: oldValue?.toString(),
         changedBy: _currentUserName!,
         changedById: _currentUserId!,
         actionType: 'restore',
@@ -752,7 +765,10 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         : (isStatus ? const Color(0xFF6366F1) : Colors.blue);
 
     // Check if this log can be restored (not a delete or restore action)
-    final canRestore = !isDelete && !isRestore && log['old_value'] != null;
+    final canRestore =
+        !isDelete &&
+            !isRestore &&
+            (log['old_value'] != null || _isEngineerField(log['field_name']?.toString()));
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
@@ -940,4 +956,3 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
     return '${buffer.toString()}.${parts[1]}';
   }
 }
-
