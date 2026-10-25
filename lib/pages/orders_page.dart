@@ -4021,9 +4021,23 @@ class _OrdersPageState extends State<OrdersPage> {
                 children: [
                   Row(children: [
                     Container(
-                      width: 42, height: 42,
-                      decoration: BoxDecoration(color: primary.withOpacity(.12), borderRadius: BorderRadius.circular(14)),
-                      child: Icon(Icons.receipt_long_rounded, color: primary),
+                      width: 42,
+                      height: 42,
+                      padding: const EdgeInsets.all(3),
+                      decoration: BoxDecoration(
+                        color: _surfaceColor,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: _borderColor),
+                      ),
+                      child: Image.asset(
+                        'assets/images/logo.png',
+                        fit: BoxFit.contain,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.receipt_long_rounded,
+                          color: primary,
+                          size: 22,
+                        ),
+                      ),
                     ),
                     const SizedBox(width: 12),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4134,57 +4148,168 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Widget _buildMobileOrderList() {
-    if (_isLoading && !_initialLoadDone) return Center(child: CircularProgressIndicator(color: Theme.of(context).colorScheme.primary));
-    if (_allOrders.isEmpty || _getFilteredOrders().isEmpty) return Center(child: Column(mainAxisSize: MainAxisSize.min, children: [Icon(Icons.inbox_rounded, size: 44, color: _secondaryTextColor.withOpacity(.6)), const SizedBox(height: 10), Text(_allOrders.isEmpty ? 'No orders yet' : 'No matching orders', style: GoogleFonts.cairo(color: _secondaryTextColor, fontSize: 14)), if (_searchQuery.isNotEmpty) TextButton(onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }, child: const Text('Clear search'))]));
+    if (_isLoading && !_initialLoadDone) {
+      return Center(
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      );
+    }
+
+    // Reuse the already-computed flat workflow list. Building all cards inside
+    // a Column when a status expands caused a large frame drop for busy stages.
+    final filteredOrders = _getFilteredOrders();
+    if (_allOrders.isEmpty || filteredOrders.isEmpty) {
+      return Center(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(
+              Icons.inbox_rounded,
+              size: 44,
+              color: _secondaryTextColor.withOpacity(.6),
+            ),
+            const SizedBox(height: 10),
+            Text(
+              _allOrders.isEmpty ? 'No orders yet' : 'No matching orders',
+              style: GoogleFonts.cairo(
+                color: _secondaryTextColor,
+                fontSize: 14,
+              ),
+            ),
+            if (_searchQuery.isNotEmpty)
+              TextButton(
+                onPressed: () {
+                  _searchController.clear();
+                  setState(() => _searchQuery = '');
+                  _rebuildGroups();
+                },
+                child: const Text('Clear search'),
+              ),
+          ],
+        ),
+      );
+    }
+
+    // _flatList contains only the status headers and orders belonging to
+    // expanded sections. ListView.builder now creates cards on demand, instead
+    // of building every order in a large status at once.
     return RefreshIndicator(
       onRefresh: _loadAllDataOnce,
       child: ListView.builder(
+        key: const PageStorageKey<String>('mobile-orders-flat-list'),
         padding: const EdgeInsets.fromLTRB(12, 12, 12, 28),
-        itemCount: _sortedStatuses.length,
-        itemBuilder: (context, sectionIndex) {
-          final status = _sortedStatuses[sectionIndex];
+        itemCount: _flatList.length,
+        itemBuilder: (context, index) {
+          final item = _flatList[index];
+
+          if (item is SAPMainOrder) {
+            return _buildMobileOrderCard(item);
+          }
+
+          final status = item.toString();
           final orders = _groupedOrders[status] ?? const <SAPMainOrder>[];
           final expanded = _expandedSections.contains(status);
           final statusColor = _getStatusColor(status);
+
           return Container(
-            margin: const EdgeInsets.only(bottom: 12),
-            decoration: BoxDecoration(color: _surfaceColor, borderRadius: BorderRadius.circular(18), border: Border.all(color: _borderColor), boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDarkMode ? .08 : .025), blurRadius: 12, offset: const Offset(0, 4))]),
+            key: ValueKey<String>('mobile-status-$status'),
+            margin: const EdgeInsets.only(bottom: 10),
+            decoration: BoxDecoration(
+              color: _surfaceColor,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: _borderColor),
+            ),
             clipBehavior: Clip.antiAlias,
-            child: Column(children: [
-              InkWell(
+            child: Material(
+              color: Colors.transparent,
+              child: InkWell(
                 onTap: () => _toggleSection(status),
-                child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13), child: Row(children: [
-                  Container(
-                    width: 4,
-                    height: 38,
-                    decoration: BoxDecoration(
-                      color: statusColor,
-                      borderRadius: BorderRadius.circular(8),
-                    ),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 12,
                   ),
-                  const SizedBox(width: 12),
-                  Container(
-                    width: 34,
-                    height: 34,
-                    decoration: BoxDecoration(
-                      color: statusColor.withOpacity(.12),
-                      borderRadius: BorderRadius.circular(11),
-                    ),
-                    child: Icon(Icons.view_kanban_rounded, size: 18, color: statusColor),
+                  child: Row(
+                    children: [
+                      Container(
+                        width: 4,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: statusColor,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(.10),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(
+                          Icons.view_kanban_rounded,
+                          size: 18,
+                          color: statusColor,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              status,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                fontSize: 13,
+                                fontWeight: FontWeight.w800,
+                                color: _textColor,
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              expanded ? 'Tap to collapse' : 'Tap to view orders',
+                              style: GoogleFonts.cairo(
+                                fontSize: 10,
+                                color: _secondaryTextColor,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: statusColor.withOpacity(.10),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          '${orders.length}',
+                          style: GoogleFonts.cairo(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: statusColor,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 5),
+                      Icon(
+                        expanded
+                            ? Icons.keyboard_arrow_up_rounded
+                            : Icons.keyboard_arrow_down_rounded,
+                        color: _secondaryTextColor,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 10),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w800, color: _textColor)), const SizedBox(height: 2), Text('Workflow stage', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor))])),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                    decoration: BoxDecoration(color: statusColor.withOpacity(.10), borderRadius: BorderRadius.circular(10)),
-                    child: Text('${orders.length}', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w800, color: statusColor)),
-                  ),
-                  const SizedBox(width: 5),
-                  Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: _secondaryTextColor),
-                ])),
+                ),
               ),
-              if (expanded) ...orders.map(_buildMobileOrderCard),
-            ]),
+            ),
           );
         },
       ),
