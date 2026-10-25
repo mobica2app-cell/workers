@@ -488,8 +488,14 @@ class _OrdersPageState extends State<OrdersPage> {
     });
   }
 
-  bool get _isHeadRole =>
-      widget.loggedInEmployee?.role?.trim().toLowerCase() == 'head';
+  String get _normalizedRole =>
+      widget.loggedInEmployee?.role?.trim().toLowerCase() ?? '';
+
+  bool get _isHeadRole => _normalizedRole == 'head';
+
+  bool get _isManagerRole => _normalizedRole == 'manager';
+
+  bool get _isEngineerRole => _normalizedRole == 'engineer';
 
   void _selectEmployeeWork(String? employeeName) {
     setState(() {
@@ -4184,10 +4190,14 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                       SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
-                      if (!widget.readOnly && _isHeadRole) ...[
+                      if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
+                        if (_isManagerRole) ...[
+                          _buildMyWorkButton(),
+                          const SizedBox(width: 8),
+                        ],
                         _buildEmployeeWorkDropdown(),
                         const SizedBox(width: 8),
-                      ] else if (!widget.readOnly) ...[
+                      ] else if (!widget.readOnly && _isEngineerRole) ...[
                         _buildMyWorkButton(),
                         const SizedBox(width: 8),
                       ],
@@ -4247,9 +4257,10 @@ class _OrdersPageState extends State<OrdersPage> {
                 ),
               _buildSearchField(),
               _buildDesignTeamFilterButton(),
-              if (!widget.readOnly && _isHeadRole)
+              if (!widget.readOnly && _isManagerRole) _buildMyWorkButton(),
+              if (!widget.readOnly && (_isHeadRole || _isManagerRole))
                 _buildEmployeeWorkDropdown(),
-              if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
+              if (!widget.readOnly && _isEngineerRole) _buildMyWorkButton(),
               _buildSortButton(),
               filtersButton,
               actionsMenu,
