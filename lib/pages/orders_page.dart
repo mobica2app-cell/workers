@@ -4142,6 +4142,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
           if (isWide) {
             return Row(
+              mainAxisAlignment: MainAxisAlignment.end,
               children: [
                 title,
                 const SizedBox(width: 12),
@@ -4167,6 +4168,9 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
                   ),
+
+                _buildSearchField(),
+                const SizedBox(width: 8),
                 if (!widget.readOnly && _isHeadRole) ...[
                   _buildEmployeeWorkDropdown(),
                   const SizedBox(width: 8),
@@ -4174,8 +4178,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   _buildMyWorkButton(),
                   const SizedBox(width: 8),
                 ],
-                _buildSearchField(),
-                const SizedBox(width: 8),
                 SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                 const SizedBox(width: 8),
                 _buildSortButton(),
@@ -4545,7 +4547,7 @@ class _OrdersPageState extends State<OrdersPage> {
           return Row(
             children: [
               Expanded(child: _buildHeaderInfo()),
-              _buildSearchField(anchorRight: true),
+              _buildSearchField(),
               const SizedBox(width: 8),
               _buildDesignTeamFilterButton(),
               const SizedBox(width: 8),
@@ -4646,7 +4648,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Compact search icon that expands on demand and collapses when cleared.
-  Widget _buildSearchField({bool anchorRight = false}) {
+  Widget _buildSearchField() {
     final screenWidth = MediaQuery.of(context).size.width;
     final expandedWidth = screenWidth < 700
         ? (screenWidth - 40).clamp(180.0, 360.0).toDouble()
@@ -4661,7 +4663,7 @@ class _OrdersPageState extends State<OrdersPage> {
       });
     }
 
-    final searchControl = AnimatedContainer(
+    return AnimatedContainer(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       width: _searchExpanded ? expandedWidth : 40,
@@ -4777,22 +4779,6 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       ),
     );
-
-    // In the wide app bar, reserve the search slot before the action buttons
-    // and align the field to its right edge. It grows to the left while the
-    // action buttons remain fixed on the right.
-    if (anchorRight) {
-      return SizedBox(
-        width: expandedWidth,
-        height: 38,
-        child: Align(
-          alignment: Alignment.centerRight,
-          child: searchControl,
-        ),
-      );
-    }
-
-    return searchControl;
   }
 
   // Sort button
