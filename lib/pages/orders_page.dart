@@ -4116,7 +4116,10 @@ class _OrdersPageState extends State<OrdersPage> {
           );
 
           final filtersButton =
-          _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog);
+          SizedBox(
+            height: 38,
+            child: _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+          );
 
           if (isWide) {
             return Row(
@@ -4646,7 +4649,10 @@ class _OrdersPageState extends State<OrdersPage> {
               const SizedBox(width: 8),
               _buildSortButton(),
               const SizedBox(width: 12),
-              _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+              SizedBox(
+                height: 38,
+                child: _buildActionBtn(Icons.filter_list, 'Filters', _showFilterDialog),
+              ),
               const SizedBox(width: 8),
               const SizedBox(width: 8),
               // Only show Import for admin or abd.elmoen
