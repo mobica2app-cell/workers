@@ -3691,7 +3691,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  // Helper widget for filter dropdowns
+  // Filter dialog dropdowns use the same compact style as the app-bar dropdowns.
   Widget _buildFilterDropdown(
       String label,
       String? value,
@@ -3706,52 +3706,65 @@ class _OrdersPageState extends State<OrdersPage> {
         : 'All';
 
     return SizedBox(
-      height: 48,
-      child: InkWell(
-        borderRadius: BorderRadius.circular(8),
-        onTap: () => _showSearchableFilterPicker(
-          label: label,
-          value: value,
-          items: items,
-          onChanged: onChanged,
+      height: 38,
+      child: Material(
+        color: _surfaceColor,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(7),
+          side: BorderSide(color: _borderColor),
         ),
-        child: InputDecorator(
-          decoration: InputDecoration(
-            isDense: true,
-            labelText: label,
-            // Keep the label on the border so it doesn't squeeze the value.
-            floatingLabelBehavior: FloatingLabelBehavior.always,
-            labelStyle: GoogleFonts.cairo(fontSize: 10, height: 1),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(8),
-            ),
-            contentPadding: const EdgeInsets.symmetric(
-              horizontal: 10,
-              vertical: 8,
-            ),
-            constraints: const BoxConstraints.tightFor(height: 48),
+        clipBehavior: Clip.antiAlias,
+        child: InkWell(
+          onTap: () => _showSearchableFilterPicker(
+            label: label,
+            value: value,
+            items: items,
+            onChanged: onChanged,
           ),
-          child: Row(
-            children: [
-              Expanded(
-                child: Text(
-                  displayValue,
-                  style: GoogleFonts.cairo(
-                    fontSize: 12,
-                    height: 1.2,
-                    color: hasValue ? _textColor : _secondaryTextColor,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 9,
+                          height: 1,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        displayValue,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          height: 1,
+                          color: hasValue ? _textColor : _secondaryTextColor,
+                        ),
+                      ),
+                    ],
                   ),
-                  overflow: TextOverflow.ellipsis,
                 ),
-              ),
-              Icon(
-                Icons.search,
-                size: 18,
-                color: hasValue
-                    ? const Color(0xFF6366F1)
-                    : _secondaryTextColor,
-              ),
-            ],
+                const SizedBox(width: 6),
+                Icon(
+                  Icons.search,
+                  size: 16,
+                  color: hasValue
+                      ? const Color(0xFF6366F1)
+                      : _secondaryTextColor,
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -4793,6 +4806,14 @@ class _OrdersPageState extends State<OrdersPage> {
         controller: _searchController,
         focusNode: _searchFocusNode,
         autofocus: true,
+        // Collapse when the user clicks elsewhere, but keep the controller and
+        // query intact so reopening search restores the previous text.
+        onTapOutside: (_) {
+          if (_searchExpanded) {
+            setState(() => _searchExpanded = false);
+            _searchFocusNode.unfocus();
+          }
+        },
         onChanged: (value) {
           final hadQuery = _searchQuery.trim().isNotEmpty;
           setState(() {

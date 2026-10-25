@@ -114,9 +114,52 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
 
 
 
+  // Convert audit-log labels/legacy names to actual Supabase column names.
+  // Some older audit rows store display labels such as "Responsible Engineer"
+  // instead of the database column `responsible_engineer`.
+  String _databaseFieldName(String fieldName) {
+    final normalized = fieldName
+        .trim()
+        .toLowerCase()
+        .replaceAll('_', ' ')
+        .replaceAll(RegExp(r'\s+'), ' ');
+
+    switch (normalized) {
+      case 'status':
+        return 'status';
+      case 'responsible engineer':
+      case 'resp. engineer':
+      case 'resp engineer':
+      case 'responsible engineer name':
+      case 'engineer':
+      case 'engineer name':
+        return 'responsible_engineer';
+      case 'reviewer':
+      case 'reviewer name':
+        return 'reviewer';
+      case 'correspondence engineer':
+      case 'alternative engineer':
+      case 'alt. engineer':
+      case 'alt engineer':
+        return 'correspondence_engineer';
+      case 'sales engineer':
+      case 'sales engineer name':
+        return 'sales_engineer';
+      case 'design team':
+        return 'design_team';
+      case 'factory':
+        return 'factory';
+      default:
+      // Preserve genuine snake_case database columns.
+        return fieldName.trim();
+    }
+  }
+
   // Restore a field to its previous value
   Future<void> _restoreField(Map<String, dynamic> log) async {
     final fieldName = log['field_name']?.toString();
+    final databaseFieldName =
+    fieldName == null ? null : _databaseFieldName(fieldName);
     final oldValue = log['old_value'];
     final newValue = log['new_value'];
 
@@ -175,14 +218,14 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         (isCurrentlyInDone ? doneLookup : mainLookup) as Map,
       );
       final targetRow = Map<String, dynamic>.from(currentRow)
-        ..[fieldName] = oldValue;
+        ..[databaseFieldName!] = oldValue;
 
       // The Done status belongs in sap_done_orders. Any other restored status
       // belongs in sap_main_orders. Move the full row and remove the old copy.
       final restoredStatus = (targetRow['status'] ?? '').toString().trim();
       final targetIsDone = restoredStatus.toLowerCase() == 'done';
 
-      if (fieldName == 'status' && targetIsDone != isCurrentlyInDone) {
+      if (databaseFieldName == 'status' && targetIsDone != isCurrentlyInDone) {
         if (targetIsDone) {
           await supabase
               .from('sap_done_orders')
@@ -203,7 +246,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
       } else {
         await supabase
             .from(isCurrentlyInDone ? 'sap_done_orders' : 'sap_main_orders')
-            .update({fieldName: oldValue})
+            .update({databaseFieldName!: oldValue})
             .eq('id', widget.order.id);
       }
 
@@ -211,7 +254,7 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
       await _auditService.logChange(
         orderId: widget.order.id,
         designOrder: widget.order.designOrder,
-        fieldName: fieldName,
+        fieldName: databaseFieldName!,
         oldValue: newValue?.toString(),
         newValue: oldValue.toString(),
         changedBy: _currentUserName!,
@@ -220,7 +263,9 @@ class _OrderTrackingPageState extends State<OrderTrackingPage> {
         notes: 'Restored from audit log: ${_formatDateTime(log['changed_at'])}',
       );
 
-      _showSnackBar('✅ Restored ${_formatFieldName(fieldName)} to previous value');
+      _showSnackBar(
+        '✅ Restored ${_formatFieldName(databaseFieldName)} to previous value',
+      );
 
       // Reload audit logs
       await _loadAuditLogs();
