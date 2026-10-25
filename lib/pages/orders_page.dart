@@ -4142,62 +4142,75 @@ class _OrdersPageState extends State<OrdersPage> {
 
           if (isWide) {
             return Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                // The page title stays anchored at the start.
-                title,
+                // Keep the title pinned to the logical start of the app bar.
+                Align(
+                  alignment: AlignmentDirectional.centerStart,
+                  child: title,
+                ),
                 const SizedBox(width: 12),
-                // Search and the remaining toolbar controls align to the end.
-                const Spacer(),
-                _buildSearchField(anchorRight: true),
-                const SizedBox(width: 8),
-                if (!widget.readOnly && _isHeadRole) ...[
-                  _buildEmployeeWorkDropdown(),
-                  const SizedBox(width: 8),
-                ] else if (!widget.readOnly) ...[
-                  _buildMyWorkButton(),
-                  const SizedBox(width: 8),
-                ],
-                if (widget.readOnly)
-                  OutlinedButton.icon(
-                    onPressed: () {
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const LoginPage()),
-                            (route) => false,
-                      );
-                    },
-                    icon: const Icon(Icons.login, size: 16),
-                    label: Text(
-                      'Back to Login',
-                      style: GoogleFonts.cairo(fontSize: 11),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: _secondaryTextColor,
-                      side: BorderSide(color: _borderColor),
-                      backgroundColor: _surfaceColor,
-                      minimumSize: const Size(0, 38),
-                      padding: const EdgeInsets.symmetric(horizontal: 10),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(7),
-                      ),
-                    ),
+                // The toolbar controls occupy a separate end-aligned region.
+                // The expandable search grows into the available gap, never
+                // changing the title's position.
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.end,
+                    crossAxisAlignment: CrossAxisAlignment.center,
+                    children: [
+                      _buildSearchField(anchorRight: true),
+                      const SizedBox(width: 8),
+                      if (!widget.readOnly && _isHeadRole) ...[
+                        _buildEmployeeWorkDropdown(),
+                        const SizedBox(width: 8),
+                      ] else if (!widget.readOnly) ...[
+                        _buildMyWorkButton(),
+                        const SizedBox(width: 8),
+                      ],
+                      if (widget.readOnly)
+                        OutlinedButton.icon(
+                          onPressed: () {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(builder: (_) => const LoginPage()),
+                                  (route) => false,
+                            );
+                          },
+                          icon: const Icon(Icons.login, size: 16),
+                          label: Text(
+                            'Back to Login',
+                            style: GoogleFonts.cairo(fontSize: 11),
+                          ),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: _secondaryTextColor,
+                            side: BorderSide(color: _borderColor),
+                            backgroundColor: _surfaceColor,
+                            minimumSize: const Size(0, 38),
+                            padding: const EdgeInsets.symmetric(horizontal: 10),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(7),
+                            ),
+                          ),
+                        ),
+                      SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
+                      const SizedBox(width: 8),
+                      _buildSortButton(),
+                      const SizedBox(width: 8),
+                      filtersButton,
+                      const SizedBox(width: 8),
+                      actionsMenu,
+                      if (_selectedRowsIds.isNotEmpty) ...[
+                        const SizedBox(width: 4),
+                        IconButton(
+                          tooltip: 'Clear selection',
+                          onPressed: _clearSelection,
+                          icon: const Icon(Icons.close, size: 18),
+                          color: _secondaryTextColor,
+                          visualDensity: VisualDensity.compact,
+                        ),
+                      ],
+                    ],
                   ),
-                SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
-                const SizedBox(width: 8),
-                _buildSortButton(),
-                const SizedBox(width: 8),
-                filtersButton,
-                const SizedBox(width: 8),
-                actionsMenu,
-                if (_selectedRowsIds.isNotEmpty) ...[
-                  const SizedBox(width: 4),
-                  IconButton(
-                    tooltip: 'Clear selection',
-                    onPressed: _clearSelection,
-                    icon: const Icon(Icons.close, size: 18),
-                    color: _secondaryTextColor,
-                    visualDensity: VisualDensity.compact,
-                  ),
-                ],
+                ),
               ],
             );
           }
