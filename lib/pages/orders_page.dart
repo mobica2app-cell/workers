@@ -4142,10 +4142,21 @@ class _OrdersPageState extends State<OrdersPage> {
 
           if (isWide) {
             return Row(
-              mainAxisAlignment: MainAxisAlignment.end,
               children: [
+                // The page title stays anchored at the start.
                 title,
                 const SizedBox(width: 12),
+                // Search and the remaining toolbar controls align to the end.
+                const Spacer(),
+                _buildSearchField(anchorRight: true),
+                const SizedBox(width: 8),
+                if (!widget.readOnly && _isHeadRole) ...[
+                  _buildEmployeeWorkDropdown(),
+                  const SizedBox(width: 8),
+                ] else if (!widget.readOnly) ...[
+                  _buildMyWorkButton(),
+                  const SizedBox(width: 8),
+                ],
                 if (widget.readOnly)
                   OutlinedButton.icon(
                     onPressed: () {
@@ -4155,8 +4166,10 @@ class _OrdersPageState extends State<OrdersPage> {
                       );
                     },
                     icon: const Icon(Icons.login, size: 16),
-                    label: Text('Back to Login',
-                        style: GoogleFonts.cairo(fontSize: 11)),
+                    label: Text(
+                      'Back to Login',
+                      style: GoogleFonts.cairo(fontSize: 11),
+                    ),
                     style: OutlinedButton.styleFrom(
                       foregroundColor: _secondaryTextColor,
                       side: BorderSide(color: _borderColor),
@@ -4168,16 +4181,6 @@ class _OrdersPageState extends State<OrdersPage> {
                       ),
                     ),
                   ),
-
-                _buildSearchField(),
-                const SizedBox(width: 8),
-                if (!widget.readOnly && _isHeadRole) ...[
-                  _buildEmployeeWorkDropdown(),
-                  const SizedBox(width: 8),
-                ] else if (!widget.readOnly) ...[
-                  _buildMyWorkButton(),
-                  const SizedBox(width: 8),
-                ],
                 SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                 const SizedBox(width: 8),
                 _buildSortButton(),
@@ -4648,7 +4651,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Compact search icon that expands on demand and collapses when cleared.
-  Widget _buildSearchField() {
+  Widget _buildSearchField({bool anchorRight = false}) {
     final screenWidth = MediaQuery.of(context).size.width;
     final expandedWidth = screenWidth < 700
         ? (screenWidth - 40).clamp(180.0, 360.0).toDouble()
@@ -4663,7 +4666,7 @@ class _OrdersPageState extends State<OrdersPage> {
       });
     }
 
-    return AnimatedContainer(
+    final searchControl = AnimatedContainer(
       duration: const Duration(milliseconds: 240),
       curve: Curves.easeOutCubic,
       width: _searchExpanded ? expandedWidth : 40,
@@ -4779,6 +4782,27 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
       ),
     );
+
+    if (anchorRight) {
+      // Only the collapsed icon occupies layout width. The opened field grows
+      // left into the spacer and does not move the action buttons on the right.
+      return SizedBox(
+        width: 40,
+        height: 38,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              right: 0,
+              top: 0,
+              child: searchControl,
+            ),
+          ],
+        ),
+      );
+    }
+
+    return searchControl;
   }
 
   // Sort button
