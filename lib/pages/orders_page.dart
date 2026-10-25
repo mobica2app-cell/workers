@@ -4132,13 +4132,6 @@ class _OrdersPageState extends State<OrdersPage> {
                     children: [
                       _buildSearchField(anchorRight: true),
                       const SizedBox(width: 8),
-                      if (!widget.readOnly && _isHeadRole) ...[
-                        _buildEmployeeWorkDropdown(),
-                        const SizedBox(width: 8),
-                      ] else if (!widget.readOnly) ...[
-                        _buildMyWorkButton(),
-                        const SizedBox(width: 8),
-                      ],
                       if (widget.readOnly)
                         OutlinedButton.icon(
                           onPressed: () {
@@ -4165,6 +4158,13 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                       SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
+                      if (!widget.readOnly && _isHeadRole) ...[
+                        _buildEmployeeWorkDropdown(),
+                        const SizedBox(width: 8),
+                      ] else if (!widget.readOnly) ...[
+                        _buildMyWorkButton(),
+                        const SizedBox(width: 8),
+                      ],
                       _buildSortButton(),
                       const SizedBox(width: 8),
                       filtersButton,
@@ -4205,11 +4205,11 @@ class _OrdersPageState extends State<OrdersPage> {
                   label: Text('Back to Login',
                       style: GoogleFonts.cairo(fontSize: 11)),
                 ),
+              _buildSearchField(),
+              _buildDesignTeamFilterButton(),
               if (!widget.readOnly && _isHeadRole)
                 _buildEmployeeWorkDropdown(),
               if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
-              _buildSearchField(),
-              _buildDesignTeamFilterButton(),
               _buildSortButton(),
               filtersButton,
               actionsMenu,
