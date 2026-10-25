@@ -4154,9 +4154,32 @@ class _OrdersPageState extends State<OrdersPage> {
               InkWell(
                 onTap: () => _toggleSection(status),
                 child: Padding(padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 13), child: Row(children: [
-                  Container(width: 10, height: 34, decoration: BoxDecoration(color: statusColor, borderRadius: BorderRadius.circular(8))),
-                  const SizedBox(width: 11),
-                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w800, color: _textColor)), Text('${orders.length} ${orders.length == 1 ? 'order' : 'orders'}', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor))])),
+                  Container(
+                    width: 4,
+                    height: 38,
+                    decoration: BoxDecoration(
+                      color: statusColor,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Container(
+                    width: 34,
+                    height: 34,
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(.12),
+                      borderRadius: BorderRadius.circular(11),
+                    ),
+                    child: Icon(Icons.view_kanban_rounded, size: 18, color: statusColor),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [Text(status, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w800, color: _textColor)), const SizedBox(height: 2), Text('Workflow stage', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor))])),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                    decoration: BoxDecoration(color: statusColor.withOpacity(.10), borderRadius: BorderRadius.circular(10)),
+                    child: Text('${orders.length}', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w800, color: statusColor)),
+                  ),
+                  const SizedBox(width: 5),
                   Icon(expanded ? Icons.keyboard_arrow_up_rounded : Icons.keyboard_arrow_down_rounded, color: _secondaryTextColor),
                 ])),
               ),
@@ -4191,7 +4214,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _showMobileEditMenu(SAPMainOrder order) async {
     final fields = <MapEntry<String, String>>[
-      const MapEntry('status', 'Status'),
       const MapEntry('design_order', 'Design order'),
       const MapEntry('contract_number', 'Contract number'),
       const MapEntry('item_number', 'Item'),
@@ -4248,6 +4270,92 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  Future<void> _showMobileStatusPicker(SAPMainOrder order) async {
+    final currentStatus = order.status;
+    final archived = _archivedOrderIds.contains(order.id);
+    final locked = _isOrderLocked(order) && !(widget.doneOrdersOnly && archived);
+    final allowedStatuses = _getAllowedStatusesForOrder(order);
+
+    if (widget.readOnly) return;
+    if (locked) {
+      _showYellowWarning('This order is locked and its status cannot be changed.');
+      return;
+    }
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: _surfaceColor,
+      isScrollControlled: true,
+      showDragHandle: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(26)),
+      ),
+      builder: (sheetContext) => SafeArea(
+        child: SizedBox(
+          height: MediaQuery.of(sheetContext).size.height * .68,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 4, 20, 14),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Change order status', style: GoogleFonts.cairo(fontSize: 19, fontWeight: FontWeight.w800, color: _textColor)),
+                    const SizedBox(height: 4),
+                    Text('${order.designOrder}  •  ${order.customerName}', maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+                    const SizedBox(height: 12),
+                    Row(children: [
+                      Text('CURRENT', style: GoogleFonts.cairo(fontSize: 9, letterSpacing: 1, fontWeight: FontWeight.w800, color: _secondaryTextColor)),
+                      const SizedBox(width: 8),
+                      Flexible(child: Container(padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5), decoration: BoxDecoration(color: _getStatusColor(currentStatus).withOpacity(.12), borderRadius: BorderRadius.circular(9)), child: Text(currentStatus, maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w700, color: _getStatusColor(currentStatus))))),
+                    ]),
+                  ],
+                ),
+              ),
+              Divider(height: 1, color: _borderColor),
+              Expanded(
+                child: allowedStatuses.isEmpty
+                    ? Center(child: Text('No available status changes', style: GoogleFonts.cairo(color: _secondaryTextColor)))
+                    : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(14, 10, 14, 20),
+                  itemCount: allowedStatuses.length,
+                  separatorBuilder: (_, __) => const SizedBox(height: 5),
+                  itemBuilder: (context, index) {
+                    final status = allowedStatuses[index];
+                    final isCurrent = status.trim().toLowerCase() == currentStatus.trim().toLowerCase();
+                    final color = _getStatusColor(status);
+                    return Material(
+                      color: isCurrent ? color.withOpacity(.10) : Colors.transparent,
+                      borderRadius: BorderRadius.circular(13),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(13),
+                        onTap: isCurrent ? null : () {
+                          Navigator.pop(sheetContext);
+                          _updateOrderStatus(order, status);
+                        },
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                          child: Row(children: [
+                            Container(width: 10, height: 10, decoration: BoxDecoration(color: color, shape: BoxShape.circle)),
+                            const SizedBox(width: 12),
+                            Expanded(child: Text(status, style: GoogleFonts.cairo(fontSize: 12, fontWeight: isCurrent ? FontWeight.w800 : FontWeight.w600, color: isCurrent ? color : _textColor))),
+                            if (isCurrent) Icon(Icons.check_circle_rounded, size: 19, color: color)
+                            else Icon(Icons.chevron_right_rounded, size: 19, color: _secondaryTextColor),
+                          ]),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _buildMobileOrderCard(SAPMainOrder order) {
     final selected = _selectedRowsIds.contains(order.id);
     final statusColor = _getStatusColor(order.status);
@@ -4257,9 +4365,9 @@ class _OrdersPageState extends State<OrdersPage> {
     Widget detail(IconData icon, String label, String value) => Row(crossAxisAlignment: CrossAxisAlignment.start, children: [Icon(icon, size: 15, color: _secondaryTextColor), const SizedBox(width: 7), Expanded(child: RichText(text: TextSpan(style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor), children: [TextSpan(text: '$label  ', style: const TextStyle(fontWeight: FontWeight.w700)), TextSpan(text: value.trim().isEmpty ? '—' : value, style: TextStyle(color: _textColor))])))]);
     return Container(
       margin: const EdgeInsets.fromLTRB(10, 0, 10, 10),
-      decoration: BoxDecoration(color: selected ? const Color(0xFF6366F1).withOpacity(.08) : _backgroundColor, borderRadius: BorderRadius.circular(15), border: Border.all(color: selected ? const Color(0xFF6366F1) : _borderColor.withOpacity(.75))),
+      decoration: BoxDecoration(color: selected ? const Color(0xFF6366F1).withOpacity(.08) : _surfaceColor, borderRadius: BorderRadius.circular(19), border: Border.all(color: selected ? const Color(0xFF6366F1) : _borderColor.withOpacity(.85), width: selected ? 1.5 : 1), boxShadow: [BoxShadow(color: Colors.black.withOpacity(_isDarkMode ? .10 : .035), blurRadius: 14, offset: const Offset(0, 4))]),
       child: InkWell(
-        borderRadius: BorderRadius.circular(15),
+        borderRadius: BorderRadius.circular(19),
         onTap: () => _toggleRowSelection(order),
         onLongPress: () => _copyOrderData(order),
         child: Padding(padding: const EdgeInsets.all(13), child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
@@ -4270,7 +4378,25 @@ class _OrdersPageState extends State<OrdersPage> {
               const SizedBox(height: 3),
               Text('Order ${order.designOrder.isEmpty ? '—' : order.designOrder}', style: GoogleFonts.cairo(fontSize: 10, color: _secondaryTextColor)),
             ])),
-            Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5), decoration: BoxDecoration(color: statusColor.withOpacity(.12), borderRadius: BorderRadius.circular(9)), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 105), child: Text(order.status, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.w700, color: statusColor)))),
+            if (widget.readOnly)
+              Container(padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6), decoration: BoxDecoration(color: statusColor.withOpacity(.12), borderRadius: BorderRadius.circular(10)), child: ConstrainedBox(constraints: const BoxConstraints(maxWidth: 105), child: Text(order.status, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor))))
+            else
+              Material(
+                color: statusColor.withOpacity(.10),
+                borderRadius: BorderRadius.circular(10),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(10),
+                  onTap: () => _showMobileStatusPicker(order),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 6),
+                    child: Row(mainAxisSize: MainAxisSize.min, children: [
+                      ConstrainedBox(constraints: const BoxConstraints(maxWidth: 94), child: Text(order.status, maxLines: 2, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 9, fontWeight: FontWeight.w800, color: statusColor))),
+                      const SizedBox(width: 3),
+                      Icon(Icons.keyboard_arrow_down_rounded, size: 14, color: statusColor),
+                    ]),
+                  ),
+                ),
+              ),
           ]),
           const SizedBox(height: 12),
           Container(height: 1, color: _borderColor.withOpacity(.65)),
@@ -4286,7 +4412,9 @@ class _OrdersPageState extends State<OrdersPage> {
           Row(children: [Expanded(child: detail(Icons.calendar_today_outlined, 'Order date', order.orderDate ?? '—')), Expanded(child: detail(Icons.local_shipping_outlined, 'Delivery', order.deliveryDate ?? '—'))]),
           const SizedBox(height: 11),
           Row(children: [
-            if (!widget.readOnly && canEdit) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileEditMenu(order), icon: const Icon(Icons.edit_outlined, size: 16), label: Text('Edit', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), foregroundColor: const Color(0xFF6366F1), side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))))),
+            if (!widget.readOnly) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileStatusPicker(order), icon: const Icon(Icons.swap_horiz_rounded, size: 16), label: Text('Status', style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w700)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 38), foregroundColor: statusColor, side: BorderSide(color: statusColor.withOpacity(.45)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))))),
+            if (!widget.readOnly && canEdit) const SizedBox(width: 7),
+            if (!widget.readOnly && canEdit) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileEditMenu(order), icon: const Icon(Icons.edit_outlined, size: 16), label: Text('Edit fields', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 38), foregroundColor: const Color(0xFF6366F1), side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))))),
             if (!widget.readOnly && canEdit) const SizedBox(width: 7),
             Expanded(child: OutlinedButton.icon(onPressed: () => _copyOrderData(order), icon: const Icon(Icons.copy_rounded, size: 15), label: Text('Copy details', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), foregroundColor: _secondaryTextColor, side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))))),
             if (_isHedOrManager && !_isDataEntry) ...[
