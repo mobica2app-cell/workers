@@ -521,17 +521,45 @@ class _OrdersPageState extends State<OrdersPage> {
         .toList()
       ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
-    // Match the Design Team filter's size and searchable picker behavior.
-    // "All orders" clears the employee selection.
+    final selected = names.contains(_selectedWorkEmployee)
+        ? _selectedWorkEmployee
+        : null;
+
     return SizedBox(
-      width: 175,
-      child: _buildFilterDropdown(
-        'All orders',
-        _selectedWorkEmployee ?? 'All orders',
-        ['All orders', ...names],
-            (value) => _selectEmployeeWork(
-          value == null || value == 'All orders' ? null : value,
+      width: 150,
+      height: 34,
+      child: DropdownButtonFormField<String>(
+        value: selected,
+        isExpanded: true,
+        isDense: true,
+        decoration: InputDecoration(
+          prefixIcon: const Icon(Icons.groups_outlined, size: 16),
+          prefixIconConstraints: const BoxConstraints(minWidth: 34),
+          contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+          filled: true,
+          fillColor: _surfaceColor,
+          enabledBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: BorderSide(color: _borderColor),
+          ),
+          focusedBorder: OutlineInputBorder(
+            borderRadius: BorderRadius.circular(6),
+            borderSide: const BorderSide(color: Color(0xFF6366F1)),
+          ),
         ),
+        hint: Text('Employee work', style: GoogleFonts.cairo(fontSize: 11)),
+        items: [
+          DropdownMenuItem<String>(
+            value: null,
+            child: Text('All orders', style: GoogleFonts.cairo(fontSize: 11)),
+          ),
+          ...names.map((name) => DropdownMenuItem<String>(
+            value: name,
+            child: Text(name, overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.cairo(fontSize: 11)),
+          )),
+        ],
+        onChanged: _isLoading ? null : _selectEmployeeWork,
       ),
     );
   }
@@ -4132,6 +4160,13 @@ class _OrdersPageState extends State<OrdersPage> {
                     children: [
                       _buildSearchField(anchorRight: true),
                       const SizedBox(width: 8),
+                      if (!widget.readOnly && _isHeadRole) ...[
+                        _buildEmployeeWorkDropdown(),
+                        const SizedBox(width: 8),
+                      ] else if (!widget.readOnly) ...[
+                        _buildMyWorkButton(),
+                        const SizedBox(width: 8),
+                      ],
                       if (widget.readOnly)
                         OutlinedButton.icon(
                           onPressed: () {
@@ -4158,13 +4193,6 @@ class _OrdersPageState extends State<OrdersPage> {
                         ),
                       SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
-                      if (!widget.readOnly && _isHeadRole) ...[
-                        _buildEmployeeWorkDropdown(),
-                        const SizedBox(width: 8),
-                      ] else if (!widget.readOnly) ...[
-                        _buildMyWorkButton(),
-                        const SizedBox(width: 8),
-                      ],
                       _buildSortButton(),
                       const SizedBox(width: 8),
                       filtersButton,
@@ -4205,11 +4233,11 @@ class _OrdersPageState extends State<OrdersPage> {
                   label: Text('Back to Login',
                       style: GoogleFonts.cairo(fontSize: 11)),
                 ),
-              _buildSearchField(),
-              _buildDesignTeamFilterButton(),
               if (!widget.readOnly && _isHeadRole)
                 _buildEmployeeWorkDropdown(),
               if (!widget.readOnly && !_isHeadRole) _buildMyWorkButton(),
+              _buildSearchField(),
+              _buildDesignTeamFilterButton(),
               _buildSortButton(),
               filtersButton,
               actionsMenu,
@@ -4769,20 +4797,15 @@ class _OrdersPageState extends State<OrdersPage> {
     );
 
     if (anchorRight) {
-      // Only the collapsed icon occupies layout width. The opened field grows
-      // left into the spacer and does not move the action buttons on the right.
+      // Give the expanded field its real layout width so the entire field
+      // remains hit-testable. Aligning it to the right makes it grow left
+      // into the available gap while keeping the controls to its right fixed.
       return SizedBox(
-        width: 40,
+        width: _searchExpanded ? expandedWidth : 40,
         height: 38,
-        child: Stack(
-          clipBehavior: Clip.none,
-          children: [
-            Positioned(
-              right: 0,
-              top: 0,
-              child: searchControl,
-            ),
-          ],
+        child: Align(
+          alignment: Alignment.centerRight,
+          child: searchControl,
         ),
       );
     }
