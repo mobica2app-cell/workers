@@ -130,18 +130,10 @@ class _ProfilePageState extends State<ProfilePage>
     );
 
     if (confirm == true && mounted) {
-      try {
-        // Clear remembered credentials
-        html.window.localStorage.remove('remembered_username');
-        html.window.localStorage.remove('remembered_password');
-      } catch (e) {
-        print('Error clearing storage: $e');
-      }
-
-      // Navigate to login page
+      // Match MainShell logout behavior: preserve Remember Me credentials.
       Navigator.of(context).pushAndRemoveUntil(
         MaterialPageRoute(builder: (context) => const LoginPage()),
-        (route) => false,
+            (route) => false,
       );
     }
   }
@@ -524,11 +516,11 @@ class _ProfilePageState extends State<ProfilePage>
   }
 
   Widget _buildInfoTile(
-    IconData icon,
-    String label,
-    String value, {
-    Color? valueColor,
-  }) {
+      IconData icon,
+      String label,
+      String value, {
+        Color? valueColor,
+      }) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8),
       child: Row(
