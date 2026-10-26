@@ -769,7 +769,7 @@ class _DashboardPageState extends State<DashboardPage> {
         ),
       )
           : SingleChildScrollView(
-        padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 12 : 24),
+        padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 8 : 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -800,11 +800,11 @@ class _DashboardPageState extends State<DashboardPage> {
                 ),
               ],
             ),
-            const SizedBox(height: 24),
+            SizedBox(height: MediaQuery.of(context).size.width < 600 ? 12 : 24),
 
             // Comparison Section
             _buildComparisonSection(),
-            const SizedBox(height: 24),
+            SizedBox(height: MediaQuery.of(context).size.width < 600 ? 12 : 24),
 
             // Stage status analytics
             _buildStageStatusGraph(),
@@ -1013,8 +1013,9 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildComparisonSection() {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Container(
-      padding: const EdgeInsets.all(24),
+      padding: EdgeInsets.all(isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -1023,16 +1024,15 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Order Breakdown', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w700, color: _textColor)),
-          const SizedBox(height: 20),
+          Text('Order Breakdown', style: GoogleFonts.cairo(
+              fontSize: isMobile ? 18 : 20,
+              fontWeight: FontWeight.w700, color: _textColor)),
+          SizedBox(height: isMobile ? 10 : 16),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1050
-                  ? 3
-                  : constraints.maxWidth >= 620
-                  ? 2
-                  : 1;
-              final gap = 14.0;
+              final columns = constraints.maxWidth >= 1050 ? 3 :
+              constraints.maxWidth >= 620 ? 2 : 1;
+              final gap = isMobile ? 8.0 : 14.0;
               final cardWidth = (constraints.maxWidth - gap * (columns - 1)) / columns;
               return Wrap(
                 spacing: gap,
@@ -1070,11 +1070,10 @@ class _DashboardPageState extends State<DashboardPage> {
     required double totalValue,
     required double totalQuantity,
     required List<String>? statuses,
-  })
-  {
+  }) {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     return Container(
-      height: 520,
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(isMobile ? 10 : 14),
       decoration: BoxDecoration(
         color: color.withOpacity(0.05),
         borderRadius: BorderRadius.circular(12),
@@ -1083,148 +1082,93 @@ class _DashboardPageState extends State<DashboardPage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(8),
-                decoration: BoxDecoration(
-                  color: color.withOpacity(0.1),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Icon(icon, color: color, size: 20),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                title,
-                style: GoogleFonts.cairo(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                  color: color,
-                ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 16),
+          Row(children: [
+            Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(color: color.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(8)),
+              child: Icon(icon, color: color, size: isMobile ? 17 : 20),
+            ),
+            const SizedBox(width: 7),
+            Expanded(child: Text(title, style: GoogleFonts.cairo(
+                fontSize: isMobile ? 14 : 16,
+                fontWeight: FontWeight.w700, color: color))),
+          ]),
+          SizedBox(height: isMobile ? 8 : 12),
           _buildComparisonRow('Orders', '$orderCount', color),
-          const SizedBox(height: 8),
-          _buildComparisonRow('Value', '\$${_formatNumber(totalValue)}', color),
-          const SizedBox(height: 8),
-          _buildComparisonRow('QTY', totalQuantity.toStringAsFixed(0), color),
-          const SizedBox(height: 16),
-          if (statuses != null && statuses.isNotEmpty) ...[
-            Divider(color: color.withOpacity(0.3)),
-            const SizedBox(height: 8),
-            Text(
-              'Statuses (${statuses.length})',
-              style: GoogleFonts.cairo(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: _secondaryTextColor,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Builder(
-              builder: (context) {
-                final counts = statuses
-                    .map((status) => _statusDistribution[status] ?? 0)
-                    .toList();
-                final total = counts.fold<int>(0, (sum, count) => sum + count);
-
-                return Column(
-                  children: [
-                    SizedBox(
-                      height: 170,
-                      child: Center(
-                        child: SizedBox(
-                          width: 170,
-                          height: 170,
-                          child: PieChart(
-                            PieChartData(
-                              startDegreeOffset: -90,
-                              sectionsSpace: 3,
-                              centerSpaceRadius: 42,
-                              sections: statuses.asMap().entries.map((entry) {
-                                final status = entry.value;
-                                final count = counts[entry.key];
-                                final percent = total == 0 ? 0.0 : count / total * 100;
-                                return PieChartSectionData(
-                                  value: count > 0 ? count.toDouble() : 0.0001,
-                                  color: _getStatusColor(status),
-                                  radius: 28,
-                                  title: '',
-                                  titleStyle: const TextStyle(
-                                    color: Colors.transparent,
-                                    fontSize: 0,
-                                  ),
-                                );
-                              }).toList(),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                    Text(
-                      '$total orders',
-                      style: GoogleFonts.cairo(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: _textColor,
-                      ),
-                    ),
-                    const SizedBox(height: 10),
-                    ...statuses.asMap().entries.map((entry) {
-                      final status = entry.value;
-                      final count = counts[entry.key];
-                      final percent = total == 0 ? 0.0 : count / total * 100;
-                      return Padding(
-                        padding: const EdgeInsets.only(bottom: 6),
-                        child: Row(
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: BoxDecoration(
-                                color: _getStatusColor(status),
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 7),
-                            Expanded(
-                              child: Text(
-                                status,
-                                style: GoogleFonts.cairo(
-                                  fontSize: 10,
-                                  color: _secondaryTextColor,
-                                ),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                            Text(
-                              '${percent.toStringAsFixed(1)}%',
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                fontWeight: FontWeight.w700,
-                                color: _textColor,
-                              ),
-                            ),
-                            const SizedBox(width: 8),
-                            Text(
-                              '$count',
-                              style: GoogleFonts.cairo(
-                                fontSize: 10,
-                                color: _secondaryTextColor,
-                              ),
-                            ),
-                          ],
-                        ),
-                      );
-                    }),
-                  ],
-                );
-              },
-            ),
-          ],
           const SizedBox(height: 4),
+          _buildComparisonRow('Value', '\$${_formatNumber(totalValue)}', color),
+          const SizedBox(height: 4),
+          _buildComparisonRow('QTY', totalQuantity.toStringAsFixed(0), color),
+          if (statuses != null && statuses.isNotEmpty) ...[
+            Divider(color: color.withOpacity(0.3), height: isMobile ? 16 : 22),
+            Text('Status breakdown', style: GoogleFonts.cairo(
+                fontSize: isMobile ? 11 : 12,
+                fontWeight: FontWeight.w700, color: _secondaryTextColor)),
+            const SizedBox(height: 6),
+            Builder(builder: (context) {
+              final counts = statuses.map((status) => _statusDistribution[status] ?? 0).toList();
+              final total = counts.fold<int>(0, (sum, count) => sum + count);
+              final legend = Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: statuses.asMap().entries.map((entry) {
+                  final status = entry.value;
+                  final count = counts[entry.key];
+                  final percent = total == 0 ? 0.0 : count / total * 100;
+                  return Padding(
+                    padding: EdgeInsets.only(bottom: isMobile ? 3 : 5),
+                    child: Row(children: [
+                      Container(width: 7, height: 7, decoration: BoxDecoration(
+                          color: _getStatusColor(status), shape: BoxShape.circle)),
+                      const SizedBox(width: 5),
+                      Expanded(child: Text(status, maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: GoogleFonts.cairo(fontSize: isMobile ? 9 : 10,
+                              color: _secondaryTextColor))),
+                      Text('${percent.toStringAsFixed(0)}%  $count',
+                          style: GoogleFonts.cairo(fontSize: isMobile ? 9 : 10,
+                              fontWeight: FontWeight.w700, color: _textColor)),
+                    ]),
+                  );
+                }).toList(),
+              );
+              final pie = SizedBox(
+                width: isMobile ? 92 : 120,
+                height: isMobile ? 92 : 120,
+                child: PieChart(PieChartData(
+                  startDegreeOffset: -90,
+                  sectionsSpace: 2,
+                  centerSpaceRadius: isMobile ? 23 : 30,
+                  sections: statuses.asMap().entries.map((entry) {
+                    final count = counts[entry.key];
+                    return PieChartSectionData(
+                      value: count > 0 ? count.toDouble() : 0.0001,
+                      color: _getStatusColor(entry.value),
+                      radius: isMobile ? 18 : 23,
+                      title: '',
+                    );
+                  }).toList(),
+                )),
+              );
+              return Row(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  pie,
+                  SizedBox(width: isMobile ? 8 : 12),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('$total orders', style: GoogleFonts.cairo(
+                          fontSize: isMobile ? 11 : 12,
+                          fontWeight: FontWeight.w700, color: _textColor)),
+                      const SizedBox(height: 5),
+                      legend,
+                    ],
+                  )),
+                ],
+              );
+            }),
+          ],
         ],
       ),
     );
@@ -1526,7 +1470,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return Container(
-      padding: const EdgeInsets.all(16),
+      padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(16),
@@ -1629,7 +1573,7 @@ class _DashboardPageState extends State<DashboardPage> {
             builder: (context, constraints) {
               final columns = constraints.maxWidth >= 1000
                   ? 3
-                  : constraints.maxWidth >= 650
+                  : constraints.maxWidth >= 320
                   ? 2
                   : 1;
               final gap = 8.0;
@@ -1672,10 +1616,11 @@ class _DashboardPageState extends State<DashboardPage> {
             )
           else
             SizedBox(
-              height: 440,
+              height: MediaQuery.of(context).size.width < 600 ? 720 : 480,
               child: LayoutBuilder(
                 builder: (context, chartConstraints) {
-                  final chartWidth = (visibleCategories.length * 120.0)
+                  final isMobileChart = MediaQuery.of(context).size.width < 600;
+                  final chartWidth = (visibleCategories.length * (isMobileChart ? 260.0 : 145.0))
                       .clamp(chartConstraints.maxWidth, 100000.0);
                   return Scrollbar(
                       controller: _stageGraphScrollController,
@@ -1740,7 +1685,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                       '$category\n$status: ${rod.toY.round()} orders',
                                       TextStyle(
                                         color: Colors.white,
-                                        fontSize: 13,
+                                        fontSize: MediaQuery.of(context).size.width < 600 ? 20 : 13,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     );
@@ -1757,12 +1702,12 @@ class _DashboardPageState extends State<DashboardPage> {
                                 leftTitles: AxisTitles(
                                   sideTitles: SideTitles(
                                     showTitles: true,
-                                    reservedSize: 44,
+                                    reservedSize: MediaQuery.of(context).size.width < 600 ? 72 : 50,
                                     getTitlesWidget: (value, meta) => Text(
                                       value.toInt().toString(),
                                       style: TextStyle(
                                         color: _secondaryTextColor,
-                                        fontSize: 12,
+                                        fontSize: MediaQuery.of(context).size.width < 600 ? 20 : 12,
                                         fontWeight: FontWeight.w600,
                                       ),
                                     ),
@@ -1771,7 +1716,7 @@ class _DashboardPageState extends State<DashboardPage> {
                                 bottomTitles: AxisTitles(
                                   sideTitles: SideTitles(
                                     showTitles: true,
-                                    reservedSize: 70,
+                                    reservedSize: MediaQuery.of(context).size.width < 600 ? 140 : 82,
                                     getTitlesWidget: (value, meta) {
                                       final index = value.toInt();
                                       if (index < 0 || index >= visibleCategories.length) {
@@ -1786,17 +1731,17 @@ class _DashboardPageState extends State<DashboardPage> {
                                           : DateFormat('MMM yyyy').format(parsedMonth);
                                       return SideTitleWidget(
                                         meta: meta,
-                                        space: 10,
+                                        space: MediaQuery.of(context).size.width < 600 ? 16 : 10,
                                         child: SizedBox(
-                                          width: 100,
+                                          width: MediaQuery.of(context).size.width < 600 ? 240 : 100,
                                           child: Text(
                                             label,
-                                            maxLines: 2,
+                                            maxLines: MediaQuery.of(context).size.width < 600 ? 4 : 2,
                                             overflow: TextOverflow.ellipsis,
                                             textAlign: TextAlign.center,
                                             style: TextStyle(
                                               color: _secondaryTextColor,
-                                              fontSize: 11,
+                                              fontSize: MediaQuery.of(context).size.width < 600 ? 18 : 11,
                                               fontWeight: FontWeight.w600,
                                             ),
                                           ),
@@ -1828,7 +1773,9 @@ class _DashboardPageState extends State<DashboardPage> {
                                     return BarChartRodData(
                                       toY: count.toDouble(),
                                       color: _getStatusColor(status),
-                                      width: activeStatuses.length > 8 ? 8 : 16,
+                                      width: MediaQuery.of(context).size.width < 600
+                                          ? (activeStatuses.length > 8 ? 18 : 32)
+                                          : (activeStatuses.length > 8 ? 10 : 20),
                                       borderRadius: BorderRadius.circular(3),
                                     );
                                   }).toList(),
