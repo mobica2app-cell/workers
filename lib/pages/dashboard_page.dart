@@ -1358,6 +1358,8 @@ class _DashboardPageState extends State<DashboardPage> {
                 normalized != 'null' &&
                 normalized != 'n/a' &&
                 normalized != 'none' &&
+                normalized != 'no one' &&
+                normalized != 'header' &&
                 normalized != '-';
           }
 
