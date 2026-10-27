@@ -4021,8 +4021,8 @@ class _OrdersPageState extends State<OrdersPage> {
                 children: [
                   Row(children: [
                     Container(
-                      width: 42,
-                      height: 42,
+                      width: 54,
+                      height: 54,
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: _surfaceColor,
@@ -4035,14 +4035,14 @@ class _OrdersPageState extends State<OrdersPage> {
                         errorBuilder: (_, __, ___) => Icon(
                           Icons.receipt_long_rounded,
                           color: primary,
-                          size: 22,
+                          size: 28,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 14),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(widget.doneOrdersOnly ? 'Done Orders' : 'Orders', style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w800, color: _textColor)),
-                      Text('${_getFilteredOrders().length} orders${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}', style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+                      Text(widget.doneOrdersOnly ? 'Done Orders' : 'Orders', style: GoogleFonts.cairo(fontSize: 24, height: 1.15, fontWeight: FontWeight.w800, color: _textColor)),
+                      Text('${_getFilteredOrders().length} orders${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}', style: GoogleFonts.cairo(fontSize: 13, color: _secondaryTextColor)),
                     ])),
                     if (!widget.readOnly)
                       IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary)),
@@ -4075,14 +4075,14 @@ class _OrdersPageState extends State<OrdersPage> {
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     onChanged: (value) { setState(() => _searchQuery = value); _rebuildGroups(); },
-                    style: GoogleFonts.cairo(fontSize: 13, color: _textColor),
+                    style: GoogleFonts.cairo(fontSize: 15, color: _textColor),
                     decoration: InputDecoration(
                       hintText: 'Search orders, customers, codes…',
-                      hintStyle: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor),
+                      hintStyle: GoogleFonts.cairo(fontSize: 14, color: _secondaryTextColor),
                       prefixIcon: const Icon(Icons.search_rounded),
                       suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }) : null,
                       filled: true, fillColor: _backgroundColor,
-                      contentPadding: const EdgeInsets.symmetric(vertical: 12),
+                      contentPadding: const EdgeInsets.symmetric(vertical: 14),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: _borderColor)),
                       enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: _borderColor)),
                     ),
@@ -4124,10 +4124,10 @@ class _OrdersPageState extends State<OrdersPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          height: 38,
-          padding: const EdgeInsets.symmetric(horizontal: 12),
-          decoration: BoxDecoration(color: _surfaceColor, border: Border.all(color: _borderColor), borderRadius: BorderRadius.circular(12)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 17, color: _secondaryTextColor), const SizedBox(width: 6), Text(label, style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600, color: _textColor))]),
+          height: 44,
+          padding: const EdgeInsets.symmetric(horizontal: 14),
+          decoration: BoxDecoration(color: _surfaceColor, border: Border.all(color: _borderColor), borderRadius: BorderRadius.circular(13)),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 20, color: _secondaryTextColor), const SizedBox(width: 8), Text(label, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700, color: _textColor))]),
         ),
       );
 
