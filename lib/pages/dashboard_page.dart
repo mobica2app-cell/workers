@@ -35,6 +35,19 @@ class _DashboardPageState extends State<DashboardPage> {
     ..._manufacturingStatuses,
   };
 
+  // Independent filters and grouping for the circular chart.
+  String _circularGraphGrouping = 'factory';
+  int? _hoveredCircularPieIndex;
+  final Set<String> _selectedCircularSubmittalStatuses = {
+    ..._beforeApprovalStatuses,
+  };
+  final Set<String> _selectedCircularApprovalStatuses = {
+    ..._approvalStatuses,
+  };
+  final Set<String> _selectedCircularManufacturingStatuses = {
+    ..._manufacturingStatuses,
+  };
+
 
   bool _isLoading = true;
 
@@ -758,6 +771,28 @@ class _DashboardPageState extends State<DashboardPage> {
     super.dispose();
   }
 
+  Widget _buildGroupingTab(
+      String value,
+      String label,
+      String selectedValue,
+      ValueChanged<String> onSelected,
+      ) {
+    final selected = selectedValue == value;
+    final primaryColor = Theme.of(context).colorScheme.primary;
+    return ChoiceChip(
+      label: Text(label, style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600)),
+      selected: selected,
+      onSelected: (_) => onSelected(value),
+      selectedColor: primaryColor.withOpacity(_isDark ? 0.28 : 0.14),
+      backgroundColor: _cardColor,
+      side: BorderSide(color: selected ? primaryColor : _borderColor),
+      labelStyle: TextStyle(color: selected ? primaryColor : _textColor),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -808,6 +843,8 @@ class _DashboardPageState extends State<DashboardPage> {
 
             // Stage status analytics
             _buildStageStatusGraph(),
+            const SizedBox(height: 24),
+            _buildCircularStageStatusGraph(),
             const SizedBox(height: 24),
           ],
         ),
@@ -1320,6 +1357,7 @@ class _DashboardPageState extends State<DashboardPage> {
   }
 
   Widget _buildStageStatusGraph() {
+    final isMobile = MediaQuery.of(context).size.width < 600;
     final stageStatuses = <String, List<String>>{
       'Submittal': _beforeApprovalStatuses,
       'Approval': _approvalStatuses,
@@ -1406,7 +1444,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final selected = selectedByStage[stage]!;
       final color = stageColors[stage]!;
       return Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        padding: EdgeInsets.fromLTRB(isMobile ? 5 : 9, 7, isMobile ? 3 : 9, 7),
         decoration: BoxDecoration(
           color: color.withOpacity(0.045),
           borderRadius: BorderRadius.circular(12),
@@ -1446,6 +1484,7 @@ class _DashboardPageState extends State<DashboardPage> {
               dense: true,
               minVerticalPadding: 0,
               contentPadding: EdgeInsets.zero,
+              horizontalTitleGap: 6,
               visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               controlAffinity: ListTileControlAffinity.leading,
@@ -1504,33 +1543,17 @@ class _DashboardPageState extends State<DashboardPage> {
                   color: _textColor,
                 ),
               ),
-              SizedBox(
-                width: 210,
-                child: DropdownButtonFormField<String>(
-                  value: _stageGraphGrouping,
-                  decoration: InputDecoration(
-                    labelText: 'Group graph by',
-                    labelStyle: GoogleFonts.cairo(fontSize: 12),
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(10),
-                    ),
-                    contentPadding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 10,
-                    ),
-                  ),
-                  dropdownColor: _cardColor,
-                  items: const [
-                    DropdownMenuItem(value: 'factory', child: Text('Factories')),
-                    DropdownMenuItem(value: 'date', child: Text('Dates (month)')),
-                    DropdownMenuItem(value: 'employee', child: Text('Employees')),
-                  ],
-                  onChanged: (value) {
-                    if (value != null) {
-                      setState(() => _stageGraphGrouping = value);
-                    }
-                  },
-                ),
+              Wrap(
+                spacing: 6,
+                runSpacing: 6,
+                children: [
+                  _buildGroupingTab('factory', 'Factories', _stageGraphGrouping,
+                          (value) => setState(() => _stageGraphGrouping = value)),
+                  _buildGroupingTab('date', 'Dates', _stageGraphGrouping,
+                          (value) => setState(() => _stageGraphGrouping = value)),
+                  _buildGroupingTab('employee', 'Employees', _stageGraphGrouping,
+                          (value) => setState(() => _stageGraphGrouping = value)),
+                ],
               ),
             ],
           ),
@@ -1618,7 +1641,7 @@ class _DashboardPageState extends State<DashboardPage> {
             )
           else
             SizedBox(
-              height: MediaQuery.of(context).size.width < 600 ? 720 : 480,
+              height: MediaQuery.of(context).size.width < 600 ? 600 : 380,
               child: LayoutBuilder(
                 builder: (context, chartConstraints) {
                   final isMobileChart = MediaQuery.of(context).size.width < 600;
@@ -1818,6 +1841,522 @@ class _DashboardPageState extends State<DashboardPage> {
               );
             }).toList(),
           ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCircularStageStatusGraph() {
+    final stageStatuses = <String, List<String>>{
+      'Submittal': _beforeApprovalStatuses,
+      'Approval': _approvalStatuses,
+      'Manufacturing': _manufacturingStatuses,
+    };
+    final selectedByStage = <String, Set<String>>{
+      'Submittal': _selectedCircularSubmittalStatuses,
+      'Approval': _selectedCircularApprovalStatuses,
+      'Manufacturing': _selectedCircularManufacturingStatuses,
+    };
+    final stageColors = <String, Color>{
+      'Submittal': Colors.purple,
+      'Approval': Colors.green,
+      'Manufacturing': Colors.orange,
+    };
+    final isMobile = MediaQuery.of(context).size.width < 600;
+    // Cycle through a broad palette so every category remains distinguishable,
+    // even when there are many slices.
+    const circularPalette = <Color>[
+      Color(0xFF2563EB), Color(0xFFDC2626), Color(0xFF059669),
+      Color(0xFF9333EA), Color(0xFFD97706), Color(0xFF0891B2),
+      Color(0xFFDB2777), Color(0xFF4F46E5), Color(0xFF65A30D),
+      Color(0xFFEA580C), Color(0xFF0F766E), Color(0xFF7C3AED),
+      Color(0xFFB91C1C), Color(0xFF0284C7), Color(0xFF854D0E),
+      Color(0xFFBE185D), Color(0xFF4338CA), Color(0xFF15803D),
+      Color(0xFF6D28D9), Color(0xFF0E7490),
+    ];
+    Color circularColor(int index) => circularPalette[index % circularPalette.length];
+
+    // Years with less than 5% of filtered orders are combined into one "Other" slice.
+    final smallDateYears = <String>{};
+
+    List<String> categoriesForOrder(SAPMainOrder order) {
+      switch (_circularGraphGrouping) {
+        case 'date':
+          final rawDate = order.orderDate?.trim() ?? '';
+          final parsedDate = DateTime.tryParse(rawDate);
+          if (parsedDate == null) {
+            return [rawDate.isEmpty ? 'Unknown date' : 'Other'];
+          }
+          final year = parsedDate.year.toString();
+          // Small years stay as a single yearly slice; larger years expand into months.
+          return [
+            smallDateYears.contains(year)
+                ? year
+                : DateFormat('yyyy-MM').format(parsedDate),
+          ];
+        case 'employee':
+          bool valid(String value) {
+            final v = value.trim().toLowerCase();
+            return v.isNotEmpty &&
+                !{'null', 'n/a', 'none', 'no one', 'header', '-'}.contains(v);
+          }
+
+          final assigned = order.correspondenceEngineer?.trim() ?? '';
+          if (valid(assigned)) return [assigned];
+          final responsible = order.responsibleEngineer?.trim() ?? '';
+          return [valid(responsible) ? responsible : 'Unassigned'];
+        case 'factory':
+        default:
+          final factory = order.factory?.trim() ?? '';
+          if (factory.isEmpty) return ['Unknown factory'];
+          final description = _factoryDescriptions[factory.toLowerCase()]?.trim() ?? '';
+          return [description.isEmpty ? factory : description];
+      }
+    }
+
+    final activeStatuses = <String>[
+      for (final stage in stageStatuses.keys)
+        ...stageStatuses[stage]!.where(selectedByStage[stage]!.contains),
+    ];
+
+    // Decide the date granularity independently for each year using the
+    // currently selected statuses. Years below 5% remain one yearly slice;
+    // years at or above 5% are split into monthly slices.
+    if (_circularGraphGrouping == 'date') {
+      final yearCounts = <String, int>{};
+      var selectedOrderCount = 0;
+      for (final order in _allOrders) {
+        if (!activeStatuses.contains(order.status.trim())) continue;
+        selectedOrderCount++;
+        final parsedDate = DateTime.tryParse(order.orderDate?.trim() ?? '');
+        if (parsedDate != null) {
+          final year = parsedDate.year.toString();
+          yearCounts[year] = (yearCounts[year] ?? 0) + 1;
+        }
+      }
+      if (selectedOrderCount > 0) {
+        for (final entry in yearCounts.entries) {
+          if (entry.value / selectedOrderCount < 0.10) {
+            smallDateYears.add(entry.key);
+          }
+        }
+      }
+    }
+    final categories = <String>{};
+    for (final order in _allOrders) {
+      if (activeStatuses.contains(order.status.trim())) {
+        categories.addAll(categoriesForOrder(order));
+      }
+    }
+    final sortedCategories = categories.toList()..sort();
+    final counts = sortedCategories.map((category) => _allOrders.where((order) =>
+    activeStatuses.contains(order.status.trim()) &&
+        categoriesForOrder(order).contains(category)).length).toList();
+    final total = counts.fold<int>(0, (sum, count) => sum + count);
+    final selectedCount = selectedByStage.values.fold<int>(
+        0, (sum, selected) => sum + selected.length);
+
+    Widget stageFilter(String stage, List<String> statuses) {
+      final selected = selectedByStage[stage]!;
+      final color = stageColors[stage]!;
+      return Container(
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.045),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.22)),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(children: [
+              Expanded(child: Text(stage, style: GoogleFonts.cairo(
+                  color: color, fontSize: 12, fontWeight: FontWeight.w700))),
+              Checkbox(
+                value: statuses.every(selected.contains),
+                tristate: true,
+                visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                onChanged: (value) => setState(() {
+                  if (value == true) {
+                    selected.addAll(statuses);
+                  } else {
+                    selected.removeAll(statuses);
+                  }
+                }),
+              ),
+            ]),
+            ...statuses.map((status) => CheckboxListTile(
+              dense: true,
+              minVerticalPadding: 0,
+              contentPadding: EdgeInsets.zero,
+              visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
+              materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              controlAffinity: ListTileControlAffinity.leading,
+              title: Text(status, style: GoogleFonts.cairo(fontSize: 10, color: _textColor)),
+              value: selected.contains(status),
+              activeColor: color,
+              onChanged: (checked) => setState(() {
+                if (checked == true) {
+                  selected.add(status);
+                } else {
+                  selected.remove(status);
+                }
+              }),
+            )),
+          ],
+        ),
+      );
+    }
+
+    final chartContent = activeStatuses.isEmpty || sortedCategories.isEmpty || total == 0
+        ? Padding(
+      padding: const EdgeInsets.all(28),
+      child: Center(
+        child: Text(
+          activeStatuses.isEmpty
+              ? 'Select at least one stage status to display the chart.'
+              : 'No matching orders for the selected filters.',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(color: _secondaryTextColor),
+        ),
+      ),
+    )
+        : Column(
+      children: [
+        SizedBox(
+          height: isMobile ? 340 : 390,
+          child: Stack(
+            children: [
+              PieChart(PieChartData(
+                startDegreeOffset: -90,
+                sectionsSpace: 2,
+                centerSpaceRadius: isMobile ? 44 : 58,
+                pieTouchData: PieTouchData(
+                  touchCallback: (event, response) {
+                    final touchedIndex = response?.touchedSection?.touchedSectionIndex;
+                    if (event is FlPointerHoverEvent || event is FlPanUpdateEvent) {
+                      if (mounted && _hoveredCircularPieIndex != touchedIndex) {
+                        setState(() => _hoveredCircularPieIndex = touchedIndex);
+                      }
+                    }
+                    if (event is! FlTapUpEvent || touchedIndex == null ||
+                        touchedIndex < 0 || touchedIndex >= sortedCategories.length) return;
+                    final category = sortedCategories[touchedIndex];
+                    final matchingOrders = _allOrders.where((order) =>
+                    activeStatuses.contains(order.status.trim()) &&
+                        categoriesForOrder(order).contains(category)).toList()
+                      ..sort((a, b) => (b.orderDate ?? '').compareTo(a.orderDate ?? ''));
+                    showModalBottomSheet<void>(
+                      context: context,
+                      isScrollControlled: true,
+                      backgroundColor: Colors.transparent,
+                      builder: (sheetContext) => Container(
+                        height: MediaQuery.of(sheetContext).size.height * 0.82,
+                        decoration: BoxDecoration(
+                          color: _backgroundColor,
+                          borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                        ),
+                        child: Column(children: [
+                          Padding(
+                            padding: const EdgeInsets.all(18),
+                            child: Row(children: [
+                              Expanded(child: Text('$category • ${matchingOrders.length} orders',
+                                  style: GoogleFonts.cairo(fontSize: 16, fontWeight: FontWeight.w700, color: _textColor))),
+                              IconButton(onPressed: () => Navigator.pop(sheetContext),
+                                  icon: Icon(Icons.close, color: _secondaryTextColor)),
+                            ]),
+                          ),
+                          Divider(height: 1, color: _borderColor),
+                          Expanded(
+                            child: matchingOrders.isEmpty
+                                ? Center(child: Text('No orders found', style: GoogleFonts.cairo(color: _secondaryTextColor)))
+                                : ListView.builder(
+                              padding: const EdgeInsets.all(14),
+                              itemCount: matchingOrders.length,
+                              itemBuilder: (context, index) {
+                                final order = matchingOrders[index];
+                                return Card(
+                                  color: _cardColor,
+                                  child: ListTile(
+                                    title: Text(order.description.isEmpty ? 'No description' : order.description,
+                                        maxLines: 2, overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.cairo(color: _textColor, fontWeight: FontWeight.w600)),
+                                    subtitle: Text(
+                                        'Status: ${order.status}\nOrder: ${order.designOrder} • Contract: ${order.contractNumber}\nFactory: ${order.factory ?? 'N/A'} • Qty: ${order.quantity}',
+                                        style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+                                    trailing: Icon(Icons.chevron_right, color: _secondaryTextColor),
+                                    onTap: () {
+                                      Navigator.pop(sheetContext);
+                                      Navigator.push(context, MaterialPageRoute(
+                                          builder: (_) => OrderTrackingPage(order: order)));
+                                    },
+                                  ),
+                                );
+                              },
+                            ),
+                          ),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+                sections: List.generate(sortedCategories.length, (index) {
+                  final count = counts[index];
+                  final maxCount = counts.fold<int>(0, (largest, value) => value > largest ? value : largest);
+                  // fl_chart has no minimum-angle option. A small visual floor keeps
+                  // low-count categories visible; tooltips and order lists use real counts.
+                  final minimumSliceValue = maxCount * 0.025;
+                  return PieChartSectionData(
+                    value: count.toDouble() < minimumSliceValue ? minimumSliceValue : count.toDouble(),
+                    color: circularColor(index),
+                    radius: isMobile ? 82 : 92,
+                    title: '',
+                  );
+                }),
+              )),
+              if (_hoveredCircularPieIndex != null &&
+                  _hoveredCircularPieIndex! >= 0 &&
+                  _hoveredCircularPieIndex! < sortedCategories.length)
+                Positioned(
+                  top: 8, left: 8, right: 8,
+                  child: IgnorePointer(
+                    child: Center(
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: _cardColor,
+                          borderRadius: BorderRadius.circular(10),
+                          border: Border.all(color: _borderColor),
+                          boxShadow: const [BoxShadow(color: Colors.black12, blurRadius: 8)],
+                        ),
+                        child: Builder(builder: (context) {
+                          final i = _hoveredCircularPieIndex!;
+                          final category = sortedCategories[i];
+                          final categoryOrders = _allOrders.where((order) =>
+                          activeStatuses.contains(order.status.trim()) &&
+                              categoriesForOrder(order).contains(category)).toList();
+                          return Text(
+                            '$category\n${categoryOrders.length} orders',
+                            textAlign: TextAlign.center,
+                            style: GoogleFonts.cairo(color: _textColor, fontSize: 12, fontWeight: FontWeight.w700),
+                          );
+                        }),
+                      ),
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        Text(
+          '$total orders across ${sortedCategories.length} ${_circularGraphGrouping == 'factory' ? 'factories' : _circularGraphGrouping == 'employee' ? 'employees' : 'date groups'}',
+          textAlign: TextAlign.center,
+          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w700, color: _textColor),
+        ),
+        const SizedBox(height: 14),
+
+      ],
+    );
+
+    final categoryLegend = total == 0
+        ? const SizedBox.shrink()
+        : Wrap(
+      spacing: 14,
+      runSpacing: 10,
+      children: List.generate(sortedCategories.length, (index) {
+        final category = sortedCategories[index];
+        final color = circularColor(index);
+        return InkWell(
+          onTap: () {
+            final matchingOrders = _allOrders.where((order) =>
+            activeStatuses.contains(order.status.trim()) &&
+                categoriesForOrder(order).contains(category)).toList();
+            if (matchingOrders.isNotEmpty) {
+              final firstStatus = activeStatuses.firstWhere(
+                    (status) => matchingOrders.any(
+                        (order) => order.status.trim() == status),
+                orElse: () => activeStatuses.first,
+              );
+              _showStageGraphOrders(
+                category: category,
+                status: firstStatus,
+                categoriesForOrder: categoriesForOrder,
+              );
+            }
+          },
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxWidth: isMobile ? 170 : 240),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 10,
+                  height: 10,
+                  decoration: BoxDecoration(
+                    color: color,
+                    shape: BoxShape.circle,
+                  ),
+                ),
+                const SizedBox(width: 6),
+                Flexible(
+                  child: Text(
+                    '$category  ${(counts[index] / total * 100).toStringAsFixed(1)}% • ${counts[index]} orders',
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: _textColor,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      }),
+    );
+
+    final selectionPanel = Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
+                onPressed: () => setState(() {
+                  _selectedCircularSubmittalStatuses.addAll(_beforeApprovalStatuses);
+                  _selectedCircularApprovalStatuses.addAll(_approvalStatuses);
+                  _selectedCircularManufacturingStatuses.addAll(_manufacturingStatuses);
+                }),
+                child: const Text('Select all'),
+              ),
+              const SizedBox(width: 8),
+              TextButton(
+                style: TextButton.styleFrom(padding: EdgeInsets.zero, minimumSize: Size.zero, tapTargetSize: MaterialTapTargetSize.shrinkWrap, visualDensity: VisualDensity.compact),
+                onPressed: () => setState(() {
+                  _selectedCircularSubmittalStatuses.clear();
+                  _selectedCircularApprovalStatuses.clear();
+                  _selectedCircularManufacturingStatuses.clear();
+                }),
+                child: const Text('Clear all'),
+              ),
+            ]),
+        Text('$selectedCount selected', style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor)),
+        const SizedBox(height: 8),
+        ...stageStatuses.entries.map((entry) => Padding(
+          padding: const EdgeInsets.only(bottom: 8),
+          child: stageFilter(entry.key, entry.value),
+        )),
+      ],
+    );
+
+    return Container(
+      padding: EdgeInsets.all(isMobile ? 10 : 16),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: [BoxShadow(
+            color: _isDark ? Colors.black.withOpacity(0.25) : Colors.black.withOpacity(0.035),
+            blurRadius: 10, offset: const Offset(0, 2))],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          if (isMobile) ...[
+            Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 10,
+              children: [
+                Text('Circular Stage Status Analytics',
+                    style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w700, color: _textColor)),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    _buildGroupingTab('factory', 'Factories', _circularGraphGrouping,
+                            (value) => setState(() => _circularGraphGrouping = value)),
+                    _buildGroupingTab('date', 'Dates', _circularGraphGrouping,
+                            (value) => setState(() => _circularGraphGrouping = value)),
+                    _buildGroupingTab('employee', 'Employees', _circularGraphGrouping,
+                            (value) => setState(() => _circularGraphGrouping = value)),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text('Circular breakdown of orders by the selected grouping and stage statuses.',
+                style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor)),
+            const SizedBox(height: 14),
+            chartContent,
+            const SizedBox(height: 12),
+            selectionPanel,
+          ] else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  flex: 3,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        alignment: WrapAlignment.start,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        runSpacing: 10,
+                        children: [
+                          Text('Circular Stage Status Analytics',
+                              style: GoogleFonts.cairo(fontSize: 20, fontWeight: FontWeight.w700, color: _textColor)),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              _buildGroupingTab('factory', 'Factories', _circularGraphGrouping,
+                                      (value) => setState(() => _circularGraphGrouping = value)),
+                              _buildGroupingTab('date', 'Dates', _circularGraphGrouping,
+                                      (value) => setState(() => _circularGraphGrouping = value)),
+                              _buildGroupingTab('employee', 'Employees', _circularGraphGrouping,
+                                      (value) => setState(() => _circularGraphGrouping = value)),
+                            ],
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      Text('Circular breakdown of orders by the selected grouping and stage statuses.',
+                          style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor)),
+                      const SizedBox(height: 14),
+                      chartContent,
+                    ],
+                  ),
+                ),
+                const SizedBox(width: 18),
+                SizedBox(
+                  width: 300,
+                  child: selectionPanel,
+                ),
+              ],
+            ),
+          if (total > 0) ...[
+            const SizedBox(height: 16),
+            Divider(color: _borderColor, height: 1),
+            const SizedBox(height: 12),
+            Text(
+              'Order distribution',
+              style: GoogleFonts.cairo(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: _textColor,
+              ),
+            ),
+            const SizedBox(height: 10),
+            categoryLegend,
+          ],
         ],
       ),
     );
