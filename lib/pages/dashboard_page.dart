@@ -415,7 +415,7 @@ class _DashboardPageState extends State<DashboardPage> {
       case 'Master Data':
         return Colors.cyan;
       case 'partation  master data':
-        return Colors.deepPurple;
+        return Colors.deepOrangeAccent;
       case 'ادارة تصميم المنتجات':
         return Colors.teal;
       case 'الادارة الهندسه':
