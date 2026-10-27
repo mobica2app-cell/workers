@@ -77,7 +77,7 @@ class _ProfilePageState extends State<ProfilePage>
   void _toggleTheme(bool value) {
     ThemeNotifier.instance.toggleTheme(value);
 
-    // Show confirmation
+    // Show confirmation0
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
