@@ -521,7 +521,7 @@ class _OrdersPageState extends State<OrdersPage> {
     });
   }
 
-  Widget _buildEmployeeWorkDropdown() {
+  Widget _buildEmployeeWorkDropdown({bool isMobile = false}) {
     final names = _allEmployees
         .map((employee) => employee.fullName.trim())
         .where((name) => name.isNotEmpty)
@@ -540,6 +540,7 @@ class _OrdersPageState extends State<OrdersPage> {
             (value) => _selectEmployeeWork(
           value == null || value == 'All orders' ? null : value,
         ),
+        isMobile: isMobile,
       ),
     );
   }
@@ -3759,7 +3760,10 @@ class _OrdersPageState extends State<OrdersPage> {
             onChanged: onChanged,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            padding: EdgeInsets.symmetric(
+              horizontal: 10,
+              vertical: 3,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -3774,6 +3778,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.cairo(
                           fontSize: 9,
+                          fontWeight: FontWeight.normal,
                           height: 1,
                           color: _secondaryTextColor,
                         ),
@@ -3785,6 +3790,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.cairo(
                           fontSize: 11,
+                          fontWeight: FontWeight.normal,
                           height: 1,
                           color: hasValue ? _textColor : _secondaryTextColor,
                         ),
@@ -4052,8 +4058,8 @@ class _OrdersPageState extends State<OrdersPage> {
                 children: [
                   Row(children: [
                     Container(
-                      width: 54,
-                      height: 54,
+                      width: 80,
+                      height: 80,
                       padding: const EdgeInsets.all(3),
                       decoration: BoxDecoration(
                         color: _surfaceColor,
@@ -4066,7 +4072,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         errorBuilder: (_, __, ___) => Icon(
                           Icons.receipt_long_rounded,
                           color: primary,
-                          size: 28,
+                          size: 30,
                         ),
                       ),
                     ),
@@ -4076,9 +4082,9 @@ class _OrdersPageState extends State<OrdersPage> {
                       Text('${_getFilteredOrders().length} orders${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}', style: GoogleFonts.cairo(fontSize: 13, color: _secondaryTextColor)),
                     ])),
                     if (!widget.readOnly)
-                      IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary)),
+                      IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary,size: 32,)),
                     PopupMenuButton<String>(
-                      icon: Icon(Icons.more_vert, color: _textColor),
+                      icon: Icon(Icons.more_vert, color: _textColor, size: 32),
                       onSelected: (value) {
                         switch (value) {
                           case 'edit': setState(() => _editMode = !_editMode); break;
@@ -4106,11 +4112,11 @@ class _OrdersPageState extends State<OrdersPage> {
                     controller: _searchController,
                     focusNode: _searchFocusNode,
                     onChanged: (value) { setState(() => _searchQuery = value); _rebuildGroups(); },
-                    style: GoogleFonts.cairo(fontSize: 15, color: _textColor),
+                    style: GoogleFonts.cairo(fontSize: 24, color: _textColor),
                     decoration: InputDecoration(
                       hintText: 'Search orders, customers, codes…',
-                      hintStyle: GoogleFonts.cairo(fontSize: 14, color: _secondaryTextColor),
-                      prefixIcon: const Icon(Icons.search_rounded),
+                      hintStyle: GoogleFonts.cairo(fontSize: 20, color: _secondaryTextColor,),
+                      prefixIcon: const Icon(Icons.search_rounded,size: 28),
                       suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }) : null,
                       filled: true, fillColor: _backgroundColor,
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
@@ -4127,14 +4133,14 @@ class _OrdersPageState extends State<OrdersPage> {
                       _mobileToolChip(Icons.sort_rounded, _getSortLabel(), () => _showMobileSortMenu()),
                       if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
                         const SizedBox(width: 8),
-                        _buildEmployeeWorkDropdown(),
+                        _buildEmployeeWorkDropdown(isMobile: true),
                       ],
                       if (!widget.readOnly && (_isEngineerRole || _isManagerRole)) ...[
                         const SizedBox(width: 8),
-                        _buildMyWorkButton(),
+                        _buildMyWorkButton(isMobile: true),
                       ],
                       const SizedBox(width: 8),
-                      _mobileToolChip(Icons.groups_2_outlined, 'Design team', _showFilterDialog),
+                      _buildDesignTeamFilterButton(isMobile: true),
                     ]),
                   ),
                   if (_editMode) Padding(padding: const EdgeInsets.only(top: 8), child: Row(children: [Icon(Icons.edit_note, size: 17, color: Colors.orange), const SizedBox(width: 6), Text('Edit mode is on', style: GoogleFonts.cairo(fontSize: 11, color: Colors.orange, fontWeight: FontWeight.w700))])),
@@ -4155,10 +4161,10 @@ class _OrdersPageState extends State<OrdersPage> {
         onTap: onTap,
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          height: 44,
+          height: 50,
           padding: const EdgeInsets.symmetric(horizontal: 14),
           decoration: BoxDecoration(color: _surfaceColor, border: Border.all(color: _borderColor), borderRadius: BorderRadius.circular(13)),
-          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 20, color: _secondaryTextColor), const SizedBox(width: 8), Text(label, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w700, color: _textColor))]),
+          child: Row(mainAxisSize: MainAxisSize.min, children: [Icon(icon, size: 24, color: _secondaryTextColor), const SizedBox(width: 8), Text(label, style: GoogleFonts.cairo(fontSize: 15, fontWeight: FontWeight.w700, color: _textColor))]),
         ),
       );
 
@@ -5157,17 +5163,18 @@ class _OrdersPageState extends State<OrdersPage> {
       String label,
       String? value,
       List<String> items,
-      Function(String?) onChanged,
-      ) {
+      Function(String?) onChanged, {
+        bool isMobile = false,
+      }) {
     final hasValue = value != null && value.isNotEmpty;
     final displayValue = hasValue ? value! : 'All';
 
     return SizedBox(
-      height: 38,
+      height: isMobile ? 50 : 38,
       child: Material(
         color: _surfaceColor,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(7),
+          borderRadius: BorderRadius.circular(isMobile ? 13 : 7),
           side: BorderSide(color: _borderColor),
         ),
         clipBehavior: Clip.antiAlias,
@@ -5179,7 +5186,10 @@ class _OrdersPageState extends State<OrdersPage> {
             onChanged: onChanged,
           ),
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            padding: EdgeInsets.symmetric(
+              horizontal: isMobile ? 14 : 10,
+              vertical: isMobile ? 5 : 3,
+            ),
             child: Row(
               children: [
                 Expanded(
@@ -5193,7 +5203,8 @@ class _OrdersPageState extends State<OrdersPage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.cairo(
-                          fontSize: 9,
+                          fontSize: isMobile ? 12 : 9,
+                          fontWeight: isMobile ? FontWeight.w600 : FontWeight.normal,
                           height: 1,
                           color: _secondaryTextColor,
                         ),
@@ -5204,7 +5215,8 @@ class _OrdersPageState extends State<OrdersPage> {
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
                         style: GoogleFonts.cairo(
-                          fontSize: 11,
+                          fontSize: isMobile ? 15 : 11,
+                          fontWeight: isMobile ? FontWeight.w700 : FontWeight.normal,
                           height: 1,
                           color: hasValue ? _textColor : _secondaryTextColor,
                         ),
@@ -5215,7 +5227,7 @@ class _OrdersPageState extends State<OrdersPage> {
                 const SizedBox(width: 6),
                 Icon(
                   Icons.search,
-                  size: 16,
+                  size: isMobile ? 22 : 16,
                   color: hasValue
                       ? const Color(0xFF6366F1)
                       : _secondaryTextColor,
@@ -5228,7 +5240,7 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
-  Widget _buildDesignTeamFilterButton() {
+  Widget _buildDesignTeamFilterButton({bool isMobile = false}) {
     final designTeams = <String>{};
     for (final order in _allOrders) {
       final team = order.designTeam?.trim();
@@ -5249,6 +5261,7 @@ class _OrdersPageState extends State<OrdersPage> {
           });
           _rebuildGroups();
         },
+        isMobile: isMobile,
       ),
     );
   }
@@ -6468,7 +6481,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
 
-  Widget _buildMyWorkButton() {
+  Widget _buildMyWorkButton({bool isMobile = false}) {
     final hasMyWork = _filterMyWork;
     final myName = widget.loggedInEmployee?.fullName ?? '';
 
@@ -6483,14 +6496,14 @@ class _OrdersPageState extends State<OrdersPage> {
       onPressed: _applyMyWorkFilter,
       icon: Icon(
         hasMyWork ? Icons.work : Icons.work_outline,
-        size: 16,
+        size: isMobile ? 24 : 16,
         color: hasMyWork ? Colors.white : const Color(0xFF6366F1),
       ),
       label: Text(
         hasMyWork ? 'My Work ($myWorkCount)' : 'My Work',
         style: GoogleFonts.cairo(
-          fontSize: 11,
-          fontWeight: FontWeight.w600,
+          fontSize: isMobile ? 15 : 11,
+          fontWeight: FontWeight.w700,
           color: hasMyWork ? Colors.white : const Color(0xFF6366F1),
         ),
       ),
@@ -6500,11 +6513,13 @@ class _OrdersPageState extends State<OrdersPage> {
           color: const Color(0xFF6366F1),
         ),
         backgroundColor: hasMyWork ? const Color(0xFF6366F1) : _surfaceColor,
-        minimumSize: const Size(0, 38),
-        maximumSize: const Size(double.infinity, 38),
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 0),
+        minimumSize: Size(0, isMobile ? 50 : 38),
+        maximumSize: Size(double.infinity, isMobile ? 50 : 38),
+        padding: EdgeInsets.symmetric(horizontal: isMobile ? 14 : 10, vertical: 0),
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(isMobile ? 13 : 7),
+        ),
       ),
     );
   }
