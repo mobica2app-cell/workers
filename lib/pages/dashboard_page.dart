@@ -1,13 +1,15 @@
 // lib/pages/dashboard_page.dart
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:fl_chart/fl_chart.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:intl/intl.dart';
 import 'package:mobitem/pages/track_order.dart';
+import 'package:mobitem/services/csv_export_service.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+
 import '../../services/sap_service.dart';
 import '../main.dart';
-
 
 class DashboardPage extends StatefulWidget {
   final SAPMainService sapService;
@@ -28,9 +30,7 @@ class _DashboardPageState extends State<DashboardPage> {
   final Set<String> _selectedSubmittalGraphStatuses = {
     ..._beforeApprovalStatuses,
   };
-  final Set<String> _selectedApprovalGraphStatuses = {
-    ..._approvalStatuses,
-  };
+  final Set<String> _selectedApprovalGraphStatuses = {..._approvalStatuses};
   final Set<String> _selectedManufacturingGraphStatuses = {
     ..._manufacturingStatuses,
   };
@@ -41,13 +41,10 @@ class _DashboardPageState extends State<DashboardPage> {
   final Set<String> _selectedCircularSubmittalStatuses = {
     ..._beforeApprovalStatuses,
   };
-  final Set<String> _selectedCircularApprovalStatuses = {
-    ..._approvalStatuses,
-  };
+  final Set<String> _selectedCircularApprovalStatuses = {..._approvalStatuses};
   final Set<String> _selectedCircularManufacturingStatuses = {
     ..._manufacturingStatuses,
   };
-
 
   bool _isLoading = true;
 
@@ -58,16 +55,29 @@ class _DashboardPageState extends State<DashboardPage> {
   int _totalEmployees = 0;
   int _totalFactories = 0;
 
-// Add these fields near the other fields
+  // Add these fields near the other fields
   Map<String, double> _statusValues = {};
   Map<String, double> _statusQuantities = {};
 
   // Status distribution
   Map<String, int> _statusDistribution = {};
 
-
   // Recent orders
   List<SAPMainOrder> _recentOrders = [];
+
+  // Dashboard explorer and activity state.
+  final TextEditingController _orderSearchController = TextEditingController();
+  final GlobalKey _orderExplorerKey = GlobalKey();
+  String? _selectedFactoryFilter;
+  String? _selectedOrderStatusFilter;
+  String? _attentionFilter;
+  String _orderSort = 'Newest';
+  String _datePreset = 'all';
+  bool _showAllExplorerOrders = false;
+  bool _isExporting = false;
+  List<Map<String, dynamic>> _recentActivity = [];
+  bool _activityLoadFailed = false;
+  DateTime? _lastRefreshedAt;
 
   // Source data used by the dashboard date filter.
   List<SAPMainOrder> _allOrders = [];
@@ -102,12 +112,23 @@ class _DashboardPageState extends State<DashboardPage> {
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
-  Color get _backgroundColor => _isDark ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
+  Color get _backgroundColor =>
+      _isDark ? const Color(0xFF000000) : const Color(0xFFF8FAFC);
   Color get _surfaceColor => _isDark ? const Color(0xFF121212) : Colors.white;
-  Color get _textColor => _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF0F172A);
-  Color get _secondaryTextColor => _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
-  Color get _borderColor => _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE2E8F0);
+  Color get _textColor =>
+      _isDark ? const Color(0xFFF5F5F5) : const Color(0xFF0F172A);
+  Color get _secondaryTextColor =>
+      _isDark ? const Color(0xFFAAAAAA) : const Color(0xFF64748B);
+  Color get _borderColor =>
+      _isDark ? const Color(0xFF2A2A2A) : const Color(0xFFE2E8F0);
   Color get _cardColor => _isDark ? const Color(0xFF121212) : Colors.white;
+  List<BoxShadow> get _dashboardCardShadows => [
+    BoxShadow(
+      color: Colors.black.withOpacity(_isDark ? 0.24 : 0.045),
+      blurRadius: 18,
+      offset: const Offset(0, 6),
+    ),
+  ];
 
   // Status lists
   static const List<String> _beforeApprovalStatuses = [
@@ -159,9 +180,43 @@ class _DashboardPageState extends State<DashboardPage> {
         debugPrint('Error loading factory names for dashboard: $e');
       }
 
+      // Keep the activity feed separate from stage graph calculations. The
+      // feed is a short, recent snapshot and must not be used as full history.
+      var recentActivity = <Map<String, dynamic>>[];
+      var activityLoadFailed = false;
+      try {
+        final activityRows = await Supabase.instance.client
+            .from('order_audit_log')
+            .select(
+              'order_id, design_order, field_name, old_value, new_value, '
+              'changed_by, changed_at, action_type, notes',
+            )
+            .order('changed_at', ascending: false)
+            .limit(12);
+        recentActivity = List<Map<String, dynamic>>.from(activityRows);
+      } catch (e) {
+        activityLoadFailed = true;
+        debugPrint('Error loading recent order activity: $e');
+      }
+
       // The dashboard date filter is based on SAP main orders.created_at.
       _allOrders = orders;
+      if (_selectedOrderStatusFilter != null &&
+          !_allOrders.any(
+            (order) => order.status.trim() == _selectedOrderStatusFilter,
+          )) {
+        _selectedOrderStatusFilter = null;
+      }
+      if (_selectedFactoryFilter != null &&
+          !_allOrders.any(
+            (order) => (order.factory?.trim() ?? '') == _selectedFactoryFilter,
+          )) {
+        _selectedFactoryFilter = null;
+      }
       _allEmployees = employees;
+      _recentActivity = recentActivity;
+      _activityLoadFailed = activityLoadFailed;
+      _lastRefreshedAt = DateTime.now();
       _auditLogs = [];
 
       _recalculateDashboard();
@@ -194,6 +249,95 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return true;
+  }
+
+  List<SAPMainOrder> get _dateFilteredOrders => _allOrders.where((order) {
+    if (!_hasDateRange) return true;
+    final createdAt = order.createdAt;
+    return createdAt != null && _isDateInRange(createdAt);
+  }).toList();
+
+  List<SAPMainOrder> get _filteredExplorerOrders {
+    final query = _orderSearchController.text.trim().toLowerCase();
+    final orders = _dateFilteredOrders.where((order) {
+      if (_selectedOrderStatusFilter != null &&
+          order.status.trim() != _selectedOrderStatusFilter) {
+        return false;
+      }
+
+      if (_selectedFactoryFilter != null &&
+          (order.factory?.trim() ?? '') != _selectedFactoryFilter) {
+        return false;
+      }
+
+      if (_attentionFilter == 'overdue_delivery' &&
+          !_hasOverdueDelivery(order)) {
+        return false;
+      }
+      if (_attentionFilter == 'missing_delivery' &&
+          (order.deliveryDate?.trim().isNotEmpty ?? false)) {
+        return false;
+      }
+      if (_attentionFilter == 'missing_engineer' &&
+          order.salesEngineer.trim().isNotEmpty) {
+        return false;
+      }
+
+      if (query.isEmpty) return true;
+      final searchable = <String>[
+        order.designOrder,
+        order.contractNumber,
+        order.customerName,
+        order.description,
+        order.salesEngineer,
+        order.productCode,
+        order.itemNumber,
+        order.status,
+        order.factory ?? '',
+      ].join(' ').toLowerCase();
+      return searchable.contains(query);
+    }).toList();
+
+    switch (_orderSort) {
+      case 'Highest value':
+        orders.sort((a, b) => b.value.compareTo(a.value));
+        break;
+      case 'Largest quantity':
+        orders.sort((a, b) => b.quantity.compareTo(a.quantity));
+        break;
+      case 'Customer A–Z':
+        orders.sort(
+          (a, b) => a.customerName.toLowerCase().compareTo(
+            b.customerName.toLowerCase(),
+          ),
+        );
+        break;
+      default:
+        orders.sort(
+          (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
+            a.createdAt ?? DateTime(2000),
+          ),
+        );
+    }
+    return orders;
+  }
+
+  DateTime? _parseOrderDate(String? value) {
+    if (value == null || value.trim().isEmpty) return null;
+    return DateTime.tryParse(value.trim())?.toLocal();
+  }
+
+  bool _hasOverdueDelivery(SAPMainOrder order) {
+    final deliveryDate = _parseOrderDate(order.deliveryDate);
+    return deliveryDate != null &&
+        _dateOnly(deliveryDate).isBefore(_dateOnly(DateTime.now()));
+  }
+
+  String _factoryLabel(String? factory) {
+    final code = factory?.trim() ?? '';
+    if (code.isEmpty) return 'No factory';
+    final description = _factoryDescriptions[code.toLowerCase()]?.trim() ?? '';
+    return description.isEmpty ? code : '$code · $description';
   }
 
   /// Returns the unique order IDs that had a matching STATUS audit event
@@ -237,18 +381,16 @@ class _DashboardPageState extends State<DashboardPage> {
 
   /// Returns the actual SAP orders represented by unique audit order IDs.
   List<SAPMainOrder> _ordersForSection(
-      List<SAPMainOrder> orders,
-      List<String>? statuses,
-      ) {
+    List<SAPMainOrder> orders,
+    List<String>? statuses,
+  ) {
     // No date filter: keep the original dashboard meaning.
     if (_startDate == null && _endDate == null) {
       if (statuses == null) {
         return List<SAPMainOrder>.from(orders);
       }
 
-      return orders
-          .where((o) => statuses.contains(o.status))
-          .toList();
+      return orders.where((o) => statuses.contains(o.status)).toList();
     }
 
     final auditIds = _auditOrderIdsForStatuses(statuses);
@@ -279,13 +421,7 @@ class _DashboardPageState extends State<DashboardPage> {
     final employees = _allEmployees;
 
     // The date filter uses SAP main order.created_at.
-    final filteredOrders = _allOrders.where((order) {
-      final createdAt = order.createdAt;
-      if (createdAt == null) return false;
-      return _startDate == null && _endDate == null
-          ? true
-          : _isDateInRange(createdAt);
-    }).toList();
+    final filteredOrders = _dateFilteredOrders;
 
     final statusDist = <String, int>{};
     final statusValues = <String, double>{};
@@ -356,8 +492,11 @@ class _DashboardPageState extends State<DashboardPage> {
     }).length;
 
     final recent = List<SAPMainOrder>.from(filteredOrders)
-      ..sort((a, b) => (b.createdAt ?? DateTime(2000))
-          .compareTo(a.createdAt ?? DateTime(2000)));
+      ..sort(
+        (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
+          a.createdAt ?? DateTime(2000),
+        ),
+      );
 
     if (!mounted) return;
 
@@ -365,7 +504,7 @@ class _DashboardPageState extends State<DashboardPage> {
       _totalOrders = filteredOrders.length;
       _totalValue = totalVal;
       _totalQuantity = totalQty;
-      _totalEmployees = employees.length;
+      _totalEmployees = employees.where((employee) => employee.isActive).length;
       _totalFactories = factories.length;
       _statusDistribution = statusDist;
       _statusValues = statusValues;
@@ -430,7 +569,6 @@ class _DashboardPageState extends State<DashboardPage> {
         return Colors.orange;
     }
   }
-
 
   void _showStatusOrders(String status) {
     // Keep the dashboard's existing filter/count logic.
@@ -768,6 +906,7 @@ class _DashboardPageState extends State<DashboardPage> {
   @override
   void dispose() {
     _stageGraphScrollController.dispose();
+    _orderSearchController.dispose();
     super.dispose();
   }
 
@@ -793,121 +932,2221 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: _backgroundColor,
-      body: _isLoading
-          ? Center(
-        child: CircularProgressIndicator(
-          color: Theme.of(context).colorScheme.primary,
-        ),
-      )
-          : SingleChildScrollView(
-        padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 8 : 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Header
-            Row(
+  Widget _buildDashboardOverview() {
+    final activeEmployees = _allEmployees
+        .where((employee) => employee.isActive)
+        .length;
+    final lastUpdated = _lastRefreshedAt == null
+        ? 'Not refreshed yet'
+        : 'Updated ${DateFormat('h:mm a').format(_lastRefreshedAt!)}';
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: _dashboardCardShadows,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Container(
+                padding: const EdgeInsets.all(9),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                child: Icon(
+                  Icons.dashboard_customize_outlined,
+                  color: Theme.of(context).colorScheme.primary,
+                  size: 20,
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Overview',
+                      style: GoogleFonts.cairo(
+                        fontSize: 18,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                    Text(
+                      'Orders · ${_hasDateRange ? _getDateFilterLabel() : 'All time'} · $lastUpdated',
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              IconButton(
+                tooltip: 'How to read these numbers',
+                onPressed: _showDataNotes,
+                icon: Icon(Icons.info_outline, color: _secondaryTextColor),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final columns = constraints.maxWidth >= 1050
+                  ? 5
+                  : constraints.maxWidth >= 650
+                  ? 3
+                  : 2;
+              final gap = 10.0;
+              final width =
+                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+              return Wrap(
+                spacing: gap,
+                runSpacing: gap,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: _buildMetricCard(
+                      label: 'Active orders',
+                      value: NumberFormat.decimalPattern().format(_totalOrders),
+                      caption: 'Tap to explore',
+                      icon: Icons.receipt_long_outlined,
+                      color: Colors.blue,
+                      onTap: _scrollToOrderExplorer,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _buildMetricCard(
+                      label: 'Pipeline value',
+                      value: '\$${_formatNumber(_totalValue)}',
+                      caption: 'Tap for status split',
+                      icon: Icons.payments_outlined,
+                      color: Colors.teal,
+                      onTap: () =>
+                          _showStatusMetricBreakdown(valueMetric: true),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _buildMetricCard(
+                      label: 'Quantity',
+                      value: NumberFormat.decimalPattern().format(
+                        _totalQuantity,
+                      ),
+                      caption: 'Mixed units · tap to split',
+                      icon: Icons.inventory_2_outlined,
+                      color: Colors.deepOrange,
+                      onTap: () =>
+                          _showStatusMetricBreakdown(valueMetric: false),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _buildMetricCard(
+                      label: 'Factories',
+                      value: '$_totalFactories',
+                      caption: 'Tap for order split',
+                      icon: Icons.factory_outlined,
+                      color: Colors.indigo,
+                      onTap: _showFactoryBreakdown,
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: _buildMetricCard(
+                      label: 'Active employees',
+                      value: '$activeEmployees',
+                      caption: 'Tap to browse staff',
+                      icon: Icons.groups_outlined,
+                      color: Colors.purple,
+                      onTap: _showEmployeeDirectory,
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 11),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+            decoration: BoxDecoration(
+              color: Colors.amber.withOpacity(_isDark ? 0.09 : 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: Colors.amber.withOpacity(0.18)),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Dashboard',
-                  style: GoogleFonts.cairo(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
-                  ),
+                Icon(
+                  Icons.lightbulb_outline_rounded,
+                  size: 17,
+                  color: Colors.amber.shade700,
                 ),
-                const Spacer(),
-                Text(
-                  DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                  style: GoogleFonts.cairo(
-                    fontSize: 14,
-                    color: _secondaryTextColor,
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Value and quantity summarize the current orders. Archived orders are excluded from these totals.',
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: _secondaryTextColor,
+                    ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: _loadDashboardData,
-                  icon: Icon(Icons.refresh, color: _secondaryTextColor),
-                  tooltip: 'Refresh',
                 ),
               ],
             ),
-            SizedBox(height: MediaQuery.of(context).size.width < 600 ? 12 : 24),
+          ),
+        ],
+      ),
+    );
+  }
 
-            // Comparison Section
-            _buildComparisonSection(),
-            SizedBox(height: MediaQuery.of(context).size.width < 600 ? 12 : 24),
+  Widget _buildMetricCard({
+    required String label,
+    required String value,
+    required String caption,
+    required IconData icon,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(16),
+        child: Ink(
+          height: 132,
+          padding: const EdgeInsets.all(14),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [color.withOpacity(_isDark ? 0.17 : 0.10), _cardColor],
+            ),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: color.withOpacity(_isDark ? 0.34 : 0.24)),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(_isDark ? 0.06 : 0.07),
+                blurRadius: 14,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -2,
+                bottom: -9,
+                child: Icon(icon, size: 58, color: color.withOpacity(0.07)),
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 34,
+                        height: 34,
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(_isDark ? 0.22 : 0.14),
+                          borderRadius: BorderRadius.circular(11),
+                        ),
+                        child: Icon(icon, size: 18, color: color),
+                      ),
+                      const Spacer(),
+                      Icon(Icons.arrow_outward_rounded, size: 15, color: color),
+                    ],
+                  ),
+                  const Spacer(),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Text(
+                      value,
+                      style: GoogleFonts.cairo(
+                        fontSize: 22,
+                        height: 1.15,
+                        fontWeight: FontWeight.w800,
+                        color: _textColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    caption,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 9,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 
-            // Stage status analytics
-            _buildStageStatusGraph(),
-            const SizedBox(height: 24),
-            _buildCircularStageStatusGraph(),
-            const SizedBox(height: 24),
+  Widget _buildDashboardSheetFrame({
+    required BuildContext sheetContext,
+    required double heightFactor,
+    required Widget child,
+  }) {
+    return SafeArea(
+      top: false,
+      child: Container(
+        height: MediaQuery.of(sheetContext).size.height * heightFactor,
+        margin: const EdgeInsets.only(top: 24),
+        padding: const EdgeInsets.fromLTRB(18, 9, 18, 16),
+        decoration: BoxDecoration(
+          color: _backgroundColor,
+          borderRadius: const BorderRadius.vertical(top: Radius.circular(26)),
+          border: Border.all(color: _borderColor),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(_isDark ? 0.4 : 0.12),
+              blurRadius: 24,
+              offset: const Offset(0, -5),
+            ),
+          ],
+        ),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildDashboardSheetHeader({
+    required BuildContext sheetContext,
+    required String title,
+    required String subtitle,
+    required IconData icon,
+    Color? accentColor,
+  }) {
+    final accent = accentColor ?? Theme.of(context).colorScheme.primary;
+    return Column(
+      children: [
+        Container(
+          width: 38,
+          height: 4,
+          decoration: BoxDecoration(
+            color: _secondaryTextColor.withOpacity(0.35),
+            borderRadius: BorderRadius.circular(10),
+          ),
+        ),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: accent.withOpacity(_isDark ? 0.2 : 0.12),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Icon(icon, color: accent, size: 22),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w800,
+                      color: _textColor,
+                    ),
+                  ),
+                  Text(
+                    subtitle,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(
+                      fontSize: 10,
+                      color: _secondaryTextColor,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton.filledTonal(
+              tooltip: 'Close',
+              onPressed: () => Navigator.pop(sheetContext),
+              style: IconButton.styleFrom(
+                backgroundColor: _surfaceColor,
+                foregroundColor: _secondaryTextColor,
+              ),
+              icon: const Icon(Icons.close_rounded, size: 18),
+            ),
+          ],
+        ),
+        const SizedBox(height: 14),
+      ],
+    );
+  }
+
+  void _showDataNotes() {
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: _cardColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+        titlePadding: const EdgeInsets.fromLTRB(22, 22, 18, 8),
+        contentPadding: const EdgeInsets.fromLTRB(22, 8, 22, 10),
+        title: Row(
+          children: [
+            Container(
+              width: 42,
+              height: 42,
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.12),
+                borderRadius: BorderRadius.circular(13),
+              ),
+              child: Icon(
+                Icons.insights_rounded,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Text(
+                'How to read the dashboard',
+                style: GoogleFonts.cairo(
+                  fontSize: 17,
+                  fontWeight: FontWeight.w800,
+                  color: _textColor,
+                ),
+              ),
+            ),
+            IconButton(
+              tooltip: 'Close',
+              onPressed: () => Navigator.pop(dialogContext),
+              icon: Icon(Icons.close_rounded, color: _secondaryTextColor),
+            ),
+          ],
+        ),
+        content: SizedBox(
+          width: 500,
+          child: SingleChildScrollView(
+            child: Column(
+              children: [
+                _buildDataNoteItem(
+                  Icons.storage_rounded,
+                  'Live order scope',
+                  'Totals include current orders. Archived orders are stored separately and excluded here.',
+                ),
+                _buildDataNoteItem(
+                  Icons.calendar_month_rounded,
+                  'Date fields',
+                  'Presets filter created_at. Existing stage charts keep their current all-active-order scope and group by order_date.',
+                ),
+                _buildDataNoteItem(
+                  Icons.payments_rounded,
+                  'Value and quantity',
+                  'Order value sums the recorded values. Quantity may combine different units of measure.',
+                ),
+                _buildDataNoteItem(
+                  Icons.factory_rounded,
+                  'Factories and people',
+                  'Factory names use the descriptions. Employee totals include active accounts.',
+                ),
+                _buildDataNoteItem(
+                  Icons.history_rounded,
+                  'Activity feed',
+                  'Shows recent changes recorded in order history. It is not a complete audit history.',
+                ),
+              ],
+            ),
+          ),
+        ),
+        actionsPadding: const EdgeInsets.fromLTRB(22, 0, 22, 18),
+        actions: [
+          FilledButton.icon(
+            onPressed: () => Navigator.pop(dialogContext),
+            icon: const Icon(Icons.check_rounded, size: 18),
+            label: Text('Got it', style: GoogleFonts.cairo()),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDataNoteItem(IconData icon, String title, String description) {
+    final primary = Theme.of(context).colorScheme.primary;
+    return Container(
+      margin: const EdgeInsets.only(bottom: 9),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: _isDark
+            ? Colors.white.withOpacity(0.035)
+            : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: _borderColor),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            width: 32,
+            height: 32,
+            decoration: BoxDecoration(
+              color: primary.withOpacity(0.11),
+              borderRadius: BorderRadius.circular(10),
+            ),
+            child: Icon(icon, size: 17, color: primary),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: GoogleFonts.cairo(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  description,
+                  style: GoogleFonts.cairo(
+                    fontSize: 10,
+                    height: 1.45,
+                    color: _secondaryTextColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _scrollToOrderExplorer() {
+    final target = _orderExplorerKey.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 350),
+      curve: Curves.easeInOut,
+      alignment: 0.05,
+    );
+  }
+
+  void _showStatusMetricBreakdown({required bool valueMetric}) {
+    final metrics = valueMetric ? _statusValues : _statusQuantities;
+    final entries = metrics.entries.where((entry) => entry.value != 0).toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    final title = valueMetric
+        ? 'Pipeline value by status'
+        : 'Quantity by status';
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _buildDashboardSheetFrame(
+        sheetContext: sheetContext,
+        heightFactor: 0.78,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDashboardSheetHeader(
+              sheetContext: sheetContext,
+              title: title,
+              subtitle: valueMetric
+                  ? 'Select a status to open matching orders.'
+                  : 'Quantities keep the units stored on each order.',
+              icon: valueMetric
+                  ? Icons.payments_rounded
+                  : Icons.inventory_2_rounded,
+              accentColor: valueMetric ? Colors.teal : Colors.deepOrange,
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: Theme.of(context).colorScheme.primary.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${entries.length} statuses',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    valueMetric
+                        ? '\$${_formatNumber(_totalValue)}'
+                        : NumberFormat.decimalPattern().format(_totalQuantity),
+                    style: GoogleFonts.cairo(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w800,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: entries.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No values for this date range',
+                        style: GoogleFonts.cairo(color: _secondaryTextColor),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        final value = valueMetric
+                            ? '\$${_formatNumber(entry.value)}'
+                            : NumberFormat.decimalPattern().format(entry.value);
+                        final metricTotal = entries.fold<double>(
+                          0,
+                          (sum, item) => sum + item.value,
+                        );
+                        final share = metricTotal == 0
+                            ? 0.0
+                            : (entry.value / metricTotal)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                        final color = _getStatusColor(entry.key);
+                        return Material(
+                          color: _cardColor,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            onTap: () {
+                              setState(
+                                () => _selectedOrderStatusFilter = entry.key,
+                              );
+                              Navigator.pop(sheetContext);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _scrollToOrderExplorer();
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(13),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: _borderColor),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 10,
+                                        height: 10,
+                                        decoration: BoxDecoration(
+                                          color: color,
+                                          borderRadius: BorderRadius.circular(
+                                            4,
+                                          ),
+                                        ),
+                                      ),
+                                      const SizedBox(width: 9),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              entry.key,
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: _textColor,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${_statusDistribution[entry.key] ?? 0} orders',
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 10,
+                                                color: _secondaryTextColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        value,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w800,
+                                          color: _textColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: LinearProgressIndicator(
+                                      value: share,
+                                      minHeight: 5,
+                                      backgroundColor: color.withOpacity(0.12),
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        color,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
           ],
         ),
       ),
     );
   }
 
+  void _showFactoryBreakdown() {
+    final byFactory = <String, int>{};
+    final valueByFactory = <String, double>{};
+    for (final order in _dateFilteredOrders) {
+      final factory = order.factory?.trim() ?? '';
+      byFactory[factory] = (byFactory[factory] ?? 0) + 1;
+      valueByFactory[factory] = (valueByFactory[factory] ?? 0) + order.value;
+    }
+    final entries = byFactory.entries.toList()
+      ..sort((a, b) => b.value.compareTo(a.value));
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => _buildDashboardSheetFrame(
+        sheetContext: sheetContext,
+        heightFactor: 0.78,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _buildDashboardSheetHeader(
+              sheetContext: sheetContext,
+              title: 'Orders by factory',
+              subtitle: 'Select a factory to filter the order explorer.',
+              icon: Icons.factory_rounded,
+              accentColor: Colors.indigo,
+            ),
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+              decoration: BoxDecoration(
+                color: Colors.indigo.withOpacity(0.08),
+                borderRadius: BorderRadius.circular(14),
+              ),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${entries.length} factory groups',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                  ),
+                  Text(
+                    '${_dateFilteredOrders.length} orders',
+                    style: GoogleFonts.cairo(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w800,
+                      color: Colors.indigo,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 12),
+            Expanded(
+              child: entries.isEmpty
+                  ? Center(
+                      child: Text(
+                        'No factory data for this date range.',
+                        style: GoogleFonts.cairo(color: _secondaryTextColor),
+                      ),
+                    )
+                  : ListView.separated(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      itemCount: entries.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final entry = entries[index];
+                        final share = _dateFilteredOrders.isEmpty
+                            ? 0.0
+                            : (entry.value / _dateFilteredOrders.length)
+                                  .clamp(0.0, 1.0)
+                                  .toDouble();
+                        return Material(
+                          color: _cardColor,
+                          borderRadius: BorderRadius.circular(14),
+                          child: InkWell(
+                            onTap: () {
+                              setState(
+                                () => _selectedFactoryFilter = entry.key,
+                              );
+                              Navigator.pop(sheetContext);
+                              WidgetsBinding.instance.addPostFrameCallback((_) {
+                                _scrollToOrderExplorer();
+                              });
+                            },
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.all(13),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: _borderColor),
+                              ),
+                              child: Column(
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        width: 36,
+                                        height: 36,
+                                        decoration: BoxDecoration(
+                                          color: Colors.indigo.withOpacity(0.1),
+                                          borderRadius: BorderRadius.circular(
+                                            11,
+                                          ),
+                                        ),
+                                        child: const Icon(
+                                          Icons.factory_rounded,
+                                          size: 18,
+                                          color: Colors.indigo,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Column(
+                                          crossAxisAlignment:
+                                              CrossAxisAlignment.start,
+                                          children: [
+                                            Text(
+                                              _factoryLabel(entry.key),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: _textColor,
+                                              ),
+                                            ),
+                                            Text(
+                                              '${entry.value} orders',
+                                              style: GoogleFonts.cairo(
+                                                fontSize: 10,
+                                                color: _secondaryTextColor,
+                                              ),
+                                            ),
+                                          ],
+                                        ),
+                                      ),
+                                      Text(
+                                        '\$${_formatNumber(valueByFactory[entry.key] ?? 0)}',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w800,
+                                          color: _textColor,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  ClipRRect(
+                                    borderRadius: BorderRadius.circular(20),
+                                    child: LinearProgressIndicator(
+                                      value: share,
+                                      minHeight: 5,
+                                      backgroundColor: Colors.indigo
+                                          .withOpacity(0.1),
+                                      valueColor:
+                                          const AlwaysStoppedAnimation<Color>(
+                                            Colors.indigo,
+                                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showEmployeeDirectory() {
+    var query = '';
+    String? departmentFilter;
+    var activeOnly = true;
+    final departments =
+        _allEmployees
+            .map((employee) => employee.department?.trim() ?? '')
+            .where((department) => department.isNotEmpty)
+            .toSet()
+            .toList()
+          ..sort();
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetContext) => StatefulBuilder(
+        builder: (context, setSheetState) {
+          final employees =
+              _allEmployees.where((employee) {
+                if (activeOnly && !employee.isActive) return false;
+                if (departmentFilter != null &&
+                    employee.department != departmentFilter) {
+                  return false;
+                }
+                final searchText = query.trim().toLowerCase();
+                return searchText.isEmpty ||
+                    employee.fullName.toLowerCase().contains(searchText) ||
+                    employee.username.toLowerCase().contains(searchText) ||
+                    (employee.role ?? '').toLowerCase().contains(searchText);
+              }).toList()..sort(
+                (a, b) => a.fullName.toLowerCase().compareTo(
+                  b.fullName.toLowerCase(),
+                ),
+              );
+          return _buildDashboardSheetFrame(
+            sheetContext: sheetContext,
+            heightFactor: 0.88,
+            child: Column(
+              children: [
+                _buildDashboardSheetHeader(
+                  sheetContext: sheetContext,
+                  title: 'Employee directory',
+                  subtitle: 'Search by name, account, role, or department.',
+                  icon: Icons.groups_rounded,
+                  accentColor: Colors.purple,
+                ),
+                TextField(
+                  onChanged: (value) => setSheetState(() => query = value),
+                  style: GoogleFonts.cairo(color: _textColor),
+                  decoration: InputDecoration(
+                    hintText: 'Search name, username, or role',
+                    hintStyle: GoogleFonts.cairo(
+                      fontSize: 11,
+                      color: _secondaryTextColor,
+                    ),
+                    prefixIcon: const Icon(Icons.search),
+                    prefixIconColor: Theme.of(context).colorScheme.primary,
+                    filled: true,
+                    fillColor: _surfaceColor,
+                    contentPadding: const EdgeInsets.symmetric(
+                      horizontal: 14,
+                      vertical: 12,
+                    ),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                    enabledBorder: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(14),
+                      borderSide: BorderSide(color: _borderColor),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 7,
+                  runSpacing: 6,
+                  children: [
+                    FilterChip(
+                      label: const Text('Active only'),
+                      selected: activeOnly,
+                      onSelected: (value) =>
+                          setSheetState(() => activeOnly = value),
+                    ),
+                    ChoiceChip(
+                      label: const Text('All departments'),
+                      selected: departmentFilter == null,
+                      onSelected: (_) =>
+                          setSheetState(() => departmentFilter = null),
+                    ),
+                    ...departments.map(
+                      (department) => ChoiceChip(
+                        label: Text(department),
+                        selected: departmentFilter == department,
+                        onSelected: (_) => setSheetState(
+                          () =>
+                              departmentFilter = departmentFilter == department
+                              ? null
+                              : department,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 8),
+                Container(
+                  margin: const EdgeInsets.only(top: 2, bottom: 8),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 11,
+                    vertical: 7,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.primary
+                        .withOpacity(0.08),
+                    borderRadius: BorderRadius.circular(11),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(
+                        Icons.people_alt_outlined,
+                        size: 15,
+                        color: Theme.of(context).colorScheme.primary,
+                      ),
+                      const SizedBox(width: 7),
+                      Text(
+                        '${employees.length} matching employees',
+                        style: GoogleFonts.cairo(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: _textColor,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Expanded(
+                  child: employees.isEmpty
+                      ? Center(
+                          child: Text(
+                            'No employees match these filters',
+                            style: GoogleFonts.cairo(
+                              color: _secondaryTextColor,
+                            ),
+                          ),
+                        )
+                      : ListView.separated(
+                          padding: const EdgeInsets.only(bottom: 8),
+                          itemCount: employees.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 7),
+                          itemBuilder: (context, index) {
+                            final employee = employees[index];
+                            final employeeColor = employee.isActive
+                                ? Colors.green
+                                : _secondaryTextColor;
+                            return Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 12,
+                                vertical: 9,
+                              ),
+                              decoration: BoxDecoration(
+                                color: _cardColor,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: _borderColor),
+                              ),
+                              child: Row(
+                                children: [
+                                  CircleAvatar(
+                                    radius: 21,
+                                    backgroundColor: Colors.purple.withOpacity(
+                                      0.1,
+                                    ),
+                                    child: Text(
+                                      employee.initials,
+                                      style: const TextStyle(
+                                        color: Colors.purple,
+                                        fontWeight: FontWeight.w800,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 11),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          employee.displayName,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: _textColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 1),
+                                        Text(
+                                          [employee.department, employee.role]
+                                              .where(
+                                                (part) =>
+                                                    part?.trim().isNotEmpty ??
+                                                    false,
+                                              )
+                                              .join(' · '),
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: GoogleFonts.cairo(
+                                            fontSize: 10,
+                                            color: _secondaryTextColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 8,
+                                      vertical: 4,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: employeeColor.withOpacity(0.11),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      employee.isActive ? 'Active' : 'Inactive',
+                                      style: GoogleFonts.cairo(
+                                        fontSize: 9,
+                                        fontWeight: FontWeight.w700,
+                                        color: employeeColor,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
+                ),
+              ],
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildOrderExplorer() {
+    final baseOrders = _dateFilteredOrders;
+    final statuses =
+        baseOrders.map((order) => order.status.trim()).toSet().toList()
+          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    final factories =
+        baseOrders.map((order) => order.factory?.trim() ?? '').toSet().toList()
+          ..sort(
+            (a, b) =>
+                _factoryLabel(a)
+                    .toLowerCase()
+                    .compareTo(_factoryLabel(b).toLowerCase()),
+          );
+    final orders = _filteredExplorerOrders;
+    final shownOrders = _showAllExplorerOrders
+        ? orders
+        : orders.take(8).toList();
+    final totalValue = orders.fold<double>(
+      0,
+      (sum, order) => sum + order.value,
+    );
+
+    return Container(
+      key: _orderExplorerKey,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: _dashboardCardShadows,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                Icons.manage_search,
+                color: Theme.of(context).colorScheme.primary,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Order explorer',
+                  style: GoogleFonts.cairo(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                ),
+              ),
+              FilledButton.tonalIcon(
+                onPressed: orders.isEmpty || _isExporting
+                    ? null
+                    : _exportFilteredOrders,
+                icon: _isExporting
+                    ? const SizedBox(
+                        width: 15,
+                        height: 15,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.file_download_outlined, size: 17),
+                label: Text(_isExporting ? 'Exporting' : 'Export'),
+                style: FilledButton.styleFrom(
+                  visualDensity: VisualDensity.compact,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 8,
+                  ),
+                  textStyle: GoogleFonts.cairo(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+              const SizedBox(width: 3),
+              IconButton.filledTonal(
+                tooltip: 'Clear order filters',
+                onPressed: _clearOrderExplorerFilters,
+                style: IconButton.styleFrom(
+                  backgroundColor: _surfaceColor,
+                  foregroundColor: _secondaryTextColor,
+                ),
+                icon: const Icon(Icons.filter_alt_off_outlined, size: 18),
+              ),
+            ],
+          ),
+          Text(
+            'Search and open a live order. Filters here do not change the existing charts.',
+            style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _orderSearchController,
+            onChanged: (_) => setState(() => _showAllExplorerOrders = false),
+            style: GoogleFonts.cairo(color: _textColor),
+            decoration: InputDecoration(
+              hintText: 'Search order, contract, customer, product, engineer…',
+              hintStyle: GoogleFonts.cairo(
+                fontSize: 12,
+                color: _secondaryTextColor,
+              ),
+              prefixIcon: const Icon(Icons.search),
+              suffixIcon: _orderSearchController.text.isEmpty
+                  ? null
+                  : IconButton(
+                      tooltip: 'Clear search',
+                      onPressed: () {
+                        _orderSearchController.clear();
+                        setState(() => _showAllExplorerOrders = false);
+                      },
+                      icon: const Icon(Icons.close),
+                    ),
+              filled: true,
+              fillColor: _surfaceColor,
+              contentPadding: const EdgeInsets.symmetric(
+                horizontal: 14,
+                vertical: 12,
+              ),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: _borderColor),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: _borderColor),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final width = constraints.maxWidth >= 560
+                  ? (constraints.maxWidth - 10) / 2
+                  : constraints.maxWidth;
+              final selectedStatus =
+                  statuses.contains(_selectedOrderStatusFilter)
+                  ? _selectedOrderStatusFilter ?? '__all__'
+                  : '__all__';
+              final selectedFactory = _selectedFactoryFilter == null
+                  ? '__all__'
+                  : factories.contains(_selectedFactoryFilter)
+                  ? (_selectedFactoryFilter!.isEmpty
+                        ? '__missing__'
+                        : _selectedFactoryFilter!)
+                  : '__all__';
+              return Wrap(
+                spacing: 10,
+                runSpacing: 8,
+                children: [
+                  SizedBox(
+                    width: width,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedStatus,
+                      isExpanded: true,
+                      decoration: _filterDecoration('Status'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '__all__',
+                          child: Text('All statuses'),
+                        ),
+                        ...statuses.map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(
+                              status,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) => setState(() {
+                        _selectedOrderStatusFilter =
+                            value == null || value == '__all__' ? null : value;
+                      }),
+                    ),
+                  ),
+                  SizedBox(
+                    width: width,
+                    child: DropdownButtonFormField<String>(
+                      value: selectedFactory,
+                      isExpanded: true,
+                      decoration: _filterDecoration('Factory'),
+                      items: [
+                        const DropdownMenuItem(
+                          value: '__all__',
+                          child: Text('All factories'),
+                        ),
+                        ...factories.map(
+                          (factory) => DropdownMenuItem(
+                            value: factory.isEmpty ? '__missing__' : factory,
+                            child: Text(
+                              factory.isEmpty
+                                  ? 'No factory recorded'
+                                  : _factoryLabel(factory),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ),
+                      ],
+                      onChanged: (value) => setState(() {
+                        _selectedFactoryFilter =
+                            value == null || value == '__all__'
+                            ? null
+                            : value == '__missing__'
+                            ? ''
+                            : value;
+                      }),
+                    ),
+                  ),
+                ],
+              );
+            },
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'Attention filters',
+            style: GoogleFonts.cairo(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: _textColor,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 7,
+            runSpacing: 6,
+            children: [
+              _buildAttentionChip(
+                'Overdue delivery',
+                'overdue_delivery',
+                baseOrders.where(_hasOverdueDelivery).length,
+                Colors.red,
+              ),
+              _buildAttentionChip(
+                'Missing delivery date',
+                'missing_delivery',
+                baseOrders
+                    .where(
+                      (order) => order.deliveryDate?.trim().isNotEmpty != true,
+                    )
+                    .length,
+                Colors.orange,
+              ),
+              _buildAttentionChip(
+                'Missing sales engineer',
+                'missing_engineer',
+                baseOrders
+                    .where((order) => order.salesEngineer.trim().isEmpty)
+                    .length,
+                Colors.deepPurple,
+              ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: Wrap(
+                  spacing: 7,
+                  runSpacing: 6,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      'Sort:',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                    ...[
+                      'Newest',
+                      'Highest value',
+                      'Largest quantity',
+                      'Customer A–Z',
+                    ].map(
+                      (sort) => ChoiceChip(
+                        label: Text(
+                          sort,
+                          style: GoogleFonts.cairo(fontSize: 10),
+                        ),
+                        selected: _orderSort == sort,
+                        onSelected: (_) => setState(() => _orderSort = sort),
+                        visualDensity: VisualDensity.compact,
+                        materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+            decoration: BoxDecoration(
+              color: _isDark
+                  ? Colors.white.withOpacity(0.035)
+                  : const Color(0xFFF8FAFC),
+              borderRadius: BorderRadius.circular(10),
+              border: Border.all(color: _borderColor),
+            ),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    '${orders.length} matching orders',
+                    style: GoogleFonts.cairo(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: _textColor,
+                    ),
+                  ),
+                ),
+                Text(
+                  'Value: \$${_formatNumber(totalValue)}',
+                  style: GoogleFonts.cairo(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: _secondaryTextColor,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 8),
+          if (shownOrders.isEmpty)
+            Padding(
+              padding: const EdgeInsets.all(26),
+              child: Center(
+                child: Text(
+                  'No orders match these filters.',
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
+                ),
+              ),
+            )
+          else
+            ...shownOrders.map(_buildExplorerOrderCard),
+          if (orders.length > 8)
+            Center(
+              child: TextButton.icon(
+                onPressed: () => setState(
+                  () => _showAllExplorerOrders = !_showAllExplorerOrders,
+                ),
+                icon: Icon(
+                  _showAllExplorerOrders
+                      ? Icons.expand_less
+                      : Icons.expand_more,
+                ),
+                label: Text(
+                  _showAllExplorerOrders
+                      ? 'Show fewer orders'
+                      : 'Show all ${orders.length} orders',
+                  style: GoogleFonts.cairo(),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
+  InputDecoration _filterDecoration(String label) => InputDecoration(
+    labelText: label,
+    labelStyle: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
+    filled: true,
+    fillColor: _surfaceColor,
+    contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+    border: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: _borderColor),
+    ),
+    enabledBorder: OutlineInputBorder(
+      borderRadius: BorderRadius.circular(10),
+      borderSide: BorderSide(color: _borderColor),
+    ),
+  );
+
+  Widget _buildAttentionChip(
+    String label,
+    String value,
+    int count,
+    Color color,
+  ) {
+    final selected = _attentionFilter == value;
+    return FilterChip(
+      label: Text('$label · $count', style: GoogleFonts.cairo(fontSize: 10)),
+      selected: selected,
+      onSelected: count == 0
+          ? null
+          : (_) => setState(() {
+              _attentionFilter = selected ? null : value;
+              _showAllExplorerOrders = false;
+            }),
+      avatar: Icon(Icons.flag_outlined, size: 14, color: color),
+      selectedColor: color.withOpacity(0.14),
+      checkmarkColor: color,
+      side: BorderSide(color: selected ? color : _borderColor),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  Widget _buildExplorerOrderCard(SAPMainOrder order) {
+    final statusColor = _getStatusColor(order.status);
+    final createdDate = order.createdAt == null
+        ? 'Created date unavailable'
+        : DateFormat('dd MMM yyyy').format(order.createdAt!.toLocal());
+    return Card(
+      color: _surfaceColor,
+      elevation: 0,
+      clipBehavior: Clip.antiAlias,
+      margin: const EdgeInsets.only(top: 9),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(16),
+        side: BorderSide(color: _borderColor.withOpacity(0.9)),
+      ),
+      child: InkWell(
+        onTap: () => Navigator.push(
+          context,
+          MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
+        ),
+        borderRadius: BorderRadius.circular(16),
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 13, 14, 12),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Expanded(
+                    child: Text(
+                      order.description.trim().isEmpty
+                          ? 'No description'
+                          : order.description,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w800,
+                        color: _textColor,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 10,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: statusColor.withOpacity(_isDark ? 0.2 : 0.1),
+                      borderRadius: BorderRadius.circular(9),
+                      border: Border.all(color: statusColor.withOpacity(0.2)),
+                    ),
+                    child: Text(
+                      order.status,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w700,
+                        color: statusColor,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 7,
+                runSpacing: 7,
+                children: [
+                  _buildOrderMeta(
+                    Icons.tag_rounded,
+                    'Design ${order.designOrder}',
+                  ),
+                  _buildOrderMeta(
+                    Icons.description_outlined,
+                    'Contract ${order.contractNumber}',
+                  ),
+                  _buildOrderMeta(
+                    Icons.person_outline,
+                    order.customerName.isEmpty
+                        ? 'Customer missing'
+                        : order.customerName,
+                  ),
+                  _buildOrderMeta(
+                    Icons.factory_outlined,
+                    _factoryLabel(order.factory),
+                  ),
+                  _buildOrderMeta(Icons.calendar_today_outlined, createdDate),
+                ],
+              ),
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 11),
+                child: Divider(height: 1, color: _borderColor),
+              ),
+              Row(
+                children: [
+                  Expanded(
+                    child: _buildOrderMetric(
+                      icon: Icons.inventory_2_rounded,
+                      label: 'QUANTITY',
+                      value:
+                          '${NumberFormat.decimalPattern().format(order.quantity)} ${order.unitOfMeasure}',
+                      color: Colors.deepOrange,
+                    ),
+                  ),
+                  Container(width: 1, height: 36, color: _borderColor),
+                  Expanded(
+                    child: _buildOrderMetric(
+                      icon: Icons.payments_rounded,
+                      label: 'ORDER VALUE',
+                      value: '\$${_formatNumber(order.value)}',
+                      color: Colors.teal,
+                    ),
+                  ),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    color: _secondaryTextColor,
+                    size: 20,
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildOrderMeta(IconData icon, String text) => Container(
+    constraints: const BoxConstraints(maxWidth: 260),
+    padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
+    decoration: BoxDecoration(
+      color: _isDark ? Colors.white.withOpacity(0.04) : const Color(0xFFF8FAFC),
+      borderRadius: BorderRadius.circular(8),
+      border: Border.all(color: _borderColor.withOpacity(0.8)),
+    ),
+    child: Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Icon(icon, size: 12, color: _secondaryTextColor),
+        const SizedBox(width: 5),
+        Flexible(
+          child: Text(
+            text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: GoogleFonts.cairo(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: _secondaryTextColor,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+
+  Widget _buildOrderMetric({
+    required IconData icon,
+    required String label,
+    required String value,
+    required Color color,
+  }) => Padding(
+    padding: const EdgeInsets.only(right: 8),
+    child: Row(
+      children: [
+        Container(
+          width: 30,
+          height: 30,
+          decoration: BoxDecoration(
+            color: color.withOpacity(_isDark ? 0.18 : 0.1),
+            borderRadius: BorderRadius.circular(9),
+          ),
+          child: Icon(icon, size: 16, color: color),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.cairo(
+                  fontSize: 8,
+                  fontWeight: FontWeight.w700,
+                  letterSpacing: 0.35,
+                  color: _secondaryTextColor,
+                ),
+              ),
+              Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w800,
+                  color: _textColor,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+
+  void _clearOrderExplorerFilters() {
+    _orderSearchController.clear();
+    setState(() {
+      _selectedFactoryFilter = null;
+      _selectedOrderStatusFilter = null;
+      _attentionFilter = null;
+      _orderSort = 'Newest';
+      _showAllExplorerOrders = false;
+    });
+  }
+
+  Future<void> _exportFilteredOrders() async {
+    final orders = _filteredExplorerOrders;
+    if (orders.isEmpty || _isExporting) return;
+    setState(() => _isExporting = true);
+    try {
+      final location = await ExcelExportService.exportOrdersToExcel(orders);
+      if (mounted) {
+        _showSnackBar(
+          kIsWeb
+              ? 'Excel file downloaded: $location'
+              : 'Excel file saved: $location',
+        );
+      }
+    } catch (e) {
+      debugPrint('Could not export dashboard orders: $e');
+      if (mounted) _showSnackBar('Could not export these orders.');
+    } finally {
+      if (mounted) setState(() => _isExporting = false);
+    }
+  }
+
+  Widget _buildRecentActivityCard() {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: _cardColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: _borderColor),
+        boxShadow: _dashboardCardShadows,
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.history, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Recent order activity',
+                  style: GoogleFonts.cairo(
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                    color: _textColor,
+                  ),
+                ),
+              ),
+              Text(
+                '${_recentActivity.length} events',
+                style: GoogleFonts.cairo(
+                  fontSize: 10,
+                  color: _secondaryTextColor,
+                ),
+              ),
+            ],
+          ),
+          Text(
+            'Latest entries from order_audit_log. Tap an event to open its order when it is still active.',
+            style: GoogleFonts.cairo(fontSize: 11, color: _secondaryTextColor),
+          ),
+          const SizedBox(height: 8),
+          if (_recentActivity.isEmpty)
+            Padding(
+              padding: const EdgeInsets.symmetric(vertical: 18),
+              child: Row(
+                children: [
+                  Icon(
+                    _activityLoadFailed
+                        ? Icons.lock_outline
+                        : Icons.inbox_outlined,
+                    color: _secondaryTextColor,
+                  ),
+                  const SizedBox(width: 9),
+                  Expanded(
+                    child: Text(
+                      _activityLoadFailed
+                          ? 'Recent activity is unavailable for this account.'
+                          : 'No audit entries were returned.',
+                      style: GoogleFonts.cairo(color: _secondaryTextColor),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else
+            ..._recentActivity.take(8).map(_buildActivityRow),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActivityRow(Map<String, dynamic> activity) {
+    final order = _findOrderForActivity(activity);
+    final field = activity['field_name']?.toString().trim() ?? 'order';
+    final oldValue = activity['old_value']?.toString().trim() ?? '';
+    final newValue = activity['new_value']?.toString().trim() ?? '';
+    final action = activity['action_type']?.toString().trim() ?? 'update';
+    final changedBy =
+        activity['changed_by']?.toString().trim() ?? 'Unknown user';
+    final designOrder = activity['design_order']?.toString().trim() ?? '';
+    final changedAt = _parseAuditDate(activity['changed_at']);
+    final eventText = oldValue.isEmpty && newValue.isEmpty
+        ? '$action · ${activity['notes']?.toString().trim() ?? ''}'
+        : oldValue.isEmpty
+        ? '$field set to $newValue'
+        : newValue.isEmpty
+        ? '$field cleared (was $oldValue)'
+        : '$field: $oldValue → $newValue';
+    final compactEvent = eventText.length > 105
+        ? '${eventText.substring(0, 102)}…'
+        : eventText;
+
+    return Card(
+      color: _surfaceColor,
+      elevation: 0,
+      margin: const EdgeInsets.only(top: 6),
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(10),
+        side: BorderSide(color: _borderColor),
+      ),
+      child: InkWell(
+        onTap: order == null
+            ? null
+            : () => Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => OrderTrackingPage(order: order),
+                ),
+              ),
+        borderRadius: BorderRadius.circular(10),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 30,
+                height: 30,
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(
+                  field.toLowerCase() == 'status'
+                      ? Icons.swap_horiz
+                      : Icons.edit_outlined,
+                  size: 16,
+                  color: Theme.of(context).colorScheme.primary,
+                ),
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Order ${designOrder.isNotEmpty ? designOrder : activity['order_id'] ?? 'unknown'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                    Text(
+                      compactEvent,
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 10,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      '$changedBy${changedAt == null ? '' : ' · ${DateFormat('dd MMM, h:mm a').format(changedAt)}'}',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.cairo(
+                        fontSize: 9,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (order != null)
+                Icon(Icons.chevron_right, size: 18, color: _secondaryTextColor),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  SAPMainOrder? _findOrderForActivity(Map<String, dynamic> activity) {
+    final orderId = activity['order_id']?.toString().trim() ?? '';
+    final designOrder = activity['design_order']?.toString().trim() ?? '';
+    for (final order in _allOrders) {
+      if ((orderId.isNotEmpty && order.id == orderId) ||
+          (designOrder.isNotEmpty && order.designOrder == designOrder)) {
+        return order;
+      }
+    }
+    return null;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: _backgroundColor,
+      body: _isLoading
+          ? Center(
+              child: CircularProgressIndicator(
+                color: Theme.of(context).colorScheme.primary,
+              ),
+            )
+          : SingleChildScrollView(
+              padding: EdgeInsets.all(
+                MediaQuery.of(context).size.width < 600 ? 8 : 24,
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  // Header
+                  Row(
+                    children: [
+                      Text(
+                        'Dashboard',
+                        style: GoogleFonts.cairo(
+                          fontSize: 28,
+                          fontWeight: FontWeight.bold,
+                          color: _textColor,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                        style: GoogleFonts.cairo(
+                          fontSize: 14,
+                          color: _secondaryTextColor,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      IconButton(
+                        onPressed: _loadDashboardData,
+                        icon: Icon(Icons.refresh, color: _secondaryTextColor),
+                        tooltip: 'Refresh',
+                      ),
+                    ],
+                  ),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+                  ),
+
+                  _buildDateRangeFilter(),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width < 600 ? 12 : 20,
+                  ),
+
+                  _buildDashboardOverview(),
+                  const SizedBox(height: 20),
+
+                  _buildOrderExplorer(),
+                  const SizedBox(height: 20),
+
+                  _buildRecentActivityCard(),
+                  const SizedBox(height: 24),
+
+                  // Comparison Section
+                  _buildComparisonSection(),
+                  SizedBox(
+                    height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+                  ),
+
+                  // Stage status analytics
+                  _buildStageStatusGraph(),
+                  const SizedBox(height: 24),
+                  _buildCircularStageStatusGraph(),
+                  const SizedBox(height: 24),
+                ],
+              ),
+            ),
+    );
+  }
+
   Widget _buildDateRangeFilter() {
     return Container(
-      padding: const EdgeInsets.all(18),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: _cardColor,
         borderRadius: BorderRadius.circular(14),
         border: Border.all(color: _borderColor),
       ),
-      child: Row(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Icon(
-            Icons.date_range_rounded,
-            color: Theme.of(context).colorScheme.primary,
-            size: 21,
+          Row(
+            children: [
+              Icon(
+                Icons.date_range_rounded,
+                color: Theme.of(context).colorScheme.primary,
+                size: 21,
+              ),
+              const SizedBox(width: 9),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Created date range',
+                      style: GoogleFonts.cairo(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w700,
+                        color: _textColor,
+                      ),
+                    ),
+                    Text(
+                      'Overview and explorer use the order creation date',
+                      style: GoogleFonts.cairo(
+                        fontSize: 11,
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (_hasDateRange)
+                TextButton.icon(
+                  onPressed: _clearDateRange,
+                  icon: const Icon(Icons.clear, size: 16),
+                  label: Text('Clear', style: GoogleFonts.cairo(fontSize: 12)),
+                ),
+            ],
           ),
-          const SizedBox(width: 10),
-          Text(
-            'Created Date',
-            style: GoogleFonts.cairo(
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: _textColor,
-            ),
+          const SizedBox(height: 12),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              _buildDatePresetChip('All time', 'all'),
+              _buildDatePresetChip('7 days', '7d'),
+              _buildDatePresetChip('30 days', '30d'),
+              _buildDatePresetChip('This month', 'month'),
+              _buildDatePresetChip('Year to date', 'ytd'),
+            ],
           ),
-          const SizedBox(width: 18),
-          Expanded(
-            child: _buildDateField(
-              label: 'Start Date',
-              date: _startDate,
-              icon: Icons.calendar_month,
-              onTap: _pickStartDate,
-            ),
-          ),
-          const SizedBox(width: 10),
-          Expanded(
-            child: _buildDateField(
-              label: 'End Date',
-              date: _endDate,
-              icon: Icons.event,
-              onTap: _pickEndDate,
-            ),
+          const SizedBox(height: 12),
+          LayoutBuilder(
+            builder: (context, constraints) {
+              final fieldWidth = constraints.maxWidth >= 580
+                  ? (constraints.maxWidth - 10) / 2
+                  : constraints.maxWidth;
+              return Wrap(
+                spacing: 10,
+                runSpacing: 10,
+                children: [
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _buildDateField(
+                      label: 'Custom start date',
+                      date: _startDate,
+                      icon: Icons.calendar_month,
+                      onTap: _pickStartDate,
+                    ),
+                  ),
+                  SizedBox(
+                    width: fieldWidth,
+                    child: _buildDateField(
+                      label: 'Custom end date',
+                      date: _endDate,
+                      icon: Icons.event,
+                      onTap: _pickEndDate,
+                    ),
+                  ),
+                ],
+              );
+            },
           ),
           if (_hasDateRange) ...[
-            const SizedBox(width: 8),
-            IconButton(
-              tooltip: 'Clear dates',
-              onPressed: _clearDateRange,
-              icon: Icon(
-                Icons.clear,
-                color: _secondaryTextColor,
+            const SizedBox(height: 8),
+            Text(
+              _getDateFilterLabel(),
+              style: GoogleFonts.cairo(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Theme.of(context).colorScheme.primary,
               ),
             ),
           ],
         ],
       ),
     );
+  }
+
+  Widget _buildDatePresetChip(String label, String value) {
+    final selected = _datePreset == value;
+    return ChoiceChip(
+      label: Text(label, style: GoogleFonts.cairo(fontSize: 11)),
+      selected: selected,
+      onSelected: (_) => _applyDatePreset(value),
+      selectedColor: Theme.of(context).colorScheme.primary.withOpacity(0.14),
+      backgroundColor: _surfaceColor,
+      side: BorderSide(
+        color: selected ? Theme.of(context).colorScheme.primary : _borderColor,
+      ),
+      labelStyle: TextStyle(
+        color: selected ? Theme.of(context).colorScheme.primary : _textColor,
+        fontWeight: FontWeight.w600,
+      ),
+      visualDensity: VisualDensity.compact,
+      materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+    );
+  }
+
+  void _applyDatePreset(String preset) {
+    final today = _dateOnly(DateTime.now());
+    DateTime? start;
+    DateTime? end;
+    switch (preset) {
+      case '7d':
+        start = today.subtract(const Duration(days: 6));
+        end = today;
+        break;
+      case '30d':
+        start = today.subtract(const Duration(days: 29));
+        end = today;
+        break;
+      case 'month':
+        start = DateTime(today.year, today.month);
+        end = today;
+        break;
+      case 'ytd':
+        start = DateTime(today.year, 1, 1);
+        end = today;
+        break;
+    }
+    setState(() {
+      _datePreset = preset;
+      _startDate = start;
+      _endDate = end;
+      _selectedFactoryFilter = null;
+      _selectedOrderStatusFilter = null;
+      _attentionFilter = null;
+    });
+    _recalculateDashboard();
   }
 
   Future<void> _pickStartDate() async {
@@ -926,7 +3165,13 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    setState(() => _startDate = date);
+    setState(() {
+      _startDate = date;
+      _datePreset = 'custom';
+      _selectedFactoryFilter = null;
+      _selectedOrderStatusFilter = null;
+      _attentionFilter = null;
+    });
     _recalculateDashboard();
   }
 
@@ -946,7 +3191,13 @@ class _DashboardPageState extends State<DashboardPage> {
       return;
     }
 
-    setState(() => _endDate = date);
+    setState(() {
+      _endDate = date;
+      _datePreset = 'custom';
+      _selectedFactoryFilter = null;
+      _selectedOrderStatusFilter = null;
+      _attentionFilter = null;
+    });
     _recalculateDashboard();
   }
 
@@ -954,6 +3205,10 @@ class _DashboardPageState extends State<DashboardPage> {
     setState(() {
       _startDate = null;
       _endDate = null;
+      _datePreset = 'all';
+      _selectedFactoryFilter = null;
+      _selectedOrderStatusFilter = null;
+      _attentionFilter = null;
     });
     _recalculateDashboard();
   }
@@ -972,10 +3227,7 @@ class _DashboardPageState extends State<DashboardPage> {
       SnackBar(
         content: Text(
           message,
-          style: GoogleFonts.cairo(
-            fontSize: 12,
-            fontWeight: FontWeight.w600,
-          ),
+          style: GoogleFonts.cairo(fontSize: 12, fontWeight: FontWeight.w600),
         ),
         behavior: SnackBarBehavior.floating,
         duration: const Duration(seconds: 3),
@@ -1216,10 +3468,7 @@ class _DashboardPageState extends State<DashboardPage> {
       children: [
         Text(
           label,
-          style: GoogleFonts.cairo(
-            fontSize: 12,
-            color: _secondaryTextColor,
-          ),
+          style: GoogleFonts.cairo(fontSize: 12, color: _secondaryTextColor),
         ),
         const Spacer(),
         Text(
@@ -1233,9 +3482,6 @@ class _DashboardPageState extends State<DashboardPage> {
       ],
     );
   }
-
-
-
 
   void _showStageGraphOrders({
     required String category,
