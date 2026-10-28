@@ -414,6 +414,8 @@ class _OrdersPageState extends State<OrdersPage> {
         return 'Date ↑';
       case 'date_desc':
         return 'Date ↓';
+      case 'item_asc':
+        return 'Contract / Item ↑';
       default:
         return 'Sort';
     }
@@ -2876,9 +2878,38 @@ class _OrdersPageState extends State<OrdersPage> {
     );
   }
 
+  // Compare identifiers numerically when possible, so 2 sorts before 10.
+  int _compareOrderIdentifiers(String? left, String? right) {
+    final a = (left ?? '').trim();
+    final b = (right ?? '').trim();
+    final aNumber = num.tryParse(a.replaceAll(',', ''));
+    final bNumber = num.tryParse(b.replaceAll(',', ''));
+    if (aNumber != null && bNumber != null) {
+      return aNumber.compareTo(bNumber);
+    }
+    return a.toLowerCase().compareTo(b.toLowerCase());
+  }
+
   // Add this method
   void _applySorting(List<SAPMainOrder> orders) {
     switch (_sortBy) {
+      case 'item_asc':
+        orders.sort((a, b) {
+          // Group all items under each contract, then sort items within it.
+          final contractComparison = _compareOrderIdentifiers(
+            a.contractNumber,
+            b.contractNumber,
+          );
+          if (contractComparison != 0) return contractComparison;
+          final itemComparison = _compareOrderIdentifiers(
+            a.itemNumber,
+            b.itemNumber,
+          );
+          if (itemComparison != 0) return itemComparison;
+          // Stable, predictable tie-breaker for rows sharing contract and item.
+          return _compareOrderIdentifiers(a.designOrder, b.designOrder);
+        });
+        break;
       case 'value_asc':
         orders.sort((a, b) => a.value.compareTo(b.value));
         break;
@@ -4140,7 +4171,7 @@ class _OrdersPageState extends State<OrdersPage> {
           Text('Sort orders', style: GoogleFonts.cairo(fontSize: 18, fontWeight: FontWeight.w800, color: _textColor)),
           const SizedBox(height: 8),
           for (final option in <MapEntry<String, String>>[
-            const MapEntry('default', 'Default order'), const MapEntry('date_asc', 'Date: oldest first'), const MapEntry('date_desc', 'Date: newest first'), const MapEntry('value_asc', 'Value: low to high'), const MapEntry('value_desc', 'Value: high to low'),
+            const MapEntry('default', 'Default order'), const MapEntry('date_asc', 'Date: oldest first'), const MapEntry('date_desc', 'Date: newest first'), const MapEntry('value_asc', 'Value: low to high'), const MapEntry('value_desc', 'Value: high to low'), const MapEntry('item_asc', 'Contract then Item: low to high'),
           ]) ListTile(dense: true, title: Text(option.value, style: GoogleFonts.cairo(color: _textColor)), trailing: _sortBy == option.key ? Icon(Icons.check_circle, color: Theme.of(context).colorScheme.primary) : null, onTap: () { setState(() => _sortBy = option.key); _rebuildGroups(); Navigator.pop(sheetContext); }),
         ]),
       )),
@@ -4864,9 +4895,10 @@ class _OrdersPageState extends State<OrdersPage> {
         field == 'responsible_engineer' &&
             _canClearResponsibleEngineer(order.status) &&
             !_isOrderLocked(order);
-    final canClearReviewer =
-        field == 'reviewer' &&
-            _canClearResponsibleEngineer(order.status) &&
+    // Reviewer and Alternative Engineer can be cleared in any active status.
+    // Keep them protected for Planning, Master Data, Done, and Task Done.
+    final canClearReviewerOrAlternative =
+        (field == 'reviewer' || field == 'correspondence_engineer') &&
             !_isOrderLocked(order);
     final displayName = currentValue ?? 'Select...';
     final hasValue = currentValue != null && currentValue.isNotEmpty;
@@ -5039,7 +5071,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     tooltip: 'Clear ${_formatFieldName(field)}',
                     onPressed: (canEdit ||
                         canClearResponsibleEngineer ||
-                        canClearReviewer)
+                        canClearReviewerOrAlternative)
                         ? () async {
                       final confirmed = await showDialog<bool>(
                         context: context,
@@ -5097,7 +5129,9 @@ class _OrdersPageState extends State<OrdersPage> {
                     icon: Icon(
                       Icons.close,
                       size: 12,
-                      color: (canEdit || canClearResponsibleEngineer)
+                      color: (canEdit ||
+                          canClearResponsibleEngineer ||
+                          canClearReviewerOrAlternative)
                           ? _secondaryTextColor
                           : _secondaryTextColor.withOpacity(0.35),
                     ),
@@ -5563,6 +5597,32 @@ class _OrdersPageState extends State<OrdersPage> {
           ),
         ),
         const PopupMenuDivider(),
+        PopupMenuItem(
+          value: 'item_asc',
+          child: Row(
+            children: [
+              Icon(
+                Icons.format_list_numbered,
+                size: 16,
+                color: _sortBy == 'item_asc'
+                    ? const Color(0xFF6366F1)
+                    : _secondaryTextColor,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                'Contract / Item ↑',
+                style: GoogleFonts.cairo(
+                  fontSize: 12,
+                  fontWeight: _sortBy == 'item_asc'
+                      ? FontWeight.w700
+                      : FontWeight.w400,
+                ),
+              ),
+              if (_sortBy == 'item_asc') const Spacer(),
+              if (_sortBy == 'item_asc') const Icon(Icons.check, size: 16),
+            ],
+          ),
+        ),
         PopupMenuItem(
           value: 'value_desc',
           child: Row(
