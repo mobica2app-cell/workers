@@ -3384,7 +3384,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 fontWeight: FontWeight.w700, color: color))),
           ]),
           SizedBox(height: isMobile ? 8 : 12),
-          _buildComparisonRow('Orders', '$orderCount', color),
+          _buildComparisonRow('Orders items', '$orderCount', color),
           const SizedBox(height: 4),
           _buildComparisonRow('Value', '\$${_formatNumber(totalValue)}', color),
           const SizedBox(height: 4),
