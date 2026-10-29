@@ -464,7 +464,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (_isOrderLocked(order)) return false;
 
     // Data Entry users can edit any row
-    if (_isDataEntry) return true;
+    if (_isDataEntry||_isAdmin) return true;
 
     // Regular users can only edit "Tasks" orders
     return order.status.toLowerCase() == 'tasks';
@@ -6665,7 +6665,85 @@ class _OrdersPageState extends State<OrdersPage> {
             ),
             const SizedBox(width: 8),
             Expanded(
-              child: Text(
+              child: (_editMode &&
+                  _isOrderEditable(order) &&
+                  !_isOrderLocked(order))
+                  ? Builder(
+                builder: (context) {
+                  const field = 'customer_name';
+                  final editKey = '${order.id}_$field';
+                  final controller = _editControllers.putIfAbsent(
+                    editKey,
+                        () => TextEditingController(
+                      text: order.customerName,
+                    ),
+                  );
+
+                  return SizedBox(
+                    height: 32,
+                    child: TextField(
+                      controller: controller,
+                      maxLines: 1,
+                      style: GoogleFonts.cairo(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w500,
+                        color: _textColor,
+                      ),
+                      decoration: InputDecoration(
+                        isDense: true,
+                        hintText: 'Customer name',
+                        contentPadding: const EdgeInsets.symmetric(
+                          horizontal: 6,
+                          vertical: 7,
+                        ),
+                        filled: true,
+                        fillColor: Colors.orange.withOpacity(0.05),
+                        enabledBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: BorderSide(
+                            color: Colors.orange.withOpacity(0.5),
+                          ),
+                        ),
+                        focusedBorder: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(4),
+                          borderSide: const BorderSide(
+                            color: Colors.orange,
+                            width: 1.2,
+                          ),
+                        ),
+                      ),
+                      onChanged: (value) => _scheduleInlineSave(
+                        order,
+                        field,
+                        value,
+                        order.customerName,
+                        editKey,
+                      ),
+                      onSubmitted: (value) async {
+                        await _flushInlineSave(
+                          order,
+                          field,
+                          value,
+                          order.customerName,
+                          editKey,
+                        );
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      },
+                      onTapOutside: (_) async {
+                        await _flushInlineSave(
+                          order,
+                          field,
+                          controller.text,
+                          order.customerName,
+                          editKey,
+                        );
+                        FocusManager.instance.primaryFocus?.unfocus();
+                      },
+                    ),
+                  );
+                },
+              )
+                  : Text(
                 order.customerName,
                 style: GoogleFonts.cairo(
                   fontSize: 13,
