@@ -772,24 +772,6 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
         Icons.precision_manufacturing_outlined,
         Colors.orange,
       ),
-      _overviewCard(
-        'Submital Value',
-        '\$${_formatNumber(_beforeApprovalValue)}',
-        Icons.attach_money,
-        Colors.deepPurple,
-      ),
-      _overviewCard(
-        'Approval Value',
-        '\$${_formatNumber(_approvalValue)}',
-        Icons.attach_money,
-        Colors.green,
-      ),
-      _overviewCard(
-        'Manufacturing Value',
-        '\$${_formatNumber(_manufacturingValue)}',
-        Icons.payments_outlined,
-        Colors.blue,
-      ),
     ];
 
     final columns = _isMobile ? 2 : 4;
