@@ -234,9 +234,15 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
       for (final order in orders) _orderKey(order): order,
     };
 
+    // These sets include every order so Header rows still contribute to value.
     final beforeApprovalIds = <String>{};
     final approvalIds = <String>{};
     final manufacturingIds = <String>{};
+
+    // Header rows are excluded from order counts, quantities, and count charts.
+    final beforeApprovalCountIds = <String>{};
+    final approvalCountIds = <String>{};
+    final manufacturingCountIds = <String>{};
 
     final beforeApprovalFactories = <String, Set<String>>{};
     final approvalFactories = <String, Set<String>>{};
@@ -262,6 +268,12 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           ? approvalIds
           : manufacturingIds;
 
+      final countIds = section == 'before'
+          ? beforeApprovalCountIds
+          : section == 'approval'
+          ? approvalCountIds
+          : manufacturingCountIds;
+
       final factories = section == 'before'
           ? beforeApprovalFactories
           : section == 'approval'
@@ -281,6 +293,13 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
           : manufacturingDates;
 
       ids.add(id);
+
+      final isHeader = (order.responsibleEngineer ?? '')
+          .trim()
+          .toLowerCase() == 'header';
+      if (isHeader) return;
+
+      countIds.add(id);
 
       final factory = (order.factory ?? '').trim();
       if (factory.isNotEmpty) {
@@ -340,26 +359,26 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
 
     debugPrint(
       '[ANALYTICS] SAP orders: ${orders.length} | '
-          'Submital: ${beforeApprovalIds.length} | '
-          'Approval: ${approvalIds.length} | '
-          'Manufacturing: ${manufacturingIds.length} | '
+          'Submital: ${beforeApprovalCountIds.length} | '
+          'Approval: ${approvalCountIds.length} | '
+          'Manufacturing: ${manufacturingCountIds.length} | '
           'Order Date Range: ${_dateRangeLabel()}',
     );
 
     if (!mounted) return;
 
     setState(() {
-      _beforeApprovalOrders = beforeApprovalIds.length;
-      _approvalOrders = approvalIds.length;
-      _manufacturingOrders = manufacturingIds.length;
+      _beforeApprovalOrders = beforeApprovalCountIds.length;
+      _approvalOrders = approvalCountIds.length;
+      _manufacturingOrders = manufacturingCountIds.length;
 
       _beforeApprovalValue = sumValue(beforeApprovalIds);
       _approvalValue = sumValue(approvalIds);
       _manufacturingValue = sumValue(manufacturingIds);
 
-      _beforeApprovalQuantity = sumQuantity(beforeApprovalIds);
-      _approvalQuantity = sumQuantity(approvalIds);
-      _manufacturingQuantity = sumQuantity(manufacturingIds);
+      _beforeApprovalQuantity = sumQuantity(beforeApprovalCountIds);
+      _approvalQuantity = sumQuantity(approvalCountIds);
+      _manufacturingQuantity = sumQuantity(manufacturingCountIds);
 
       _beforeApprovalFactories = counts(beforeApprovalFactories);
       _approvalFactories = counts(approvalFactories);
