@@ -68,6 +68,9 @@ class _DashboardPageState extends State<DashboardPage> {
   // Dashboard explorer and activity state.
   final TextEditingController _orderSearchController = TextEditingController();
   final GlobalKey _orderExplorerKey = GlobalKey();
+  final GlobalKey _orderBreakdownKey = GlobalKey();
+  final GlobalKey _stageStatusKey = GlobalKey();
+  final GlobalKey _circularStageStatusKey = GlobalKey();
   String? _selectedFactoryFilter;
   String? _selectedOrderStatusFilter;
   String? _attentionFilter;
@@ -188,9 +191,9 @@ class _DashboardPageState extends State<DashboardPage> {
         final activityRows = await Supabase.instance.client
             .from('order_audit_log')
             .select(
-              'order_id, design_order, field_name, old_value, new_value, '
+          'order_id, design_order, field_name, old_value, new_value, '
               'changed_by, changed_at, action_type, notes',
-            )
+        )
             .order('changed_at', ascending: false)
             .limit(12);
         recentActivity = List<Map<String, dynamic>>.from(activityRows);
@@ -203,13 +206,13 @@ class _DashboardPageState extends State<DashboardPage> {
       _allOrders = orders;
       if (_selectedOrderStatusFilter != null &&
           !_allOrders.any(
-            (order) => order.status.trim() == _selectedOrderStatusFilter,
+                (order) => order.status.trim() == _selectedOrderStatusFilter,
           )) {
         _selectedOrderStatusFilter = null;
       }
       if (_selectedFactoryFilter != null &&
           !_allOrders.any(
-            (order) => (order.factory?.trim() ?? '') == _selectedFactoryFilter,
+                (order) => (order.factory?.trim() ?? '') == _selectedFactoryFilter,
           )) {
         _selectedFactoryFilter = null;
       }
@@ -307,14 +310,14 @@ class _DashboardPageState extends State<DashboardPage> {
         break;
       case 'Customer A–Z':
         orders.sort(
-          (a, b) => a.customerName.toLowerCase().compareTo(
+              (a, b) => a.customerName.toLowerCase().compareTo(
             b.customerName.toLowerCase(),
           ),
         );
         break;
       default:
         orders.sort(
-          (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
+              (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
             a.createdAt ?? DateTime(2000),
           ),
         );
@@ -381,9 +384,9 @@ class _DashboardPageState extends State<DashboardPage> {
 
   /// Returns the actual SAP orders represented by unique audit order IDs.
   List<SAPMainOrder> _ordersForSection(
-    List<SAPMainOrder> orders,
-    List<String>? statuses,
-  ) {
+      List<SAPMainOrder> orders,
+      List<String>? statuses,
+      ) {
     // No date filter: keep the original dashboard meaning.
     if (_startDate == null && _endDate == null) {
       if (statuses == null) {
@@ -493,7 +496,7 @@ class _DashboardPageState extends State<DashboardPage> {
 
     final recent = List<SAPMainOrder>.from(filteredOrders)
       ..sort(
-        (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
+            (a, b) => (b.createdAt ?? DateTime(2000)).compareTo(
           a.createdAt ?? DateTime(2000),
         ),
       );
@@ -1000,11 +1003,13 @@ class _DashboardPageState extends State<DashboardPage> {
           const SizedBox(height: 14),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1050
-                  ? 5
-                  : constraints.maxWidth >= 650
-                  ? 3
-                  : 2;
+              // Keep all four overview cards on one full-width row on
+              // desktop/tablet layouts, while remaining responsive on phones.
+              final columns = constraints.maxWidth >= 900
+                  ? 4
+                  : constraints.maxWidth >= 520
+                  ? 2
+                  : 1;
               final gap = 10.0;
               final width =
                   (constraints.maxWidth - gap * (columns - 1)) / columns;
@@ -1028,25 +1033,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: _buildMetricCard(
                       label: 'Pipeline value',
                       value: '\$${_formatNumber(_totalValue)}',
-                      caption: 'Tap for status split',
+                      caption: 'Tap to view order breakdown',
                       icon: Icons.payments_outlined,
                       color: Colors.teal,
-                      onTap: () =>
-                          _showStatusMetricBreakdown(valueMetric: true),
-                    ),
-                  ),
-                  SizedBox(
-                    width: width,
-                    child: _buildMetricCard(
-                      label: 'Quantity',
-                      value: NumberFormat.decimalPattern().format(
-                        _totalQuantity,
-                      ),
-                      caption: 'Mixed units · tap to split',
-                      icon: Icons.inventory_2_outlined,
-                      color: Colors.deepOrange,
-                      onTap: () =>
-                          _showStatusMetricBreakdown(valueMetric: false),
+                      onTap: _scrollToOrderBreakdown,
                     ),
                   ),
                   SizedBox(
@@ -1054,10 +1044,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: _buildMetricCard(
                       label: 'Factories',
                       value: '$_totalFactories',
-                      caption: 'Tap for order split',
+                      caption: 'Tap for factory stage analysis',
                       icon: Icons.factory_outlined,
                       color: Colors.indigo,
-                      onTap: _showFactoryBreakdown,
+                      onTap: _scrollToFactoryStageAnalysis,
                     ),
                   ),
                   SizedBox(
@@ -1065,10 +1055,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     child: _buildMetricCard(
                       label: 'Active employees',
                       value: '$activeEmployees',
-                      caption: 'Tap to browse staff',
+                      caption: 'Tap for employee stage analysis',
                       icon: Icons.groups_outlined,
                       color: Colors.purple,
-                      onTap: _showEmployeeDirectory,
+                      onTap: _scrollToEmployeeStageAnalysis,
                     ),
                   ),
                 ],
@@ -1377,11 +1367,6 @@ class _DashboardPageState extends State<DashboardPage> {
                   'Factories and people',
                   'Factory names use the descriptions. Employee totals include active accounts.',
                 ),
-                _buildDataNoteItem(
-                  Icons.history_rounded,
-                  'Activity feed',
-                  'Shows recent changes recorded in order history. It is not a complete audit history.',
-                ),
               ],
             ),
           ),
@@ -1463,6 +1448,39 @@ class _DashboardPageState extends State<DashboardPage> {
     );
   }
 
+  void _scrollToKey(GlobalKey key) {
+    final target = key.currentContext;
+    if (target == null) return;
+    Scrollable.ensureVisible(
+      target,
+      duration: const Duration(milliseconds: 450),
+      curve: Curves.easeInOut,
+      alignment: 0.04,
+    );
+  }
+
+  void _scrollToOrderBreakdown() => _scrollToKey(_orderBreakdownKey);
+
+  void _scrollToFactoryStageAnalysis() {
+    setState(() {
+      _stageGraphGrouping = 'factory';
+      _circularGraphGrouping = 'factory';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToKey(_stageStatusKey);
+    });
+  }
+
+  void _scrollToEmployeeStageAnalysis() {
+    setState(() {
+      _stageGraphGrouping = 'employee';
+      _circularGraphGrouping = 'employee';
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToKey(_stageStatusKey);
+    });
+  }
+
   void _showStatusMetricBreakdown({required bool valueMetric}) {
     final metrics = valueMetric ? _statusValues : _statusQuantities;
     final entries = metrics.entries.where((entry) => entry.value != 0).toList()
@@ -1527,120 +1545,120 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: entries.isEmpty
                   ? Center(
-                      child: Text(
-                        'No values for this date range',
-                        style: GoogleFonts.cairo(color: _secondaryTextColor),
-                      ),
-                    )
+                child: Text(
+                  'No values for this date range',
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
+                ),
+              )
                   : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final entry = entries[index];
-                        final value = valueMetric
-                            ? '\$${_formatNumber(entry.value)}'
-                            : NumberFormat.decimalPattern().format(entry.value);
-                        final metricTotal = entries.fold<double>(
-                          0,
-                          (sum, item) => sum + item.value,
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  final value = valueMetric
+                      ? '\$${_formatNumber(entry.value)}'
+                      : NumberFormat.decimalPattern().format(entry.value);
+                  final metricTotal = entries.fold<double>(
+                    0,
+                        (sum, item) => sum + item.value,
+                  );
+                  final share = metricTotal == 0
+                      ? 0.0
+                      : (entry.value / metricTotal)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+                  final color = _getStatusColor(entry.key);
+                  return Material(
+                    color: _cardColor,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: () {
+                        setState(
+                              () => _selectedOrderStatusFilter = entry.key,
                         );
-                        final share = metricTotal == 0
-                            ? 0.0
-                            : (entry.value / metricTotal)
-                                  .clamp(0.0, 1.0)
-                                  .toDouble();
-                        final color = _getStatusColor(entry.key);
-                        return Material(
-                          color: _cardColor,
+                        Navigator.pop(sheetContext);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _scrollToOrderExplorer();
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.all(13),
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          child: InkWell(
-                            onTap: () {
-                              setState(
-                                () => _selectedOrderStatusFilter = entry.key,
-                              );
-                              Navigator.pop(sheetContext);
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                _scrollToOrderExplorer();
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              padding: const EdgeInsets.all(13),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: _borderColor),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 10,
+                                  height: 10,
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(
+                                      4,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 9),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        width: 10,
-                                        height: 10,
-                                        decoration: BoxDecoration(
-                                          color: color,
-                                          borderRadius: BorderRadius.circular(
-                                            4,
-                                          ),
-                                        ),
-                                      ),
-                                      const SizedBox(width: 9),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              entry.key,
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.cairo(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: _textColor,
-                                              ),
-                                            ),
-                                            Text(
-                                              '${_statusDistribution[entry.key] ?? 0} orders',
-                                              style: GoogleFonts.cairo(
-                                                fontSize: 10,
-                                                color: _secondaryTextColor,
-                                              ),
-                                            ),
-                                          ],
-                                        ),
-                                      ),
-                                      const SizedBox(width: 8),
                                       Text(
-                                        value,
+                                        entry.key,
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
                                         style: GoogleFonts.cairo(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.w800,
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
                                           color: _textColor,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${_statusDistribution[entry.key] ?? 0} orders',
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 10,
+                                          color: _secondaryTextColor,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: LinearProgressIndicator(
-                                      value: share,
-                                      minHeight: 5,
-                                      backgroundColor: color.withOpacity(0.12),
-                                      valueColor: AlwaysStoppedAnimation<Color>(
-                                        color,
-                                      ),
-                                    ),
+                                ),
+                                const SizedBox(width: 8),
+                                Text(
+                                  value,
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w800,
+                                    color: _textColor,
                                   ),
-                                ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LinearProgressIndicator(
+                                value: share,
+                                minHeight: 5,
+                                backgroundColor: color.withOpacity(0.12),
+                                valueColor: AlwaysStoppedAnimation<Color>(
+                                  color,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          ],
+                        ),
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -1709,118 +1727,118 @@ class _DashboardPageState extends State<DashboardPage> {
             Expanded(
               child: entries.isEmpty
                   ? Center(
-                      child: Text(
-                        'No factory data for this date range.',
-                        style: GoogleFonts.cairo(color: _secondaryTextColor),
-                      ),
-                    )
+                child: Text(
+                  'No factory data for this date range.',
+                  style: GoogleFonts.cairo(color: _secondaryTextColor),
+                ),
+              )
                   : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 8),
-                      itemCount: entries.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final entry = entries[index];
-                        final share = _dateFilteredOrders.isEmpty
-                            ? 0.0
-                            : (entry.value / _dateFilteredOrders.length)
-                                  .clamp(0.0, 1.0)
-                                  .toDouble();
-                        return Material(
-                          color: _cardColor,
+                padding: const EdgeInsets.only(bottom: 8),
+                itemCount: entries.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final entry = entries[index];
+                  final share = _dateFilteredOrders.isEmpty
+                      ? 0.0
+                      : (entry.value / _dateFilteredOrders.length)
+                      .clamp(0.0, 1.0)
+                      .toDouble();
+                  return Material(
+                    color: _cardColor,
+                    borderRadius: BorderRadius.circular(14),
+                    child: InkWell(
+                      onTap: () {
+                        setState(
+                              () => _selectedFactoryFilter = entry.key,
+                        );
+                        Navigator.pop(sheetContext);
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          _scrollToOrderExplorer();
+                        });
+                      },
+                      borderRadius: BorderRadius.circular(14),
+                      child: Container(
+                        padding: const EdgeInsets.all(13),
+                        decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(14),
-                          child: InkWell(
-                            onTap: () {
-                              setState(
-                                () => _selectedFactoryFilter = entry.key,
-                              );
-                              Navigator.pop(sheetContext);
-                              WidgetsBinding.instance.addPostFrameCallback((_) {
-                                _scrollToOrderExplorer();
-                              });
-                            },
-                            borderRadius: BorderRadius.circular(14),
-                            child: Container(
-                              padding: const EdgeInsets.all(13),
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: _borderColor),
-                              ),
-                              child: Column(
-                                children: [
-                                  Row(
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Column(
+                          children: [
+                            Row(
+                              children: [
+                                Container(
+                                  width: 36,
+                                  height: 36,
+                                  decoration: BoxDecoration(
+                                    color: Colors.indigo.withOpacity(0.1),
+                                    borderRadius: BorderRadius.circular(
+                                      11,
+                                    ),
+                                  ),
+                                  child: const Icon(
+                                    Icons.factory_rounded,
+                                    size: 18,
+                                    color: Colors.indigo,
+                                  ),
+                                ),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                    CrossAxisAlignment.start,
                                     children: [
-                                      Container(
-                                        width: 36,
-                                        height: 36,
-                                        decoration: BoxDecoration(
-                                          color: Colors.indigo.withOpacity(0.1),
-                                          borderRadius: BorderRadius.circular(
-                                            11,
-                                          ),
-                                        ),
-                                        child: const Icon(
-                                          Icons.factory_rounded,
-                                          size: 18,
-                                          color: Colors.indigo,
-                                        ),
-                                      ),
-                                      const SizedBox(width: 10),
-                                      Expanded(
-                                        child: Column(
-                                          crossAxisAlignment:
-                                              CrossAxisAlignment.start,
-                                          children: [
-                                            Text(
-                                              _factoryLabel(entry.key),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                              style: GoogleFonts.cairo(
-                                                fontSize: 12,
-                                                fontWeight: FontWeight.w700,
-                                                color: _textColor,
-                                              ),
-                                            ),
-                                            Text(
-                                              '${entry.value} orders',
-                                              style: GoogleFonts.cairo(
-                                                fontSize: 10,
-                                                color: _secondaryTextColor,
-                                              ),
-                                            ),
-                                          ],
+                                      Text(
+                                        _factoryLabel(entry.key),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: GoogleFonts.cairo(
+                                          fontSize: 12,
+                                          fontWeight: FontWeight.w700,
+                                          color: _textColor,
                                         ),
                                       ),
                                       Text(
-                                        '\$${_formatNumber(valueByFactory[entry.key] ?? 0)}',
+                                        '${entry.value} orders',
                                         style: GoogleFonts.cairo(
-                                          fontSize: 12,
-                                          fontWeight: FontWeight.w800,
-                                          color: _textColor,
+                                          fontSize: 10,
+                                          color: _secondaryTextColor,
                                         ),
                                       ),
                                     ],
                                   ),
-                                  const SizedBox(height: 10),
-                                  ClipRRect(
-                                    borderRadius: BorderRadius.circular(20),
-                                    child: LinearProgressIndicator(
-                                      value: share,
-                                      minHeight: 5,
-                                      backgroundColor: Colors.indigo
-                                          .withOpacity(0.1),
-                                      valueColor:
-                                          const AlwaysStoppedAnimation<Color>(
-                                            Colors.indigo,
-                                          ),
-                                    ),
+                                ),
+                                Text(
+                                  '\$${_formatNumber(valueByFactory[entry.key] ?? 0)}',
+                                  style: GoogleFonts.cairo(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w800,
+                                    color: _textColor,
                                   ),
-                                ],
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            ClipRRect(
+                              borderRadius: BorderRadius.circular(20),
+                              child: LinearProgressIndicator(
+                                value: share,
+                                minHeight: 5,
+                                backgroundColor: Colors.indigo
+                                    .withOpacity(0.1),
+                                valueColor:
+                                const AlwaysStoppedAnimation<Color>(
+                                  Colors.indigo,
+                                ),
                               ),
                             ),
-                          ),
-                        );
-                      },
+                          ],
+                        ),
+                      ),
                     ),
+                  );
+                },
+              ),
             ),
           ],
         ),
@@ -1833,12 +1851,12 @@ class _DashboardPageState extends State<DashboardPage> {
     String? departmentFilter;
     var activeOnly = true;
     final departments =
-        _allEmployees
-            .map((employee) => employee.department?.trim() ?? '')
-            .where((department) => department.isNotEmpty)
-            .toSet()
-            .toList()
-          ..sort();
+    _allEmployees
+        .map((employee) => employee.department?.trim() ?? '')
+        .where((department) => department.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort();
     showModalBottomSheet<void>(
       context: context,
       isScrollControlled: true,
@@ -1846,22 +1864,22 @@ class _DashboardPageState extends State<DashboardPage> {
       builder: (sheetContext) => StatefulBuilder(
         builder: (context, setSheetState) {
           final employees =
-              _allEmployees.where((employee) {
-                if (activeOnly && !employee.isActive) return false;
-                if (departmentFilter != null &&
-                    employee.department != departmentFilter) {
-                  return false;
-                }
-                final searchText = query.trim().toLowerCase();
-                return searchText.isEmpty ||
-                    employee.fullName.toLowerCase().contains(searchText) ||
-                    employee.username.toLowerCase().contains(searchText) ||
-                    (employee.role ?? '').toLowerCase().contains(searchText);
-              }).toList()..sort(
+          _allEmployees.where((employee) {
+            if (activeOnly && !employee.isActive) return false;
+            if (departmentFilter != null &&
+                employee.department != departmentFilter) {
+              return false;
+            }
+            final searchText = query.trim().toLowerCase();
+            return searchText.isEmpty ||
+                employee.fullName.toLowerCase().contains(searchText) ||
+                employee.username.toLowerCase().contains(searchText) ||
+                (employee.role ?? '').toLowerCase().contains(searchText);
+          }).toList()..sort(
                 (a, b) => a.fullName.toLowerCase().compareTo(
-                  b.fullName.toLowerCase(),
-                ),
-              );
+              b.fullName.toLowerCase(),
+            ),
+          );
           return _buildDashboardSheetFrame(
             sheetContext: sheetContext,
             heightFactor: 0.88,
@@ -1919,12 +1937,12 @@ class _DashboardPageState extends State<DashboardPage> {
                           setSheetState(() => departmentFilter = null),
                     ),
                     ...departments.map(
-                      (department) => ChoiceChip(
+                          (department) => ChoiceChip(
                         label: Text(department),
                         selected: departmentFilter == department,
                         onSelected: (_) => setSheetState(
-                          () =>
-                              departmentFilter = departmentFilter == department
+                              () =>
+                          departmentFilter = departmentFilter == department
                               ? null
                               : department,
                         ),
@@ -1966,107 +1984,107 @@ class _DashboardPageState extends State<DashboardPage> {
                 Expanded(
                   child: employees.isEmpty
                       ? Center(
-                          child: Text(
-                            'No employees match these filters',
-                            style: GoogleFonts.cairo(
-                              color: _secondaryTextColor,
-                            ),
-                          ),
-                        )
+                    child: Text(
+                      'No employees match these filters',
+                      style: GoogleFonts.cairo(
+                        color: _secondaryTextColor,
+                      ),
+                    ),
+                  )
                       : ListView.separated(
-                          padding: const EdgeInsets.only(bottom: 8),
-                          itemCount: employees.length,
-                          separatorBuilder: (_, __) =>
-                              const SizedBox(height: 7),
-                          itemBuilder: (context, index) {
-                            final employee = employees[index];
-                            final employeeColor = employee.isActive
-                                ? Colors.green
-                                : _secondaryTextColor;
-                            return Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 12,
-                                vertical: 9,
+                    padding: const EdgeInsets.only(bottom: 8),
+                    itemCount: employees.length,
+                    separatorBuilder: (_, __) =>
+                    const SizedBox(height: 7),
+                    itemBuilder: (context, index) {
+                      final employee = employees[index];
+                      final employeeColor = employee.isActive
+                          ? Colors.green
+                          : _secondaryTextColor;
+                      return Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _cardColor,
+                          borderRadius: BorderRadius.circular(14),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 21,
+                              backgroundColor: Colors.purple.withOpacity(
+                                0.1,
                               ),
-                              decoration: BoxDecoration(
-                                color: _cardColor,
-                                borderRadius: BorderRadius.circular(14),
-                                border: Border.all(color: _borderColor),
+                              child: Text(
+                                employee.initials,
+                                style: const TextStyle(
+                                  color: Colors.purple,
+                                  fontWeight: FontWeight.w800,
+                                ),
                               ),
-                              child: Row(
+                            ),
+                            const SizedBox(width: 11),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment:
+                                CrossAxisAlignment.start,
                                 children: [
-                                  CircleAvatar(
-                                    radius: 21,
-                                    backgroundColor: Colors.purple.withOpacity(
-                                      0.1,
-                                    ),
-                                    child: Text(
-                                      employee.initials,
-                                      style: const TextStyle(
-                                        color: Colors.purple,
-                                        fontWeight: FontWeight.w800,
-                                      ),
+                                  Text(
+                                    employee.displayName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 12,
+                                      fontWeight: FontWeight.w700,
+                                      color: _textColor,
                                     ),
                                   ),
-                                  const SizedBox(width: 11),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(
-                                          employee.displayName,
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: _textColor,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 1),
-                                        Text(
-                                          [employee.department, employee.role]
-                                              .where(
-                                                (part) =>
-                                                    part?.trim().isNotEmpty ??
-                                                    false,
-                                              )
-                                              .join(' · '),
-                                          maxLines: 1,
-                                          overflow: TextOverflow.ellipsis,
-                                          style: GoogleFonts.cairo(
-                                            fontSize: 10,
-                                            color: _secondaryTextColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 8,
-                                      vertical: 4,
-                                    ),
-                                    decoration: BoxDecoration(
-                                      color: employeeColor.withOpacity(0.11),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      employee.isActive ? 'Active' : 'Inactive',
-                                      style: GoogleFonts.cairo(
-                                        fontSize: 9,
-                                        fontWeight: FontWeight.w700,
-                                        color: employeeColor,
-                                      ),
+                                  const SizedBox(height: 1),
+                                  Text(
+                                    [employee.department, employee.role]
+                                        .where(
+                                          (part) =>
+                                      part?.trim().isNotEmpty ??
+                                          false,
+                                    )
+                                        .join(' · '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.cairo(
+                                      fontSize: 10,
+                                      color: _secondaryTextColor,
                                     ),
                                   ),
                                 ],
                               ),
-                            );
-                          },
+                            ),
+                            const SizedBox(width: 8),
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 8,
+                                vertical: 4,
+                              ),
+                              decoration: BoxDecoration(
+                                color: employeeColor.withOpacity(0.11),
+                                borderRadius: BorderRadius.circular(20),
+                              ),
+                              child: Text(
+                                employee.isActive ? 'Active' : 'Inactive',
+                                style: GoogleFonts.cairo(
+                                  fontSize: 9,
+                                  fontWeight: FontWeight.w700,
+                                  color: employeeColor,
+                                ),
+                              ),
+                            ),
+                          ],
                         ),
+                      );
+                    },
+                  ),
                 ),
               ],
             ),
@@ -2079,23 +2097,23 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildOrderExplorer() {
     final baseOrders = _dateFilteredOrders;
     final statuses =
-        baseOrders.map((order) => order.status.trim()).toSet().toList()
-          ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+    baseOrders.map((order) => order.status.trim()).toSet().toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
     final factories =
-        baseOrders.map((order) => order.factory?.trim() ?? '').toSet().toList()
-          ..sort(
+    baseOrders.map((order) => order.factory?.trim() ?? '').toSet().toList()
+      ..sort(
             (a, b) =>
-                _factoryLabel(a)
-                    .toLowerCase()
-                    .compareTo(_factoryLabel(b).toLowerCase()),
-          );
+            _factoryLabel(a)
+                .toLowerCase()
+                .compareTo(_factoryLabel(b).toLowerCase()),
+      );
     final orders = _filteredExplorerOrders;
     final shownOrders = _showAllExplorerOrders
         ? orders
         : orders.take(8).toList();
     final totalValue = orders.fold<double>(
       0,
-      (sum, order) => sum + order.value,
+          (sum, order) => sum + order.value,
     );
 
     return Container(
@@ -2133,10 +2151,10 @@ class _DashboardPageState extends State<DashboardPage> {
                     : _exportFilteredOrders,
                 icon: _isExporting
                     ? const SizedBox(
-                        width: 15,
-                        height: 15,
-                        child: CircularProgressIndicator(strokeWidth: 2),
-                      )
+                  width: 15,
+                  height: 15,
+                  child: CircularProgressIndicator(strokeWidth: 2),
+                )
                     : const Icon(Icons.file_download_outlined, size: 17),
                 label: Text(_isExporting ? 'Exporting' : 'Export'),
                 style: FilledButton.styleFrom(
@@ -2182,13 +2200,13 @@ class _DashboardPageState extends State<DashboardPage> {
               suffixIcon: _orderSearchController.text.isEmpty
                   ? null
                   : IconButton(
-                      tooltip: 'Clear search',
-                      onPressed: () {
-                        _orderSearchController.clear();
-                        setState(() => _showAllExplorerOrders = false);
-                      },
-                      icon: const Icon(Icons.close),
-                    ),
+                tooltip: 'Clear search',
+                onPressed: () {
+                  _orderSearchController.clear();
+                  setState(() => _showAllExplorerOrders = false);
+                },
+                icon: const Icon(Icons.close),
+              ),
               filled: true,
               fillColor: _surfaceColor,
               contentPadding: const EdgeInsets.symmetric(
@@ -2212,15 +2230,15 @@ class _DashboardPageState extends State<DashboardPage> {
                   ? (constraints.maxWidth - 10) / 2
                   : constraints.maxWidth;
               final selectedStatus =
-                  statuses.contains(_selectedOrderStatusFilter)
+              statuses.contains(_selectedOrderStatusFilter)
                   ? _selectedOrderStatusFilter ?? '__all__'
                   : '__all__';
               final selectedFactory = _selectedFactoryFilter == null
                   ? '__all__'
                   : factories.contains(_selectedFactoryFilter)
                   ? (_selectedFactoryFilter!.isEmpty
-                        ? '__missing__'
-                        : _selectedFactoryFilter!)
+                  ? '__missing__'
+                  : _selectedFactoryFilter!)
                   : '__all__';
               return Wrap(
                 spacing: 10,
@@ -2238,7 +2256,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: Text('All statuses'),
                         ),
                         ...statuses.map(
-                          (status) => DropdownMenuItem(
+                              (status) => DropdownMenuItem(
                             value: status,
                             child: Text(
                               status,
@@ -2250,7 +2268,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       ],
                       onChanged: (value) => setState(() {
                         _selectedOrderStatusFilter =
-                            value == null || value == '__all__' ? null : value;
+                        value == null || value == '__all__' ? null : value;
                       }),
                     ),
                   ),
@@ -2266,7 +2284,7 @@ class _DashboardPageState extends State<DashboardPage> {
                           child: Text('All factories'),
                         ),
                         ...factories.map(
-                          (factory) => DropdownMenuItem(
+                              (factory) => DropdownMenuItem(
                             value: factory.isEmpty ? '__missing__' : factory,
                             child: Text(
                               factory.isEmpty
@@ -2280,7 +2298,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       ],
                       onChanged: (value) => setState(() {
                         _selectedFactoryFilter =
-                            value == null || value == '__all__'
+                        value == null || value == '__all__'
                             ? null
                             : value == '__missing__'
                             ? ''
@@ -2318,7 +2336,7 @@ class _DashboardPageState extends State<DashboardPage> {
                 baseOrders
                     .where(
                       (order) => order.deliveryDate?.trim().isNotEmpty != true,
-                    )
+                )
                     .length,
                 Colors.orange,
               ),
@@ -2354,7 +2372,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       'Largest quantity',
                       'Customer A–Z',
                     ].map(
-                      (sort) => ChoiceChip(
+                          (sort) => ChoiceChip(
                         label: Text(
                           sort,
                           style: GoogleFonts.cairo(fontSize: 10),
@@ -2420,7 +2438,7 @@ class _DashboardPageState extends State<DashboardPage> {
             Center(
               child: TextButton.icon(
                 onPressed: () => setState(
-                  () => _showAllExplorerOrders = !_showAllExplorerOrders,
+                      () => _showAllExplorerOrders = !_showAllExplorerOrders,
                 ),
                 icon: Icon(
                   _showAllExplorerOrders
@@ -2457,11 +2475,11 @@ class _DashboardPageState extends State<DashboardPage> {
   );
 
   Widget _buildAttentionChip(
-    String label,
-    String value,
-    int count,
-    Color color,
-  ) {
+      String label,
+      String value,
+      int count,
+      Color color,
+      ) {
     final selected = _attentionFilter == value;
     return FilterChip(
       label: Text('$label · $count', style: GoogleFonts.cairo(fontSize: 10)),
@@ -2469,9 +2487,9 @@ class _DashboardPageState extends State<DashboardPage> {
       onSelected: count == 0
           ? null
           : (_) => setState(() {
-              _attentionFilter = selected ? null : value;
-              _showAllExplorerOrders = false;
-            }),
+        _attentionFilter = selected ? null : value;
+        _showAllExplorerOrders = false;
+      }),
       avatar: Icon(Icons.flag_outlined, size: 14, color: color),
       selectedColor: color.withOpacity(0.14),
       checkmarkColor: color,
@@ -2582,7 +2600,7 @@ class _DashboardPageState extends State<DashboardPage> {
                       icon: Icons.inventory_2_rounded,
                       label: 'QUANTITY',
                       value:
-                          '${NumberFormat.decimalPattern().format(order.quantity)} ${order.unitOfMeasure}',
+                      '${NumberFormat.decimalPattern().format(order.quantity)} ${order.unitOfMeasure}',
                       color: Colors.deepOrange,
                     ),
                   ),
@@ -2824,11 +2842,11 @@ class _DashboardPageState extends State<DashboardPage> {
         onTap: order == null
             ? null
             : () => Navigator.push(
-                context,
-                MaterialPageRoute(
-                  builder: (_) => OrderTrackingPage(order: order),
-                ),
-              ),
+          context,
+          MaterialPageRoute(
+            builder: (_) => OrderTrackingPage(order: order),
+          ),
+        ),
         borderRadius: BorderRadius.circular(10),
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
@@ -2914,76 +2932,73 @@ class _DashboardPageState extends State<DashboardPage> {
       backgroundColor: _backgroundColor,
       body: _isLoading
           ? Center(
-              child: CircularProgressIndicator(
-                color: Theme.of(context).colorScheme.primary,
-              ),
-            )
+        child: CircularProgressIndicator(
+          color: Theme.of(context).colorScheme.primary,
+        ),
+      )
           : SingleChildScrollView(
-              padding: EdgeInsets.all(
-                MediaQuery.of(context).size.width < 600 ? 8 : 24,
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  // Header
-                  Row(
-                    children: [
-                      Text(
-                        'Dashboard',
-                        style: GoogleFonts.cairo(
-                          fontSize: 28,
-                          fontWeight: FontWeight.bold,
-                          color: _textColor,
-                        ),
-                      ),
-                      const Spacer(),
-                      Text(
-                        DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
-                        style: GoogleFonts.cairo(
-                          fontSize: 14,
-                          color: _secondaryTextColor,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      IconButton(
-                        onPressed: _loadDashboardData,
-                        icon: Icon(Icons.refresh, color: _secondaryTextColor),
-                        tooltip: 'Refresh',
-                      ),
-                    ],
+        padding: EdgeInsets.all(
+          MediaQuery.of(context).size.width < 600 ? 8 : 24,
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Header
+            Row(
+              children: [
+                Text(
+                  'Dashboard',
+                  style: GoogleFonts.cairo(
+                    fontSize: 28,
+                    fontWeight: FontWeight.bold,
+                    color: _textColor,
                   ),
-                  SizedBox(
-                    height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+                ),
+                const Spacer(),
+                Text(
+                  DateFormat('EEEE, MMMM d, yyyy').format(DateTime.now()),
+                  style: GoogleFonts.cairo(
+                    fontSize: 14,
+                    color: _secondaryTextColor,
                   ),
-
-                  _buildDateRangeFilter(),
-                  SizedBox(
-                    height: MediaQuery.of(context).size.width < 600 ? 12 : 20,
-                  ),
-
-                  _buildDashboardOverview(),
-                  const SizedBox(height: 20),
-
-                  _buildOrderExplorer(),
-                  const SizedBox(height: 20),
-
-                  _buildRecentActivityCard(),
-                  const SizedBox(height: 24),
-
-                  // Comparison Section
-                  _buildComparisonSection(),
-                  SizedBox(
-                    height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
-                  ),
-
-                  // Stage status analytics
-                  _buildStageStatusGraph(),
-                  const SizedBox(height: 24),
-                  _buildCircularStageStatusGraph(),
-                  const SizedBox(height: 24),
-                ],
-              ),
+                ),
+                const SizedBox(width: 12),
+                IconButton(
+                  onPressed: _loadDashboardData,
+                  icon: Icon(Icons.refresh, color: _secondaryTextColor),
+                  tooltip: 'Refresh',
+                ),
+              ],
             ),
+            SizedBox(
+              height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+            ),
+
+            _buildDateRangeFilter(),
+            SizedBox(
+              height: MediaQuery.of(context).size.width < 600 ? 12 : 20,
+            ),
+
+            _buildDashboardOverview(),
+            const SizedBox(height: 20),
+
+            _buildOrderExplorer(),
+            const SizedBox(height: 20),
+
+            // Comparison Section
+            _buildComparisonSection(),
+            SizedBox(
+              height: MediaQuery.of(context).size.width < 600 ? 12 : 24,
+            ),
+
+            // Stage status analytics
+            _buildStageStatusGraph(),
+            const SizedBox(height: 24),
+            _buildCircularStageStatusGraph(),
+            const SizedBox(height: 24),
+          ],
+        ),
+      ),
     );
   }
 
@@ -3304,6 +3319,7 @@ class _DashboardPageState extends State<DashboardPage> {
   Widget _buildComparisonSection() {
     final isMobile = MediaQuery.of(context).size.width < 600;
     return Container(
+      key: _orderBreakdownKey,
       padding: EdgeInsets.all(isMobile ? 12 : 20),
       decoration: BoxDecoration(
         color: _cardColor,
@@ -3604,20 +3620,22 @@ class _DashboardPageState extends State<DashboardPage> {
 
   Widget _buildStageStatusGraph() {
     final isMobile = MediaQuery.of(context).size.width < 600;
+    // Match the compact filter-card UI used by Circular Stage Status Analytics.
+    // Desktop order: Approval, Manufacturing, then Submittal.
     final stageStatuses = <String, List<String>>{
-      'Submittal': _beforeApprovalStatuses,
       'Approval': _approvalStatuses,
       'Manufacturing': _manufacturingStatuses,
+      'Submittal': _beforeApprovalStatuses,
     };
     final selectedByStage = <String, Set<String>>{
-      'Submittal': _selectedSubmittalGraphStatuses,
       'Approval': _selectedApprovalGraphStatuses,
       'Manufacturing': _selectedManufacturingGraphStatuses,
+      'Submittal': _selectedSubmittalGraphStatuses,
     };
     final stageColors = <String, Color>{
-      'Submittal': Colors.purple,
       'Approval': Colors.green,
       'Manufacturing': Colors.orange,
+      'Submittal': Colors.purple,
     };
 
     List<String> categoriesForOrder(SAPMainOrder order) {
@@ -3690,7 +3708,7 @@ class _DashboardPageState extends State<DashboardPage> {
       final selected = selectedByStage[stage]!;
       final color = stageColors[stage]!;
       return Container(
-        padding: EdgeInsets.fromLTRB(isMobile ? 5 : 9, 7, isMobile ? 3 : 9, 7),
+        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
         decoration: BoxDecoration(
           color: color.withOpacity(0.045),
           borderRadius: BorderRadius.circular(12),
@@ -3730,7 +3748,6 @@ class _DashboardPageState extends State<DashboardPage> {
               dense: true,
               minVerticalPadding: 0,
               contentPadding: EdgeInsets.zero,
-              horizontalTitleGap: 6,
               visualDensity: const VisualDensity(horizontal: -4, vertical: -4),
               materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
               controlAffinity: ListTileControlAffinity.leading,
@@ -3757,6 +3774,7 @@ class _DashboardPageState extends State<DashboardPage> {
     }
 
     return Container(
+      key: _stageStatusKey,
       padding: EdgeInsets.all(MediaQuery.of(context).size.width < 600 ? 10 : 16),
       decoration: BoxDecoration(
         color: _cardColor,
@@ -3842,23 +3860,40 @@ class _DashboardPageState extends State<DashboardPage> {
           ),
           LayoutBuilder(
             builder: (context, constraints) {
-              final columns = constraints.maxWidth >= 1000
-                  ? 3
-                  : constraints.maxWidth >= 320
-                  ? 2
-                  : 1;
+              // Use the actual space available to this section, not the
+              // window's MediaQuery width. This also handles narrow panels
+              // inside desktop/web layouts correctly.
+              final availableWidth = constraints.maxWidth;
+              final isNarrow = availableWidth < 700;
               final gap = 8.0;
+              final cards = stageStatuses.entries.map((entry) {
+                return stageFilter(entry.key, entry.value);
+              }).toList();
+
+              // A Column guarantees one full-width stage card per row on
+              // mobile/narrow layouts (Wrap can otherwise place two cards
+              // beside each other when the parent has extra width).
+              if (isNarrow) {
+                return Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    for (int i = 0; i < cards.length; i++) ...[
+                      if (i > 0) SizedBox(height: gap),
+                      SizedBox(width: double.infinity, child: cards[i]),
+                    ],
+                  ],
+                );
+              }
+
+              final columns = availableWidth >= 1000 ? 3 : 2;
               final width =
-                  (constraints.maxWidth - gap * (columns - 1)) / columns;
+                  (availableWidth - gap * (columns - 1)) / columns;
               return Wrap(
                 spacing: gap,
                 runSpacing: gap,
-                children: stageStatuses.entries.map((entry) {
-                  return SizedBox(
-                    width: width,
-                    child: stageFilter(entry.key, entry.value),
-                  );
-                }).toList(),
+                children: cards
+                    .map((card) => SizedBox(width: width, child: card))
+                    .toList(),
               );
             },
           ),
@@ -4500,6 +4535,7 @@ class _DashboardPageState extends State<DashboardPage> {
     );
 
     return Container(
+      key: _circularStageStatusKey,
       padding: EdgeInsets.all(isMobile ? 10 : 16),
       decoration: BoxDecoration(
         color: _cardColor,
