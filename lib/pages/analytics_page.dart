@@ -1187,9 +1187,7 @@ class _AnalyticsPageState extends State<AnalyticsPage> {
                             : DateFormat('dd MMM yyyy').format(date);
 
                         return Material(
-                          color: _isDark
-                              ? const Color(0xFF121212)
-                              : const Color(0xFF000000),
+                          color: _surfaceColor,
                           borderRadius: BorderRadius.circular(13),
                           child: InkWell(
                             borderRadius: BorderRadius.circular(13),
