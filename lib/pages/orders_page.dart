@@ -553,7 +553,7 @@ class _OrdersPageState extends State<OrdersPage> {
           content: Text('⚠️ No data to copy', style: GoogleFonts.cairo()),
           backgroundColor: Colors.orange,
           behavior: SnackBarBehavior.floating,
-          duration: const Duration(milliseconds: 1000),
+          duration: const Duration(milliseconds: 3000),
         ),
       );
       return;
@@ -569,7 +569,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1000),
+        duration: const Duration(milliseconds: 3000),
       ),
     );
   }
@@ -610,7 +610,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1000),
+        duration: const Duration(milliseconds: 3000),
       ),
     );
   }
@@ -650,7 +650,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.green,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1000),
+        duration: const Duration(milliseconds: 3000),
       ),
     );
   }
@@ -935,7 +935,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,
-                    duration: const Duration(milliseconds: 1000),
+                    duration: const Duration(milliseconds: 3000),
                   ),
                 );
                 return;
@@ -1801,7 +1801,7 @@ class _OrdersPageState extends State<OrdersPage> {
         ),
         backgroundColor: Colors.amber.shade700,
         behavior: SnackBarBehavior.floating,
-        duration: const Duration(milliseconds: 1000),
+        duration: const Duration(milliseconds: 3000),
         margin: const EdgeInsets.all(16),
         shape: RoundedRectangleBorder(
           borderRadius: BorderRadius.circular(10),
@@ -2442,7 +2442,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          duration: const Duration(milliseconds: 1000),
+          duration: const Duration(milliseconds: 3000),
           content: Text(
             '✅ $deleted deleted, ❌ $failed failed',
             style: GoogleFonts.cairo(),
@@ -3195,7 +3195,7 @@ class _OrdersPageState extends State<OrdersPage> {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          duration: const Duration(milliseconds: 1000),
+          duration: const Duration(milliseconds: 3000),
           content: Text(message, style: GoogleFonts.cairo()),
           behavior: SnackBarBehavior.floating,
           backgroundColor: message.contains('Error')
