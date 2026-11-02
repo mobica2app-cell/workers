@@ -1,6 +1,7 @@
 // lib/pages/main_shell.dart
 
 import 'package:flutter/material.dart';
+import 'package:video_player/video_player.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:mobitem/pages/analytics_page.dart';
 import 'package:mobitem/pages/employee_tracking_page.dart';
@@ -35,6 +36,29 @@ class _MainShellState extends State<MainShell> {
   bool _isCollapsed = false;
   bool _aiPanelVisible = false;
   bool _aiMaximized = false;
+
+  // Sidebar logo animation assets. Keep these paths in sync with pubspec.yaml.
+  static const String _logoExpandVideo =
+      'assets/animations/mobica_logo_forward.mp4';
+  static const String _logoCollapseVideo =
+      'assets/animations/mobica_logo_reverse.mp4';
+  static const String _logoMarkImage = 'assets/images/mobica_m.png';
+  static const String _logoFullImage = 'assets/images/logo.png';
+
+  VideoPlayerController? _logoVideoController;
+  int _logoAnimationToken = 0;
+  String _logoDebugStatus = 'Idle';
+  String? _logoDebugError;
+
+  void _logLogoVideo(String message) {
+    final line = '[SIDEBAR VIDEO] $message';
+    debugPrint(line);
+    if (mounted) {
+      setState(() {
+        _logoDebugStatus = message;
+      });
+    }
+  }
 
   // ============================================================
   // THEME
@@ -162,9 +186,127 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   void _toggleSidebar() {
+    final expanding = _isCollapsed;
     setState(() {
       _isCollapsed = !_isCollapsed;
     });
+    _playLogoTransition(expanding: expanding);
+  }
+
+  Future<void> _playLogoTransition({required bool expanding}) async {
+    final token = ++_logoAnimationToken;
+    final asset = expanding ? _logoExpandVideo : _logoCollapseVideo;
+
+    debugPrint('================================================');
+    debugPrint('[SIDEBAR VIDEO] Transition requested');
+    debugPrint('[SIDEBAR VIDEO] Direction: ${expanding ? "EXPAND" : "COLLAPSE"}');
+    debugPrint('[SIDEBAR VIDEO] Asset: $asset');
+    debugPrint('[SIDEBAR VIDEO] Platform: ${Theme.of(context).platform}');
+
+    final previousController = _logoVideoController;
+    _logoVideoController = null;
+    await previousController?.dispose();
+
+    final controller = VideoPlayerController.asset(asset);
+
+    try {
+      _logoDebugError = null;
+      _logLogoVideo('Loading: $asset');
+
+      debugPrint('[SIDEBAR VIDEO] Initializing controller...');
+      await controller.initialize().timeout(const Duration(seconds: 20));
+
+      if (!mounted || token != _logoAnimationToken) {
+        debugPrint('[SIDEBAR VIDEO] Initialization finished but request is stale. Disposing.');
+        await controller.dispose();
+        return;
+      }
+
+      final initialValue = controller.value;
+      debugPrint('[SIDEBAR VIDEO] INITIALIZED SUCCESSFULLY');
+      debugPrint('[SIDEBAR VIDEO] Size: ${initialValue.size.width} x ${initialValue.size.height}');
+      debugPrint('[SIDEBAR VIDEO] Duration: ${initialValue.duration}');
+      debugPrint('[SIDEBAR VIDEO] Aspect ratio: ${initialValue.aspectRatio}');
+      debugPrint('[SIDEBAR VIDEO] Is playing: ${initialValue.isPlaying}');
+      debugPrint('[SIDEBAR VIDEO] Has error: ${initialValue.hasError}');
+
+      await controller.setLooping(false);
+      await controller.setVolume(0);
+      await controller.setPlaybackSpeed(1.0);
+
+      var completionLogged = false;
+      var errorLogged = false;
+      controller.addListener(() {
+        if (!mounted || token != _logoAnimationToken) return;
+        final value = controller.value;
+
+        if (value.hasError && !errorLogged) {
+          errorLogged = true;
+          final error = value.errorDescription ?? 'Unknown video playback error';
+          _logoDebugError = error;
+          debugPrint('[SIDEBAR VIDEO] PLAYBACK ERROR: $error');
+          _logLogoVideo('Playback error: $error');
+        }
+
+        if (value.isPlaying && _logoDebugStatus.startsWith('Ready')) {
+          debugPrint('[SIDEBAR VIDEO] Playback started.');
+          _logLogoVideo('Playing');
+        }
+
+        if (value.isCompleted && !completionLogged) {
+          completionLogged = true;
+          debugPrint('[SIDEBAR VIDEO] Playback completed at ${value.position}.');
+          if (identical(_logoVideoController, controller)) {
+            setState(() => _logoVideoController = null);
+          }
+          _logLogoVideo('Completed');
+          controller.dispose();
+        }
+      });
+
+      setState(() {
+        _logoVideoController = controller;
+        _logoDebugStatus = 'Ready — ${initialValue.duration.inMilliseconds} ms';
+      });
+
+      debugPrint('[SIDEBAR VIDEO] Calling play()...');
+      await controller.play();
+
+      // Check shortly after play() to catch silent failures and browser restrictions.
+      await Future<void>.delayed(const Duration(milliseconds: 700));
+      if (!mounted || token != _logoAnimationToken) return;
+
+      final value = controller.value;
+      debugPrint('[SIDEBAR VIDEO] 700ms playback check:');
+      debugPrint('[SIDEBAR VIDEO] isPlaying=${value.isPlaying}');
+      debugPrint('[SIDEBAR VIDEO] position=${value.position}');
+      debugPrint('[SIDEBAR VIDEO] duration=${value.duration}');
+      debugPrint('[SIDEBAR VIDEO] hasError=${value.hasError}');
+      if (!value.isPlaying && !value.isCompleted && !value.hasError) {
+        _logLogoVideo('Not playing — position ${value.position}');
+        debugPrint('[SIDEBAR VIDEO] WARNING: play() returned but video is not playing.');
+      }
+    } catch (error, stackTrace) {
+      _logoDebugError = error.toString();
+      debugPrint('[SIDEBAR VIDEO] FAILED');
+      debugPrint('[SIDEBAR VIDEO] Asset: $asset');
+      debugPrint('[SIDEBAR VIDEO] Error: $error');
+      debugPrint('[SIDEBAR VIDEO] Stack trace: $stackTrace');
+      await controller.dispose();
+      if (mounted && token == _logoAnimationToken) {
+        setState(() {
+          _logoVideoController = null;
+          _logoDebugStatus = 'Failed: $error';
+        });
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _logoAnimationToken++;
+    _logoVideoController?.dispose();
+    super.dispose();
   }
 
   bool get _canUseAi =>
@@ -554,6 +696,30 @@ class _MainShellState extends State<MainShell> {
     );
   }
 
+  Widget _buildSidebarLogo({required bool expanded}) {
+    final controller = _logoVideoController;
+    if (controller != null && controller.value.isInitialized) {
+      return FittedBox(
+        fit: BoxFit.contain,
+        alignment: expanded ? Alignment.centerLeft : Alignment.center,
+        child: SizedBox(
+          width: controller.value.size.width,
+          height: controller.value.size.height,
+          child: Tooltip(
+            message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
+            child: VideoPlayer(controller),
+          ),
+        ),
+      );
+    }
+
+    return Image.asset(
+      expanded ? _logoFullImage : _logoMarkImage,
+      fit: BoxFit.contain,
+      alignment: expanded ? Alignment.centerLeft : Alignment.center,
+    );
+  }
+
   // ============================================================
   // EXPANDED HEADER
   // ============================================================
@@ -564,11 +730,7 @@ class _MainShellState extends State<MainShell> {
         Expanded(
           child: SizedBox(
             height: 64,
-            child: Image.asset(
-              'assets/images/logo.png',
-              fit: BoxFit.contain,
-              alignment: Alignment.centerLeft,
-            ),
+            child: _buildSidebarLogo(expanded: true),
           ),
         ),
         IconButton(
@@ -597,10 +759,7 @@ class _MainShellState extends State<MainShell> {
         SizedBox(
           width: 48,
           height: 48,
-          child: Image.asset(
-            'assets/images/logo.png',
-            fit: BoxFit.contain,
-          ),
+          child: _buildSidebarLogo(expanded: false),
         ),
         const SizedBox(height: 8),
         IconButton(
@@ -801,86 +960,63 @@ class _MainShellState extends State<MainShell> {
               ),
             ),
 
-            child:
-            _isCollapsed
-                ? Tooltip(
-              message:
-              item.label,
+            child: LayoutBuilder(
+              builder: (context, constraints) {
+                // During the 240px <-> 80px sidebar transition, the width
+                // changes continuously. Decide from the actual available
+                // width rather than the target `_isCollapsed` state, so the
+                // expanded Row is never laid out inside the narrow sidebar.
+                final showExpandedContent = constraints.maxWidth >= 110;
 
-              child:
-              Icon(
-                isSelected
-                    ? item
-                    .activeIcon
-                    : item.icon,
-
-                color:
-                isSelected
-                    ? const Color(0xFFFF6B6B)
-                    : Colors.white60,
-
-                size: 22,
-              ),
-            )
-                : Row(
-              children: [
-
-                Icon(
-                  isSelected
-                      ? item
-                      .activeIcon
-                      : item.icon,
-
-                  color:
-                  isSelected
-                      ? Colors.white
-                      : Colors.white54,
-
-                  size: 22,
-                ),
-
-                const SizedBox(
-                  width: 12,
-                ),
-
-                Expanded(
-                  child: Text(
-                    item.label,
-
-                    style:
-                    TextStyle(
-                      color:
-                      isSelected
-                          ? Colors.white
-                          : Colors.white54,
-
-                      fontSize: 14,
-
-                      fontWeight:
-                      isSelected
-                          ? FontWeight.w600
-                          : FontWeight.w400,
-                    ),
-                  ),
-                ),
-
-                if (isSelected)
-                  Container(
-                    width: 4,
-                    height: 4,
-
-                    decoration:
-                    const BoxDecoration(
-                      color:
-                      Color(
-                        0xFFB7C8E1,
+                if (!showExpandedContent) {
+                  return Tooltip(
+                    message: item.label,
+                    child: Center(
+                      child: Icon(
+                        isSelected ? item.activeIcon : item.icon,
+                        color: isSelected
+                            ? const Color(0xFFFF6B6B)
+                            : Colors.white60,
+                        size: 22,
                       ),
-
-                      shape:
-                      BoxShape.circle,
                     ),
-                  ),
-              ],
+                  );
+                }
+
+                return Row(
+                  children: [
+                    Icon(
+                      isSelected ? item.activeIcon : item.icon,
+                      color: isSelected ? Colors.white : Colors.white54,
+                      size: 22,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        item.label,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          color: isSelected ? Colors.white : Colors.white54,
+                          fontSize: 14,
+                          fontWeight: isSelected
+                              ? FontWeight.w600
+                              : FontWeight.w400,
+                        ),
+                      ),
+                    ),
+                    if (isSelected)
+                      Container(
+                        width: 4,
+                        height: 4,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFFB7C8E1),
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                  ],
+                );
+              },
             ),
           ),
         ),

@@ -46,6 +46,7 @@ dependencies:
   responsive_framework: ^1.5.1
   google_fonts: ^8.2.0
   shared_preferences: ^2.5.6
+  video_player: ^2.14.1
 dev_dependencies:
   flutter_test:
     sdk: flutter
@@ -71,6 +72,9 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
    - assets/images/logo.png
+   - assets/images/mobica_m.png
+   - assets/animations/mobica_logo_reverse.mp4
+   - assets/animations/mobica_logo_forward.mp4
   #   - images/a_dot_ham.jpeg
 
   # An image asset can refer to one or more resolution-specific "variants", see
