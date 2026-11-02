@@ -233,17 +233,11 @@ class _LoginPageState extends State<LoginPage> {
           gradient: LinearGradient(
             begin: Alignment.topLeft,
             end: Alignment.bottomRight,
-            colors: _isDark
-                ? const [
+            colors: const [
               Color(0xFF000000),
               Color(0xFF080808),
               Color(0xFF000000),
             ]
-                : const [
-              Color(0xFF0F172A),
-              Color(0xFF1E293B),
-              Color(0xFF0F172A),
-            ],
           ),
         ),
         child: SafeArea(

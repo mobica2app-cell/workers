@@ -5424,24 +5424,22 @@ class _OrdersPageState extends State<OrdersPage> {
         controller: _searchController,
         focusNode: _searchFocusNode,
         autofocus: true,
-        // Collapse when the user clicks elsewhere, but keep the controller and
-        // query intact so reopening search restores the previous text.
+        // Keep the search field expanded while it contains a query,
+        // even when the user taps elsewhere. Collapse only when it is empty.
         onTapOutside: (_) {
-          if (_searchExpanded) {
+          if (_searchController.text.trim().isEmpty && _searchExpanded) {
             setState(() => _searchExpanded = false);
-            _searchFocusNode.unfocus();
           }
+          _searchFocusNode.unfocus();
         },
         onChanged: (value) {
-          final hadQuery = _searchQuery.trim().isNotEmpty;
+          final isEmpty = value.trim().isEmpty;
           setState(() {
             _searchQuery = value;
-            if (value.trim().isEmpty && hadQuery) {
-              _searchExpanded = false;
-            }
+            _searchExpanded = !isEmpty;
           });
           _rebuildGroups();
-          if (value.trim().isEmpty && hadQuery) {
+          if (isEmpty) {
             _searchFocusNode.unfocus();
           }
         },
