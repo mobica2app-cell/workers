@@ -47,11 +47,80 @@ class _MainShellState extends State<MainShell> {
   static const String _logoMarkImage = 'assets/images/mobica_m.png';
   static const String _logoFullImage = 'assets/images/logo.png';
 
+  // Both videos are initialized once when MainShell is created, then kept
+  // alive so expanding/collapsing never waits for asset initialization.
+  VideoPlayerController? _expandLogoController;
+  VideoPlayerController? _collapseLogoController;
   VideoPlayerController? _logoVideoController;
+
   int _logoAnimationToken = 0;
   bool _isSidebarAnimating = false;
-  String _logoDebugStatus = 'Idle';
+  bool _isExpandingLogoTransition = false;
+  bool _logoVideosReady = false;
+  String _logoDebugStatus = 'Waiting for logo videos';
   String? _logoDebugError;
+
+  @override
+  void initState() {
+    super.initState();
+    _preloadLogoVideos();
+  }
+
+  Future<void> _preloadLogoVideos() async {
+    VideoPlayerController? expandController;
+    VideoPlayerController? collapseController;
+
+    try {
+      _logLogoVideo('Preloading logo animations');
+
+      expandController = VideoPlayerController.asset(_logoExpandVideo);
+      collapseController = VideoPlayerController.asset(_logoCollapseVideo);
+
+      // Initialize both in parallel so either direction is ready immediately.
+      await Future.wait([
+        expandController.initialize(),
+        collapseController.initialize(),
+      ]);
+
+      await Future.wait([
+        expandController.setLooping(false),
+        collapseController.setLooping(false),
+        expandController.setVolume(0),
+        collapseController.setVolume(0),
+        expandController.setPlaybackSpeed(2.0),
+        collapseController.setPlaybackSpeed(2.0),
+      ]);
+
+      if (!mounted) {
+        await expandController.dispose();
+        await collapseController.dispose();
+        return;
+      }
+
+      setState(() {
+        _expandLogoController = expandController;
+        _collapseLogoController = collapseController;
+        _logoVideosReady = true;
+        _logoDebugStatus = 'Both logo videos preloaded and ready';
+      });
+
+      debugPrint('[SIDEBAR VIDEO] Both logo videos preloaded and ready.');
+    } catch (error, stackTrace) {
+      debugPrint('[SIDEBAR VIDEO] PRELOAD FAILED: $error');
+      debugPrint('$stackTrace');
+
+      await expandController?.dispose();
+      await collapseController?.dispose();
+
+      if (mounted) {
+        setState(() {
+          _logoDebugError = error.toString();
+          _logoDebugStatus = 'Preload failed; static logos will be used';
+          _logoVideosReady = false;
+        });
+      }
+    }
+  }
 
   void _logLogoVideo(String message) {
     final line = '[SIDEBAR VIDEO] $message';
@@ -189,111 +258,113 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   void _toggleSidebar() {
-    // Ignore repeated clicks until the current logo video has finished.
     if (_isSidebarAnimating) return;
 
-    // Keep the current sidebar layout while the logo video plays.
-    // The width/layout changes only after the transition has finished.
     final expanding = _isCollapsed;
-    setState(() {
-      _isSidebarAnimating = true;
-    });
 
-    _playLogoTransition(expanding: expanding);
+    if (expanding) {
+      // Expand the sidebar first. Keep the M mark visible until the
+      // preloaded forward animation begins.
+      setState(() {
+        _isCollapsed = false;
+        _isSidebarAnimating = true;
+        _isExpandingLogoTransition = true;
+      });
+      _playLogoTransition(expanding: true);
+    } else {
+      // Keep the expanded layout while the reverse animation plays.
+      setState(() {
+        _isSidebarAnimating = true;
+        _isExpandingLogoTransition = false;
+      });
+      _playLogoTransition(expanding: false);
+    }
   }
 
   Future<void> _playLogoTransition({required bool expanding}) async {
     final token = ++_logoAnimationToken;
-    final asset = expanding ? _logoExpandVideo : _logoCollapseVideo;
-    final controller = VideoPlayerController.asset(asset);
-    final completed = Completer<void>();
-    VoidCallback? videoListener;
+    final controller =
+    expanding ? _expandLogoController : _collapseLogoController;
 
-    debugPrint('[SIDEBAR VIDEO] ${expanding ? "EXPAND" : "COLLAPSE"}: $asset');
-
-    try {
-      _logoDebugError = null;
-      _logLogoVideo('Initializing $asset');
-
-      await controller.initialize();
-
-      if (!mounted || token != _logoAnimationToken) return;
-
-      await controller.setLooping(false);
-      await controller.setVolume(0);
-      await controller.setPlaybackSpeed(2.0);
-
-      videoListener = () {
-        if (!mounted || token != _logoAnimationToken || completed.isCompleted) {
-          return;
-        }
-
-        final value = controller.value;
-        if (value.hasError) {
-          completed.completeError(
-            StateError(value.errorDescription ?? 'Unknown video playback error'),
-          );
-        } else if (value.isCompleted) {
-          completed.complete();
-        }
-      };
-
-      controller.addListener(videoListener!);
-
-      setState(() {
-        _logoVideoController = controller;
-        _logoDebugStatus =
-        'Playing at 2× — ${controller.value.duration.inMilliseconds} ms source';
-      });
-
-      debugPrint('[SIDEBAR VIDEO] Starting at 2x speed. '
-          'Duration: ${controller.value.duration}');
-
-      await controller.play();
-
-      // Wait for the actual video completion, not just play() returning.
-      final waitDuration = controller.value.duration + const Duration(seconds: 5);
-      await completed.future.timeout(waitDuration);
-
-      debugPrint('[SIDEBAR VIDEO] Animation finished.');
-      _logLogoVideo('Completed at 2×');
-    } catch (error, stackTrace) {
-      _logoDebugError = error.toString();
-      debugPrint('[SIDEBAR VIDEO] FAILED: $error');
-      debugPrint('$stackTrace');
-      if (!completed.isCompleted) {
-        // Prevent an unhandled Completer error if playback failed before waiting.
-        completed.complete();
-      }
-      if (mounted && token == _logoAnimationToken) {
-        _logLogoVideo('Video failed; showing static logo');
-      }
-    } finally {
-      if (videoListener != null) {
-        controller.removeListener(videoListener);
-      }
-
-      if (identical(_logoVideoController, controller) && mounted) {
-        setState(() => _logoVideoController = null);
-      }
-
-      await controller.dispose();
-
+    if (controller == null || !controller.value.isInitialized) {
+      _logLogoVideo('Logo video is not ready; using static logo');
       if (mounted && token == _logoAnimationToken) {
         setState(() {
-          // Apply the expand/collapse only after the video has ended
-          // (or failed), so the sidebar does not resize during playback.
-          _isCollapsed = !expanding;
+          if (!expanding) _isCollapsed = true;
+          _isExpandingLogoTransition = false;
           _isSidebarAnimating = false;
         });
       }
+      return;
+    }
+
+    final completed = Completer<void>();
+    void videoListener() {
+      if (!mounted || token != _logoAnimationToken || completed.isCompleted) {
+        return;
+      }
+
+      final value = controller.value;
+      if (value.hasError) {
+        completed.completeError(
+          StateError(value.errorDescription ?? 'Unknown video playback error'),
+        );
+      } else if (value.isCompleted) {
+        completed.complete();
+      }
+    }
+
+    try {
+      _logoDebugError = null;
+      await controller.pause();
+      await controller.seekTo(Duration.zero);
+      await controller.setPlaybackSpeed(2.0);
+
+      if (!mounted || token != _logoAnimationToken) return;
+
+      controller.addListener(videoListener);
+      setState(() {
+        _logoVideoController = controller;
+        _logoDebugStatus =
+        'Playing preloaded ${expanding ? 'expand' : 'collapse'} animation';
+      });
+
+      await controller.play();
+      await completed.future.timeout(
+        controller.value.duration + const Duration(seconds: 5),
+      );
+      debugPrint(
+        '[SIDEBAR VIDEO] ${expanding ? 'Expand' : 'Collapse'} animation completed.',
+      );
+    } catch (error, stackTrace) {
+      _logoDebugError = error.toString();
+      debugPrint('[SIDEBAR VIDEO] PLAYBACK FAILED: $error');
+      debugPrint('$stackTrace');
+      if (mounted && token == _logoAnimationToken) {
+        _logLogoVideo('Playback failed; showing static logo');
+      }
+    } finally {
+      controller.removeListener(videoListener);
+
+      if (mounted && token == _logoAnimationToken) {
+        setState(() {
+          _logoVideoController = null;
+          if (!expanding) _isCollapsed = true;
+          _isExpandingLogoTransition = false;
+          _isSidebarAnimating = false;
+          _logoDebugStatus = 'Ready';
+        });
+      }
+
+      // Keep initialized controllers alive for the next click.
     }
   }
 
   @override
   void dispose() {
     _logoAnimationToken++;
-    _logoVideoController?.dispose();
+    _expandLogoController?.dispose();
+    _collapseLogoController?.dispose();
     super.dispose();
   }
 
@@ -703,8 +774,12 @@ class _MainShellState extends State<MainShell> {
         ),
       );
     } else {
+      final showMarkDuringExpansion =
+          expanded && _isExpandingLogoTransition && _logoVideoController == null;
       logoContent = Image.asset(
-        expanded ? _logoFullImage : _logoMarkImage,
+        (!expanded || showMarkDuringExpansion)
+            ? _logoMarkImage
+            : _logoFullImage,
         fit: BoxFit.contain,
         alignment: expanded ? Alignment.centerLeft : Alignment.center,
       );
