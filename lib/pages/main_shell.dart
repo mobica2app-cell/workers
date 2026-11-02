@@ -47,17 +47,14 @@ class _MainShellState extends State<MainShell> {
   static const String _logoMarkImage = 'assets/images/mobica_m.png';
   static const String _logoFullImage = 'assets/images/logo.png';
 
-  // Both videos are initialized once when MainShell is created, then kept
-  // alive so expanding/collapsing never waits for asset initialization.
   VideoPlayerController? _expandLogoController;
   VideoPlayerController? _collapseLogoController;
   VideoPlayerController? _logoVideoController;
-
   int _logoAnimationToken = 0;
   bool _isSidebarAnimating = false;
-  bool _isExpandingLogoTransition = false;
-  bool _logoVideosReady = false;
-  String _logoDebugStatus = 'Waiting for logo videos';
+  DateTime? _lastSidebarToggleAt;
+  static const Duration _sidebarToggleDebounce = Duration(milliseconds: 700);
+  String _logoDebugStatus = 'Loading logo animations';
   String? _logoDebugError;
 
   @override
@@ -71,12 +68,9 @@ class _MainShellState extends State<MainShell> {
     VideoPlayerController? collapseController;
 
     try {
-      _logLogoVideo('Preloading logo animations');
-
       expandController = VideoPlayerController.asset(_logoExpandVideo);
       collapseController = VideoPlayerController.asset(_logoCollapseVideo);
 
-      // Initialize both in parallel so either direction is ready immediately.
       await Future.wait([
         expandController.initialize(),
         collapseController.initialize(),
@@ -100,23 +94,18 @@ class _MainShellState extends State<MainShell> {
       setState(() {
         _expandLogoController = expandController;
         _collapseLogoController = collapseController;
-        _logoVideosReady = true;
-        _logoDebugStatus = 'Both logo videos preloaded and ready';
+        _logoDebugStatus = 'Logo animations ready';
       });
-
-      debugPrint('[SIDEBAR VIDEO] Both logo videos preloaded and ready.');
     } catch (error, stackTrace) {
-      debugPrint('[SIDEBAR VIDEO] PRELOAD FAILED: $error');
+      debugPrint('[SIDEBAR VIDEO] Preload failed: $error');
       debugPrint('$stackTrace');
-
       await expandController?.dispose();
       await collapseController?.dispose();
 
       if (mounted) {
         setState(() {
           _logoDebugError = error.toString();
-          _logoDebugStatus = 'Preload failed; static logos will be used';
-          _logoVideosReady = false;
+          _logoDebugStatus = 'Logo animation preload failed';
         });
       }
     }
@@ -258,27 +247,27 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   void _toggleSidebar() {
-    if (_isSidebarAnimating) return;
+    final now = DateTime.now();
+    final lastToggle = _lastSidebarToggleAt;
 
+    // Ignore both clicks during the animation and rapid clicks immediately
+    // after it finishes (e.g. a mouse double-click).
+    if (_isSidebarAnimating ||
+        (lastToggle != null &&
+            now.difference(lastToggle) < _sidebarToggleDebounce)) {
+      return;
+    }
+
+    _lastSidebarToggleAt = now;
     final expanding = _isCollapsed;
 
-    if (expanding) {
-      // Expand the sidebar first. Keep the M mark visible until the
-      // preloaded forward animation begins.
-      setState(() {
-        _isCollapsed = false;
-        _isSidebarAnimating = true;
-        _isExpandingLogoTransition = true;
-      });
-      _playLogoTransition(expanding: true);
-    } else {
-      // Keep the expanded layout while the reverse animation plays.
-      setState(() {
-        _isSidebarAnimating = true;
-        _isExpandingLogoTransition = false;
-      });
-      _playLogoTransition(expanding: false);
-    }
+    // Lock the toggle immediately, but wait to resize the sidebar until the
+    // video controller is positioned at its first frame.
+    setState(() {
+      _isSidebarAnimating = true;
+    });
+
+    _playLogoTransition(expanding: expanding);
   }
 
   Future<void> _playLogoTransition({required bool expanding}) async {
@@ -286,109 +275,103 @@ class _MainShellState extends State<MainShell> {
     final controller =
     expanding ? _expandLogoController : _collapseLogoController;
 
-    if (controller == null || !controller.value.isInitialized) {
-      debugPrint('[SIDEBAR VIDEO] Requested video is not initialized.');
-      if (mounted && token == _logoAnimationToken) {
-        setState(() {
-          if (!expanding) _isCollapsed = true;
-          _logoVideoController = null;
-          _isExpandingLogoTransition = false;
-          _isSidebarAnimating = false;
-          _logoDebugStatus = 'Video unavailable; static logo shown';
-        });
-      }
-      return;
-    }
-
-    final completed = Completer<void>();
-
-    void videoListener() {
-      if (!mounted || token != _logoAnimationToken || completed.isCompleted) {
-        return;
-      }
-
-      final value = controller.value;
-      if (value.hasError) {
-        completed.completeError(
-          StateError(value.errorDescription ?? 'Unknown video playback error'),
-        );
-        return;
-      }
-
-      // `isCompleted` can remain stale briefly after seeking a reused
-      // controller. Checking the playback position also handles that case.
-      final duration = value.duration;
-      final reachedEnd = duration > Duration.zero &&
-          value.position >= duration - const Duration(milliseconds: 80);
-
-      if (value.isCompleted || reachedEnd) {
-        completed.complete();
-      }
-    }
-
     var listenerAttached = false;
+    var transitionStarted = false;
+    final transitionStopwatch = Stopwatch();
+    const sidebarTransitionDuration = Duration(milliseconds: 300);
+    Completer<void>? completed;
+
+    void listener() {
+      if (!mounted ||
+          token != _logoAnimationToken ||
+          completed == null ||
+          completed!.isCompleted) {
+        return;
+      }
+
+      final value = controller!.value;
+      if (value.hasError) {
+        completed!.completeError(
+          StateError(value.errorDescription ?? 'Logo animation failed'),
+        );
+      } else if (value.isCompleted) {
+        completed!.complete();
+      }
+    }
 
     try {
-      _logoDebugError = null;
+      if (controller == null || !controller.value.isInitialized) {
+        throw StateError('Logo video controller is not initialized');
+      }
 
-      // Reset the retained controller every time before replaying it.
-      await controller.pause();
+      // Prepare the already-initialized video before changing the sidebar.
+      // This avoids showing the target static logo for a frame first.
+      await controller!.pause();
       await controller.seekTo(Duration.zero);
       await controller.setLooping(false);
       await controller.setPlaybackSpeed(2.0);
 
       if (!mounted || token != _logoAnimationToken) return;
 
-      // Show the video in the expanded header for BOTH directions.
-      // During collapse, the sidebar remains expanded until this finishes.
+      // One rebuild: put the video on screen and begin resizing the sidebar.
       setState(() {
         _logoVideoController = controller;
+        _isCollapsed = !expanding;
         _logoDebugStatus =
         'Playing ${expanding ? 'expand' : 'collapse'} animation';
       });
+      transitionStarted = true;
+      transitionStopwatch.start();
 
-      controller.addListener(videoListener);
+      completed = Completer<void>();
+      controller!.addListener(listener);
       listenerAttached = true;
 
-      await controller.play();
-
-      // Wait for the end position, not merely for play() to return.
-      await completed.future.timeout(
-        controller.value.duration + const Duration(seconds: 8),
-      );
-
-      debugPrint(
-        '[SIDEBAR VIDEO] ${expanding ? 'Expand' : 'Collapse'} animation completed.',
+      await controller!.play();
+      await completed!.future.timeout(
+        controller!.value.duration + const Duration(seconds: 6),
       );
     } catch (error, stackTrace) {
       _logoDebugError = error.toString();
-      debugPrint('[SIDEBAR VIDEO] PLAYBACK FAILED: $error');
+      debugPrint('[SIDEBAR VIDEO] Playback failed: $error');
       debugPrint('$stackTrace');
+
+      // If preparation failed, still allow the sidebar to change using its
+      // static logo instead of leaving the toggle permanently locked.
+      if (mounted &&
+          token == _logoAnimationToken &&
+          !transitionStarted) {
+        setState(() {
+          _isCollapsed = !expanding;
+          _logoDebugStatus = 'Video unavailable; static logo shown';
+        });
+        transitionStarted = true;
+        transitionStopwatch.start();
+      }
     } finally {
-      if (listenerAttached) {
-        controller.removeListener(videoListener);
+      if (listenerAttached && controller != null) {
+        controller!.removeListener(listener);
       }
 
-      // Pause and rewind so this same preloaded controller is ready for
-      // the next click instead of being left at its completed frame.
-      try {
-        await controller.pause();
-        await controller.seekTo(Duration.zero);
-      } catch (resetError) {
-        debugPrint('[SIDEBAR VIDEO] Could not reset controller: $resetError');
+      if (controller != null) {
+        try {
+          await controller!.pause();
+        } catch (_) {}
+      }
+
+      // The video can finish before AnimatedContainer's 300ms width
+      // transition. Keep the toggle locked until BOTH animations are done.
+      if (transitionStarted) {
+        final remaining =
+            sidebarTransitionDuration - transitionStopwatch.elapsed;
+        if (remaining > Duration.zero) {
+          await Future.delayed(remaining);
+        }
       }
 
       if (mounted && token == _logoAnimationToken) {
         setState(() {
           _logoVideoController = null;
-
-          // Collapse only AFTER the reverse animation has played in the
-          // expanded sidebar. Expansion was applied before its animation.
-          if (!expanding) {
-            _isCollapsed = true;
-          }
-
-          _isExpandingLogoTransition = false;
           _isSidebarAnimating = false;
           _logoDebugStatus = 'Ready';
         });
@@ -767,65 +750,75 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   Widget _buildSidebarHeader() {
-    return Container(
-      padding: EdgeInsets.symmetric(
-        horizontal: _isCollapsed ? 12 : 10,
-        vertical: _isCollapsed ? 12 : 14,
-      ),
+    return IgnorePointer(
+      ignoring: _isSidebarAnimating,
+      child: Container(
+        padding: EdgeInsets.symmetric(
+          horizontal: _isCollapsed ? 12 : 10,
+          vertical: _isCollapsed ? 12 : 14,
+        ),
 
-      decoration:
-      const BoxDecoration(
-        border: Border(
-          bottom: BorderSide(
-            color: Colors.white10,
+        decoration:
+        const BoxDecoration(
+          border: Border(
+            bottom: BorderSide(
+              color: Colors.white10,
+            ),
           ),
         ),
-      ),
 
-      child:
-      _isCollapsed
-          ? _buildCollapsedHeader()
-          : _buildExpandedHeader(),
+        child:
+        _isCollapsed
+            ? _buildCollapsedHeader()
+            : _buildExpandedHeader(),
+      ),
     );
   }
 
   Widget _buildSidebarLogo({required bool expanded}) {
     final controller = _logoVideoController;
 
-    // The full-logo source has built-in empty margins. Zoom it inside a
-    // clipped viewport so the visible logo fills the header without
-    // changing the sidebar's layout dimensions.
     final Widget logoContent;
     if (controller != null && controller.value.isInitialized) {
       logoContent = FittedBox(
+        key: const ValueKey('logo-video'),
         fit: BoxFit.contain,
         alignment: expanded ? Alignment.centerLeft : Alignment.center,
         child: SizedBox(
           width: controller.value.size.width,
           height: controller.value.size.height,
-          child: Tooltip(
-            message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
-            child: VideoPlayer(controller),
-          ),
+          child: VideoPlayer(controller),
         ),
       );
     } else {
-      final showMarkDuringExpansion =
-          expanded && _isExpandingLogoTransition && _logoVideoController == null;
       logoContent = Image.asset(
-        (!expanded || showMarkDuringExpansion)
-            ? _logoMarkImage
-            : _logoFullImage,
+        expanded ? _logoFullImage : _logoMarkImage,
+        key: ValueKey(expanded ? 'logo-full-image' : 'logo-mark-image'),
         fit: BoxFit.contain,
         alignment: expanded ? Alignment.centerLeft : Alignment.center,
       );
     }
 
-    return logoContent;
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 140),
+      reverseDuration: const Duration(milliseconds: 100),
+      switchInCurve: Curves.easeOut,
+      switchOutCurve: Curves.easeIn,
+      layoutBuilder: (currentChild, previousChildren) {
+        return Stack(
+          alignment: Alignment.center,
+          children: [
+            ...previousChildren,
+            if (currentChild != null) currentChild,
+          ],
+        );
+      },
+      child: logoContent,
+    );
   }
 
   // ============================================================
-  // EXPANDED HEADER
+  //   // EXPANDED HEADER
   // ============================================================
 
   Widget _buildExpandedHeader() {
@@ -841,22 +834,23 @@ class _MainShellState extends State<MainShell> {
             padding: const EdgeInsets.only(right: 22),
             child: _buildSidebarLogo(expanded: true),
           ),
-          Positioned(
-            right: 0,
-            top: 0,
-            child: IconButton(
-              onPressed: _isSidebarAnimating ? null : _toggleSidebar,
-              icon: const Icon(
-                Icons.chevron_left,
-                color: Colors.white54,
-                size: 20,
+          if (!_isSidebarAnimating)
+            Positioned(
+              right: 0,
+              top: 0,
+              child: IconButton(
+                onPressed: _toggleSidebar,
+                icon: const Icon(
+                  Icons.chevron_left,
+                  color: Colors.white54,
+                  size: 20,
+                ),
+                tooltip: 'Collapse',
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+                visualDensity: VisualDensity.compact,
               ),
-              tooltip: 'Collapse',
-              padding: EdgeInsets.zero,
-              constraints: const BoxConstraints(),
-              visualDensity: VisualDensity.compact,
             ),
-          ),
         ],
       ),
     );
@@ -875,16 +869,17 @@ class _MainShellState extends State<MainShell> {
           child: _buildSidebarLogo(expanded: false),
         ),
         const SizedBox(height: 8),
-        IconButton(
-          onPressed: _isSidebarAnimating ? null : _toggleSidebar,
-          icon: const Icon(
-            Icons.chevron_right,
-            color: Colors.white54,
-            size: 20,
+        if (!_isSidebarAnimating)
+          IconButton(
+            onPressed: _toggleSidebar,
+            icon: const Icon(
+              Icons.chevron_right,
+              color: Colors.white54,
+              size: 20,
+            ),
+            splashRadius: 20,
+            tooltip: 'Expand',
           ),
-          splashRadius: 20,
-          tooltip: 'Expand',
-        ),
       ],
     );
   }
