@@ -47,73 +47,14 @@ class _MainShellState extends State<MainShell> {
   static const String _logoMarkImage = 'assets/images/mobica_m.png';
   static const String _logoFullImage = 'assets/images/logo.png';
 
-  VideoPlayerController? _expandLogoController;
-  VideoPlayerController? _collapseLogoController;
   VideoPlayerController? _logoVideoController;
-  int _logoAnimationToken = 0;
   bool _isSidebarAnimating = false;
-  String _logoDebugStatus = 'Loading logo animations';
+  String _logoDebugStatus = 'Logo animations ready';
   String? _logoDebugError;
-
-  late final Future<void> _logoAssetsFuture;
 
   @override
   void initState() {
     super.initState();
-    // Start loading immediately, and keep one shared Future so a toggle
-    // pressed before loading finishes waits for the same initialization.
-    _logoAssetsFuture = _preloadLogoVideos();
-  }
-
-  Future<void> _preloadLogoVideos() async {
-    VideoPlayerController? expandController;
-    VideoPlayerController? collapseController;
-
-    try {
-      debugPrint('[SIDEBAR VIDEO] Loading expand asset: $_logoExpandVideo');
-      expandController = VideoPlayerController.asset(_logoExpandVideo);
-      await expandController.initialize();
-      await expandController.setLooping(false);
-      await expandController.setVolume(0);
-      await expandController.setPlaybackSpeed(2.0);
-      await expandController.seekTo(Duration.zero);
-
-      debugPrint('[SIDEBAR VIDEO] Loading collapse asset: $_logoCollapseVideo');
-      collapseController = VideoPlayerController.asset(_logoCollapseVideo);
-      await collapseController.initialize();
-      await collapseController.setLooping(false);
-      await collapseController.setVolume(0);
-      await collapseController.setPlaybackSpeed(2.0);
-      await collapseController.seekTo(Duration.zero);
-
-      if (!mounted) {
-        await expandController.dispose();
-        await collapseController.dispose();
-        return;
-      }
-
-      _expandLogoController = expandController;
-      _collapseLogoController = collapseController;
-      setState(() {
-        _logoDebugStatus = 'Logo animations ready';
-        _logoDebugError = null;
-      });
-      debugPrint('[SIDEBAR VIDEO] Both logo assets are initialized and ready');
-    } catch (error, stackTrace) {
-      debugPrint('[SIDEBAR VIDEO] Asset loading failed: $error');
-      debugPrint('$stackTrace');
-      await expandController?.dispose();
-      await collapseController?.dispose();
-
-      if (mounted) {
-        setState(() {
-          _expandLogoController = null;
-          _collapseLogoController = null;
-          _logoDebugError = error.toString();
-          _logoDebugStatus = 'Logo animation preload failed';
-        });
-      }
-    }
   }
 
   void _logLogoVideo(String message) {
@@ -257,126 +198,105 @@ class _MainShellState extends State<MainShell> {
     final expanding = _isCollapsed;
     setState(() {
       _isSidebarAnimating = true;
-      _logoDebugStatus = 'Preparing logo animation';
+      _logoDebugStatus = 'Refreshing logo animation asset';
+      _logoDebugError = null;
     });
 
     _playLogoTransition(expanding: expanding);
   }
 
   Future<void> _playLogoTransition({required bool expanding}) async {
-    final token = ++_logoAnimationToken;
+    // A NEW controller is created for every transition. This avoids reusing
+    // a completed/stale platform player after seekTo(Duration.zero).
+    final assetPath = expanding ? _logoExpandVideo : _logoCollapseVideo;
     VideoPlayerController? controller;
-
     var listenerAttached = false;
-    var playbackHasAdvanced = false;
     var transitionStarted = false;
     final transitionStopwatch = Stopwatch();
     const sidebarTransitionDuration = Duration(milliseconds: 300);
-    Completer<void>? completed;
+    final completed = Completer<void>();
 
     void listener() {
-      if (!mounted ||
-          token != _logoAnimationToken ||
-          completed == null ||
-          completed!.isCompleted) {
-        return;
-      }
+      if (!mounted || completed.isCompleted || controller == null) return;
 
       final value = controller!.value;
       if (value.hasError) {
-        completed!.completeError(
+        completed.completeError(
           StateError(value.errorDescription ?? 'Logo animation failed'),
         );
-      } else {
-        // A reused controller can briefly expose its previous completed
-        // value after seekTo(0). Only accept completion after this playback
-        // has genuinely advanced from the first frame.
-        if (value.position > Duration.zero) {
-          playbackHasAdvanced = true;
-        }
-        if (playbackHasAdvanced && value.isCompleted) {
-          completed!.complete();
-        }
+      } else if (value.isCompleted) {
+        completed.complete();
       }
     }
 
     try {
-      // Wait for the shared preload operation. This also handles a click
-      // that happens before initState's asset loading has completed.
-      await _logoAssetsFuture;
-      if (!mounted || token != _logoAnimationToken) return;
+      debugPrint('[SIDEBAR VIDEO] Creating fresh player for $assetPath');
+      controller = VideoPlayerController.asset(assetPath);
 
-      controller = expanding ? _expandLogoController : _collapseLogoController;
-      if (controller == null || !controller.value.isInitialized) {
-        throw StateError(
-          _logoDebugError ?? 'Logo video asset failed to initialize',
-        );
-      }
-
-      // Reset the reusable player completely before each run.
-      await controller.pause();
-      await controller.seekTo(Duration.zero);
-      // Let the platform publish the reset position before attaching the
-      // completion listener; otherwise a stale completed state can finish
-      // the next animation immediately.
-      await Future<void>.delayed(const Duration(milliseconds: 40));
-      if (controller.value.position > const Duration(milliseconds: 80)) {
-        throw StateError('Logo video did not reset to its first frame');
-      }
+      // Fully initialize a fresh player before showing it.
+      await controller.initialize();
       await controller.setLooping(false);
+      await controller.setVolume(0);
       await controller.setPlaybackSpeed(2.0);
+      await controller.seekTo(Duration.zero);
 
-      if (!mounted || token != _logoAnimationToken) return;
+      if (!mounted) return;
 
-      // One rebuild: put the video on screen and begin resizing the sidebar.
       setState(() {
         _logoVideoController = controller;
-        _isCollapsed = !expanding;
         _logoDebugStatus =
         'Playing ${expanding ? 'expand' : 'collapse'} animation';
       });
-      transitionStarted = true;
-      transitionStopwatch.start();
 
-      completed = Completer<void>();
-      controller!.addListener(listener);
+      controller.addListener(listener);
       listenerAttached = true;
 
+      // Start playback only after the fresh controller is visible.
       await controller.play();
-      playbackHasAdvanced = false;
-      await completed!.future.timeout(
-        controller!.value.duration + const Duration(seconds: 6),
+      await completed.future.timeout(
+        controller.value.duration + const Duration(seconds: 5),
       );
+
+      if (!mounted) return;
+
+      // Video has finished: replace it with the destination image and only
+      // now start the sidebar width transition.
+      setState(() {
+        _logoVideoController = null;
+        _isCollapsed = !expanding;
+        _logoDebugStatus = 'Showing destination logo';
+      });
+      transitionStarted = true;
+      transitionStopwatch.start();
     } catch (error, stackTrace) {
       _logoDebugError = error.toString();
-      debugPrint('[SIDEBAR VIDEO] Playback failed: $error');
+      debugPrint('[SIDEBAR VIDEO] Fresh asset playback failed: $error');
       debugPrint('$stackTrace');
 
-      // If preparation failed, still allow the sidebar to change using its
-      // static logo instead of leaving the toggle permanently locked.
-      if (mounted &&
-          token == _logoAnimationToken &&
-          !transitionStarted) {
+      // Keep the UI usable if the video cannot be loaded or played.
+      if (mounted) {
         setState(() {
+          _logoVideoController = null;
           _isCollapsed = !expanding;
-          _logoDebugStatus = 'Video unavailable; static logo shown';
+          _logoDebugStatus = 'Video unavailable; showing static logo';
         });
         transitionStarted = true;
         transitionStopwatch.start();
       }
     } finally {
       if (listenerAttached && controller != null) {
-        controller!.removeListener(listener);
+        controller.removeListener(listener);
       }
 
       if (controller != null) {
         try {
-          await controller!.pause();
+          await controller.pause();
+        } catch (_) {}
+        try {
+          await controller.dispose();
         } catch (_) {}
       }
 
-      // The video can finish before AnimatedContainer's 300ms width
-      // transition. Keep the toggle locked until BOTH animations are done.
       if (transitionStarted) {
         final remaining =
             sidebarTransitionDuration - transitionStopwatch.elapsed;
@@ -385,7 +305,7 @@ class _MainShellState extends State<MainShell> {
         }
       }
 
-      if (mounted && token == _logoAnimationToken) {
+      if (mounted) {
         setState(() {
           _logoVideoController = null;
           _isSidebarAnimating = false;
@@ -397,9 +317,7 @@ class _MainShellState extends State<MainShell> {
 
   @override
   void dispose() {
-    _logoAnimationToken++;
-    _expandLogoController?.dispose();
-    _collapseLogoController?.dispose();
+    _logoVideoController?.dispose();
     super.dispose();
   }
 
