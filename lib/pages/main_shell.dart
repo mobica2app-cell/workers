@@ -287,18 +287,21 @@ class _MainShellState extends State<MainShell> {
     expanding ? _expandLogoController : _collapseLogoController;
 
     if (controller == null || !controller.value.isInitialized) {
-      _logLogoVideo('Logo video is not ready; using static logo');
+      debugPrint('[SIDEBAR VIDEO] Requested video is not initialized.');
       if (mounted && token == _logoAnimationToken) {
         setState(() {
           if (!expanding) _isCollapsed = true;
+          _logoVideoController = null;
           _isExpandingLogoTransition = false;
           _isSidebarAnimating = false;
+          _logoDebugStatus = 'Video unavailable; static logo shown';
         });
       }
       return;
     }
 
     final completed = Completer<void>();
+
     void videoListener() {
       if (!mounted || token != _logoAnimationToken || completed.isCompleted) {
         return;
@@ -309,30 +312,51 @@ class _MainShellState extends State<MainShell> {
         completed.completeError(
           StateError(value.errorDescription ?? 'Unknown video playback error'),
         );
-      } else if (value.isCompleted) {
+        return;
+      }
+
+      // `isCompleted` can remain stale briefly after seeking a reused
+      // controller. Checking the playback position also handles that case.
+      final duration = value.duration;
+      final reachedEnd = duration > Duration.zero &&
+          value.position >= duration - const Duration(milliseconds: 80);
+
+      if (value.isCompleted || reachedEnd) {
         completed.complete();
       }
     }
 
+    var listenerAttached = false;
+
     try {
       _logoDebugError = null;
+
+      // Reset the retained controller every time before replaying it.
       await controller.pause();
       await controller.seekTo(Duration.zero);
+      await controller.setLooping(false);
       await controller.setPlaybackSpeed(2.0);
 
       if (!mounted || token != _logoAnimationToken) return;
 
-      controller.addListener(videoListener);
+      // Show the video in the expanded header for BOTH directions.
+      // During collapse, the sidebar remains expanded until this finishes.
       setState(() {
         _logoVideoController = controller;
         _logoDebugStatus =
-        'Playing preloaded ${expanding ? 'expand' : 'collapse'} animation';
+        'Playing ${expanding ? 'expand' : 'collapse'} animation';
       });
 
+      controller.addListener(videoListener);
+      listenerAttached = true;
+
       await controller.play();
+
+      // Wait for the end position, not merely for play() to return.
       await completed.future.timeout(
-        controller.value.duration + const Duration(seconds: 5),
+        controller.value.duration + const Duration(seconds: 8),
       );
+
       debugPrint(
         '[SIDEBAR VIDEO] ${expanding ? 'Expand' : 'Collapse'} animation completed.',
       );
@@ -340,23 +364,35 @@ class _MainShellState extends State<MainShell> {
       _logoDebugError = error.toString();
       debugPrint('[SIDEBAR VIDEO] PLAYBACK FAILED: $error');
       debugPrint('$stackTrace');
-      if (mounted && token == _logoAnimationToken) {
-        _logLogoVideo('Playback failed; showing static logo');
-      }
     } finally {
-      controller.removeListener(videoListener);
+      if (listenerAttached) {
+        controller.removeListener(videoListener);
+      }
+
+      // Pause and rewind so this same preloaded controller is ready for
+      // the next click instead of being left at its completed frame.
+      try {
+        await controller.pause();
+        await controller.seekTo(Duration.zero);
+      } catch (resetError) {
+        debugPrint('[SIDEBAR VIDEO] Could not reset controller: $resetError');
+      }
 
       if (mounted && token == _logoAnimationToken) {
         setState(() {
           _logoVideoController = null;
-          if (!expanding) _isCollapsed = true;
+
+          // Collapse only AFTER the reverse animation has played in the
+          // expanded sidebar. Expansion was applied before its animation.
+          if (!expanding) {
+            _isCollapsed = true;
+          }
+
           _isExpandingLogoTransition = false;
           _isSidebarAnimating = false;
           _logoDebugStatus = 'Ready';
         });
       }
-
-      // Keep initialized controllers alive for the next click.
     }
   }
 
