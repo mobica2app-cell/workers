@@ -1,5 +1,7 @@
 // lib/pages/main_shell.dart
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:video_player/video_player.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -47,6 +49,7 @@ class _MainShellState extends State<MainShell> {
 
   VideoPlayerController? _logoVideoController;
   int _logoAnimationToken = 0;
+  bool _isSidebarAnimating = false;
   String _logoDebugStatus = 'Idle';
   String? _logoDebugError;
 
@@ -186,117 +189,102 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   void _toggleSidebar() {
+    // Ignore repeated clicks until the current logo video has finished.
+    if (_isSidebarAnimating) return;
+
+    // Keep the current sidebar layout while the logo video plays.
+    // The width/layout changes only after the transition has finished.
     final expanding = _isCollapsed;
     setState(() {
-      _isCollapsed = !_isCollapsed;
+      _isSidebarAnimating = true;
     });
+
     _playLogoTransition(expanding: expanding);
   }
 
   Future<void> _playLogoTransition({required bool expanding}) async {
     final token = ++_logoAnimationToken;
     final asset = expanding ? _logoExpandVideo : _logoCollapseVideo;
-
-    debugPrint('================================================');
-    debugPrint('[SIDEBAR VIDEO] Transition requested');
-    debugPrint('[SIDEBAR VIDEO] Direction: ${expanding ? "EXPAND" : "COLLAPSE"}');
-    debugPrint('[SIDEBAR VIDEO] Asset: $asset');
-    debugPrint('[SIDEBAR VIDEO] Platform: ${Theme.of(context).platform}');
-
-    final previousController = _logoVideoController;
-    _logoVideoController = null;
-    await previousController?.dispose();
-
     final controller = VideoPlayerController.asset(asset);
+    final completed = Completer<void>();
+    VoidCallback? videoListener;
+
+    debugPrint('[SIDEBAR VIDEO] ${expanding ? "EXPAND" : "COLLAPSE"}: $asset');
 
     try {
       _logoDebugError = null;
-      _logLogoVideo('Loading: $asset');
+      _logLogoVideo('Initializing $asset');
 
-      debugPrint('[SIDEBAR VIDEO] Initializing controller...');
-      await controller.initialize().timeout(const Duration(seconds: 20));
+      await controller.initialize();
 
-      if (!mounted || token != _logoAnimationToken) {
-        debugPrint('[SIDEBAR VIDEO] Initialization finished but request is stale. Disposing.');
-        await controller.dispose();
-        return;
-      }
-
-      final initialValue = controller.value;
-      debugPrint('[SIDEBAR VIDEO] INITIALIZED SUCCESSFULLY');
-      debugPrint('[SIDEBAR VIDEO] Size: ${initialValue.size.width} x ${initialValue.size.height}');
-      debugPrint('[SIDEBAR VIDEO] Duration: ${initialValue.duration}');
-      debugPrint('[SIDEBAR VIDEO] Aspect ratio: ${initialValue.aspectRatio}');
-      debugPrint('[SIDEBAR VIDEO] Is playing: ${initialValue.isPlaying}');
-      debugPrint('[SIDEBAR VIDEO] Has error: ${initialValue.hasError}');
+      if (!mounted || token != _logoAnimationToken) return;
 
       await controller.setLooping(false);
       await controller.setVolume(0);
-      await controller.setPlaybackSpeed(1.0);
+      await controller.setPlaybackSpeed(2.0);
 
-      var completionLogged = false;
-      var errorLogged = false;
-      controller.addListener(() {
-        if (!mounted || token != _logoAnimationToken) return;
+      videoListener = () {
+        if (!mounted || token != _logoAnimationToken || completed.isCompleted) {
+          return;
+        }
+
         final value = controller.value;
-
-        if (value.hasError && !errorLogged) {
-          errorLogged = true;
-          final error = value.errorDescription ?? 'Unknown video playback error';
-          _logoDebugError = error;
-          debugPrint('[SIDEBAR VIDEO] PLAYBACK ERROR: $error');
-          _logLogoVideo('Playback error: $error');
+        if (value.hasError) {
+          completed.completeError(
+            StateError(value.errorDescription ?? 'Unknown video playback error'),
+          );
+        } else if (value.isCompleted) {
+          completed.complete();
         }
+      };
 
-        if (value.isPlaying && _logoDebugStatus.startsWith('Ready')) {
-          debugPrint('[SIDEBAR VIDEO] Playback started.');
-          _logLogoVideo('Playing');
-        }
-
-        if (value.isCompleted && !completionLogged) {
-          completionLogged = true;
-          debugPrint('[SIDEBAR VIDEO] Playback completed at ${value.position}.');
-          if (identical(_logoVideoController, controller)) {
-            setState(() => _logoVideoController = null);
-          }
-          _logLogoVideo('Completed');
-          controller.dispose();
-        }
-      });
+      controller.addListener(videoListener!);
 
       setState(() {
         _logoVideoController = controller;
-        _logoDebugStatus = 'Ready — ${initialValue.duration.inMilliseconds} ms';
+        _logoDebugStatus =
+        'Playing at 2× — ${controller.value.duration.inMilliseconds} ms source';
       });
 
-      debugPrint('[SIDEBAR VIDEO] Calling play()...');
+      debugPrint('[SIDEBAR VIDEO] Starting at 2x speed. '
+          'Duration: ${controller.value.duration}');
+
       await controller.play();
 
-      // Check shortly after play() to catch silent failures and browser restrictions.
-      await Future<void>.delayed(const Duration(milliseconds: 700));
-      if (!mounted || token != _logoAnimationToken) return;
+      // Wait for the actual video completion, not just play() returning.
+      final waitDuration = controller.value.duration + const Duration(seconds: 5);
+      await completed.future.timeout(waitDuration);
 
-      final value = controller.value;
-      debugPrint('[SIDEBAR VIDEO] 700ms playback check:');
-      debugPrint('[SIDEBAR VIDEO] isPlaying=${value.isPlaying}');
-      debugPrint('[SIDEBAR VIDEO] position=${value.position}');
-      debugPrint('[SIDEBAR VIDEO] duration=${value.duration}');
-      debugPrint('[SIDEBAR VIDEO] hasError=${value.hasError}');
-      if (!value.isPlaying && !value.isCompleted && !value.hasError) {
-        _logLogoVideo('Not playing — position ${value.position}');
-        debugPrint('[SIDEBAR VIDEO] WARNING: play() returned but video is not playing.');
-      }
+      debugPrint('[SIDEBAR VIDEO] Animation finished.');
+      _logLogoVideo('Completed at 2×');
     } catch (error, stackTrace) {
       _logoDebugError = error.toString();
-      debugPrint('[SIDEBAR VIDEO] FAILED');
-      debugPrint('[SIDEBAR VIDEO] Asset: $asset');
-      debugPrint('[SIDEBAR VIDEO] Error: $error');
-      debugPrint('[SIDEBAR VIDEO] Stack trace: $stackTrace');
+      debugPrint('[SIDEBAR VIDEO] FAILED: $error');
+      debugPrint('$stackTrace');
+      if (!completed.isCompleted) {
+        // Prevent an unhandled Completer error if playback failed before waiting.
+        completed.complete();
+      }
+      if (mounted && token == _logoAnimationToken) {
+        _logLogoVideo('Video failed; showing static logo');
+      }
+    } finally {
+      if (videoListener != null) {
+        controller.removeListener(videoListener);
+      }
+
+      if (identical(_logoVideoController, controller) && mounted) {
+        setState(() => _logoVideoController = null);
+      }
+
       await controller.dispose();
+
       if (mounted && token == _logoAnimationToken) {
         setState(() {
-          _logoVideoController = null;
-          _logoDebugStatus = 'Failed: $error';
+          // Apply the expand/collapse only after the video has ended
+          // (or failed), so the sidebar does not resize during playback.
+          _isCollapsed = !expanding;
+          _isSidebarAnimating = false;
         });
       }
     }
@@ -699,15 +687,24 @@ class _MainShellState extends State<MainShell> {
   Widget _buildSidebarLogo({required bool expanded}) {
     final controller = _logoVideoController;
     if (controller != null && controller.value.isInitialized) {
-      return FittedBox(
-        fit: BoxFit.contain,
-        alignment: expanded ? Alignment.centerLeft : Alignment.center,
-        child: SizedBox(
-          width: controller.value.size.width,
-          height: controller.value.size.height,
-          child: Tooltip(
-            message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
-            child: VideoPlayer(controller),
+      return ClipRect(
+        child: Transform.scale(
+          // The full-logo video contains extra transparent/blank space
+          // above and below the artwork. Zoom it slightly to match the
+          // visual size of the static logo without changing the video.
+          scale: expanded ? 1.22 : 1.0,
+          alignment: expanded ? Alignment.centerLeft : Alignment.center,
+          child: FittedBox(
+            fit: BoxFit.contain,
+            alignment: expanded ? Alignment.centerLeft : Alignment.center,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: Tooltip(
+                message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
+                child: VideoPlayer(controller),
+              ),
+            ),
           ),
         ),
       );
@@ -734,7 +731,7 @@ class _MainShellState extends State<MainShell> {
           ),
         ),
         IconButton(
-          onPressed: _toggleSidebar,
+          onPressed: _isSidebarAnimating ? null : _toggleSidebar,
           icon: const Icon(
             Icons.chevron_left,
             color: Colors.white54,
@@ -763,7 +760,7 @@ class _MainShellState extends State<MainShell> {
         ),
         const SizedBox(height: 8),
         IconButton(
-          onPressed: _toggleSidebar,
+          onPressed: _isSidebarAnimating ? null : _toggleSidebar,
           icon: const Icon(
             Icons.chevron_right,
             color: Colors.white54,
