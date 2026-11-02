@@ -242,11 +242,15 @@ class _MainShellState extends State<MainShell> {
 
       if (!mounted) return;
 
+      // Start the logo video and sidebar width animation together.
       setState(() {
         _logoVideoController = controller;
+        _isCollapsed = !expanding;
         _logoDebugStatus =
         'Playing ${expanding ? 'expand' : 'collapse'} animation';
       });
+      transitionStarted = true;
+      transitionStopwatch.start();
 
       controller.addListener(listener);
       listenerAttached = true;
@@ -259,15 +263,12 @@ class _MainShellState extends State<MainShell> {
 
       if (!mounted) return;
 
-      // Video has finished: replace it with the destination image and only
-      // now start the sidebar width transition.
+      // Keep the sidebar at its new width; replace the video with the
+      // destination static logo as soon as playback finishes.
       setState(() {
         _logoVideoController = null;
-        _isCollapsed = !expanding;
         _logoDebugStatus = 'Showing destination logo';
       });
-      transitionStarted = true;
-      transitionStopwatch.start();
     } catch (error, stackTrace) {
       _logoDebugError = error.toString();
       debugPrint('[SIDEBAR VIDEO] Fresh asset playback failed: $error');
@@ -712,42 +713,30 @@ class _MainShellState extends State<MainShell> {
   Widget _buildSidebarLogo({required bool expanded}) {
     final controller = _logoVideoController;
 
-    final Widget logoContent;
-    if (controller != null && controller.value.isInitialized) {
-      logoContent = FittedBox(
-        key: const ValueKey('logo-video'),
-        fit: BoxFit.contain,
-        alignment: expanded ? Alignment.centerLeft : Alignment.center,
-        child: SizedBox(
-          width: controller.value.size.width,
-          height: controller.value.size.height,
-          child: VideoPlayer(controller),
+    // Keep the destination image mounted and painted underneath the video.
+    // When the video ends, removing its layer reveals an already-rendered
+    // image instead of waiting for Image.asset to load.
+    return Stack(
+      fit: StackFit.expand,
+      alignment: expanded ? Alignment.centerLeft : Alignment.center,
+      children: [
+        Image.asset(
+          expanded ? _logoFullImage : _logoMarkImage,
+          fit: BoxFit.contain,
+          alignment: expanded ? Alignment.centerLeft : Alignment.center,
+          gaplessPlayback: true,
         ),
-      );
-    } else {
-      logoContent = Image.asset(
-        expanded ? _logoFullImage : _logoMarkImage,
-        key: ValueKey(expanded ? 'logo-full-image' : 'logo-mark-image'),
-        fit: BoxFit.contain,
-        alignment: expanded ? Alignment.centerLeft : Alignment.center,
-      );
-    }
-
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 140),
-      reverseDuration: const Duration(milliseconds: 100),
-      switchInCurve: Curves.easeOut,
-      switchOutCurve: Curves.easeIn,
-      layoutBuilder: (currentChild, previousChildren) {
-        return Stack(
-          alignment: Alignment.center,
-          children: [
-            ...previousChildren,
-            if (currentChild != null) currentChild,
-          ],
-        );
-      },
-      child: logoContent,
+        if (controller != null && controller.value.isInitialized)
+          FittedBox(
+            fit: BoxFit.contain,
+            alignment: expanded ? Alignment.centerLeft : Alignment.center,
+            child: SizedBox(
+              width: controller.value.size.width,
+              height: controller.value.size.height,
+              child: VideoPlayer(controller),
+            ),
+          ),
+      ],
     );
   }
 
