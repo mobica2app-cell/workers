@@ -661,11 +661,9 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildSidebarHeader() {
     return Container(
-      padding:
-      EdgeInsets.all(
-        _isCollapsed
-            ? 12
-            : 16,
+      padding: EdgeInsets.symmetric(
+        horizontal: _isCollapsed ? 12 : 10,
+        vertical: _isCollapsed ? 12 : 14,
       ),
 
       decoration:
@@ -686,35 +684,33 @@ class _MainShellState extends State<MainShell> {
 
   Widget _buildSidebarLogo({required bool expanded}) {
     final controller = _logoVideoController;
+
+    // The full-logo source has built-in empty margins. Zoom it inside a
+    // clipped viewport so the visible logo fills the header without
+    // changing the sidebar's layout dimensions.
+    final Widget logoContent;
     if (controller != null && controller.value.isInitialized) {
-      return ClipRect(
-        child: Transform.scale(
-          // The full-logo video contains extra transparent/blank space
-          // above and below the artwork. Zoom it slightly to match the
-          // visual size of the static logo without changing the video.
-          scale: expanded ? 1.22 : 1.0,
-          alignment: expanded ? Alignment.centerLeft : Alignment.center,
-          child: FittedBox(
-            fit: BoxFit.contain,
-            alignment: expanded ? Alignment.centerLeft : Alignment.center,
-            child: SizedBox(
-              width: controller.value.size.width,
-              height: controller.value.size.height,
-              child: Tooltip(
-                message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
-                child: VideoPlayer(controller),
-              ),
-            ),
+      logoContent = FittedBox(
+        fit: BoxFit.contain,
+        alignment: expanded ? Alignment.centerLeft : Alignment.center,
+        child: SizedBox(
+          width: controller.value.size.width,
+          height: controller.value.size.height,
+          child: Tooltip(
+            message: 'Video: $_logoDebugStatus${_logoDebugError == null ? '' : '\\nError: $_logoDebugError'}',
+            child: VideoPlayer(controller),
           ),
         ),
       );
+    } else {
+      logoContent = Image.asset(
+        expanded ? _logoFullImage : _logoMarkImage,
+        fit: BoxFit.contain,
+        alignment: expanded ? Alignment.centerLeft : Alignment.center,
+      );
     }
 
-    return Image.asset(
-      expanded ? _logoFullImage : _logoMarkImage,
-      fit: BoxFit.contain,
-      alignment: expanded ? Alignment.centerLeft : Alignment.center,
-    );
+    return logoContent;
   }
 
   // ============================================================
@@ -722,27 +718,36 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   Widget _buildExpandedHeader() {
-    return Row(
-      children: [
-        Expanded(
-          child: SizedBox(
-            height: 64,
+    return SizedBox(
+      height: 116,
+      width: double.infinity,
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          // Give the full logo/video the entire available header area.
+          // The collapse control is overlaid so it does not reduce logo width.
+          Padding(
+            padding: const EdgeInsets.only(right: 22),
             child: _buildSidebarLogo(expanded: true),
           ),
-        ),
-        IconButton(
-          onPressed: _isSidebarAnimating ? null : _toggleSidebar,
-          icon: const Icon(
-            Icons.chevron_left,
-            color: Colors.white54,
-            size: 20,
+          Positioned(
+            right: 0,
+            top: 0,
+            child: IconButton(
+              onPressed: _isSidebarAnimating ? null : _toggleSidebar,
+              icon: const Icon(
+                Icons.chevron_left,
+                color: Colors.white54,
+                size: 20,
+              ),
+              tooltip: 'Collapse',
+              padding: EdgeInsets.zero,
+              constraints: const BoxConstraints(),
+              visualDensity: VisualDensity.compact,
+            ),
           ),
-          tooltip: 'Collapse',
-          padding: EdgeInsets.zero,
-          constraints: const BoxConstraints(),
-          visualDensity: VisualDensity.compact,
-        ),
-      ],
+        ],
+      ),
     );
   }
 
