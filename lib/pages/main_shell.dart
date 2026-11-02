@@ -52,15 +52,17 @@ class _MainShellState extends State<MainShell> {
   VideoPlayerController? _logoVideoController;
   int _logoAnimationToken = 0;
   bool _isSidebarAnimating = false;
-  DateTime? _lastSidebarToggleAt;
-  static const Duration _sidebarToggleDebounce = Duration(milliseconds: 700);
   String _logoDebugStatus = 'Loading logo animations';
   String? _logoDebugError;
+
+  late final Future<void> _logoAssetsFuture;
 
   @override
   void initState() {
     super.initState();
-    _preloadLogoVideos();
+    // Start loading immediately, and keep one shared Future so a toggle
+    // pressed before loading finishes waits for the same initialization.
+    _logoAssetsFuture = _preloadLogoVideos();
   }
 
   Future<void> _preloadLogoVideos() async {
@@ -68,22 +70,21 @@ class _MainShellState extends State<MainShell> {
     VideoPlayerController? collapseController;
 
     try {
+      debugPrint('[SIDEBAR VIDEO] Loading expand asset: $_logoExpandVideo');
       expandController = VideoPlayerController.asset(_logoExpandVideo);
+      await expandController.initialize();
+      await expandController.setLooping(false);
+      await expandController.setVolume(0);
+      await expandController.setPlaybackSpeed(2.0);
+      await expandController.seekTo(Duration.zero);
+
+      debugPrint('[SIDEBAR VIDEO] Loading collapse asset: $_logoCollapseVideo');
       collapseController = VideoPlayerController.asset(_logoCollapseVideo);
-
-      await Future.wait([
-        expandController.initialize(),
-        collapseController.initialize(),
-      ]);
-
-      await Future.wait([
-        expandController.setLooping(false),
-        collapseController.setLooping(false),
-        expandController.setVolume(0),
-        collapseController.setVolume(0),
-        expandController.setPlaybackSpeed(2.0),
-        collapseController.setPlaybackSpeed(2.0),
-      ]);
+      await collapseController.initialize();
+      await collapseController.setLooping(false);
+      await collapseController.setVolume(0);
+      await collapseController.setPlaybackSpeed(2.0);
+      await collapseController.seekTo(Duration.zero);
 
       if (!mounted) {
         await expandController.dispose();
@@ -91,19 +92,23 @@ class _MainShellState extends State<MainShell> {
         return;
       }
 
+      _expandLogoController = expandController;
+      _collapseLogoController = collapseController;
       setState(() {
-        _expandLogoController = expandController;
-        _collapseLogoController = collapseController;
         _logoDebugStatus = 'Logo animations ready';
+        _logoDebugError = null;
       });
+      debugPrint('[SIDEBAR VIDEO] Both logo assets are initialized and ready');
     } catch (error, stackTrace) {
-      debugPrint('[SIDEBAR VIDEO] Preload failed: $error');
+      debugPrint('[SIDEBAR VIDEO] Asset loading failed: $error');
       debugPrint('$stackTrace');
       await expandController?.dispose();
       await collapseController?.dispose();
 
       if (mounted) {
         setState(() {
+          _expandLogoController = null;
+          _collapseLogoController = null;
           _logoDebugError = error.toString();
           _logoDebugStatus = 'Logo animation preload failed';
         });
@@ -247,24 +252,12 @@ class _MainShellState extends State<MainShell> {
   // ============================================================
 
   void _toggleSidebar() {
-    final now = DateTime.now();
-    final lastToggle = _lastSidebarToggleAt;
+    if (_isSidebarAnimating) return;
 
-    // Ignore both clicks during the animation and rapid clicks immediately
-    // after it finishes (e.g. a mouse double-click).
-    if (_isSidebarAnimating ||
-        (lastToggle != null &&
-            now.difference(lastToggle) < _sidebarToggleDebounce)) {
-      return;
-    }
-
-    _lastSidebarToggleAt = now;
     final expanding = _isCollapsed;
-
-    // Lock the toggle immediately, but wait to resize the sidebar until the
-    // video controller is positioned at its first frame.
     setState(() {
       _isSidebarAnimating = true;
+      _logoDebugStatus = 'Preparing logo animation';
     });
 
     _playLogoTransition(expanding: expanding);
@@ -272,10 +265,10 @@ class _MainShellState extends State<MainShell> {
 
   Future<void> _playLogoTransition({required bool expanding}) async {
     final token = ++_logoAnimationToken;
-    final controller =
-    expanding ? _expandLogoController : _collapseLogoController;
+    VideoPlayerController? controller;
 
     var listenerAttached = false;
+    var playbackHasAdvanced = false;
     var transitionStarted = false;
     final transitionStopwatch = Stopwatch();
     const sidebarTransitionDuration = Duration(milliseconds: 300);
@@ -294,20 +287,42 @@ class _MainShellState extends State<MainShell> {
         completed!.completeError(
           StateError(value.errorDescription ?? 'Logo animation failed'),
         );
-      } else if (value.isCompleted) {
-        completed!.complete();
+      } else {
+        // A reused controller can briefly expose its previous completed
+        // value after seekTo(0). Only accept completion after this playback
+        // has genuinely advanced from the first frame.
+        if (value.position > Duration.zero) {
+          playbackHasAdvanced = true;
+        }
+        if (playbackHasAdvanced && value.isCompleted) {
+          completed!.complete();
+        }
       }
     }
 
     try {
+      // Wait for the shared preload operation. This also handles a click
+      // that happens before initState's asset loading has completed.
+      await _logoAssetsFuture;
+      if (!mounted || token != _logoAnimationToken) return;
+
+      controller = expanding ? _expandLogoController : _collapseLogoController;
       if (controller == null || !controller.value.isInitialized) {
-        throw StateError('Logo video controller is not initialized');
+        throw StateError(
+          _logoDebugError ?? 'Logo video asset failed to initialize',
+        );
       }
 
-      // Prepare the already-initialized video before changing the sidebar.
-      // This avoids showing the target static logo for a frame first.
-      await controller!.pause();
+      // Reset the reusable player completely before each run.
+      await controller.pause();
       await controller.seekTo(Duration.zero);
+      // Let the platform publish the reset position before attaching the
+      // completion listener; otherwise a stale completed state can finish
+      // the next animation immediately.
+      await Future<void>.delayed(const Duration(milliseconds: 40));
+      if (controller.value.position > const Duration(milliseconds: 80)) {
+        throw StateError('Logo video did not reset to its first frame');
+      }
       await controller.setLooping(false);
       await controller.setPlaybackSpeed(2.0);
 
@@ -327,7 +342,8 @@ class _MainShellState extends State<MainShell> {
       controller!.addListener(listener);
       listenerAttached = true;
 
-      await controller!.play();
+      await controller.play();
+      playbackHasAdvanced = false;
       await completed!.future.timeout(
         controller!.value.duration + const Duration(seconds: 6),
       );
