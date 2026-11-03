@@ -4579,7 +4579,7 @@ class _OrdersPageState extends State<OrdersPage> {
             if (!widget.readOnly && canEdit) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileEditMenu(order), icon: const Icon(Icons.edit_outlined, size: 16), label: Text('Edit fields', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 38), foregroundColor: const Color(0xFF6366F1), side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))))),
             if (!widget.readOnly && canEdit) const SizedBox(width: 7),
             Expanded(child: OutlinedButton.icon(onPressed: () => _copyOrderData(order), icon: const Icon(Icons.copy_rounded, size: 15), label: Text('Copy details', style: GoogleFonts.cairo(fontSize: 10)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 36), foregroundColor: _secondaryTextColor, side: BorderSide(color: _borderColor), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10))))),
-            if (_isHedOrManager && !_isDataEntry) ...[
+            if (_isHedOrManager || _isDataEntry) ...[
               const SizedBox(width: 7),
               IconButton.filledTonal(tooltip: 'Track order', onPressed: () => _navigateToOrderTracking(order), icon: const Icon(Icons.track_changes_rounded, size: 18)),
             ],
