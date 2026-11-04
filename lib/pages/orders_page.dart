@@ -79,6 +79,8 @@ class _OrdersPageState extends State<OrdersPage> {
   // Factory/SLoc descriptions loaded from Supabase `factory_names`.
   // Key = SLoc/factory code, Value = description.
   Map<String, String> _factoryDescriptions = {};
+  // Preserve the exact Supabase SLoc code while descriptions are indexed case-insensitively.
+  Map<String, String> _factoryCodes = {};
 
   // Selection
   final Set<String> _selectedRowsIds = {};
@@ -801,7 +803,6 @@ class _OrdersPageState extends State<OrdersPage> {
         _isDataEntry;
   }
 
-  // Add this method to show manual task creation dialog
   Future<void> _showAddTaskDialog() async {
     final nameController = TextEditingController();
     final contractController = TextEditingController();
@@ -935,7 +936,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       style: GoogleFonts.cairo(),
                     ),
                     backgroundColor: Colors.red,
-                    duration: const Duration(milliseconds: 3000),
+                    duration: const Duration(milliseconds: 1000),
                   ),
                 );
                 return;
@@ -1035,6 +1036,303 @@ class _OrdersPageState extends State<OrdersPage> {
         setState(() => _isLoading = false);
         _showSnackBar('Error creating task: $e');
       }
+    }
+  }
+
+  // Create a contract: shared fields are entered once, then item-specific rows.
+  Future<void> _showAddContractDialog() async {
+    final countController = TextEditingController(text: '1');
+    final customerController = TextEditingController();
+    final contractController = TextEditingController();
+    final designOrderController = TextEditingController();
+    final orderDateController = TextEditingController();
+    final endDateController = TextEditingController();
+    final deliveryDateController = TextEditingController();
+    final salesEngineerController = TextEditingController();
+    String? selectedFactoryCode;
+    List<Map<String, TextEditingController>> itemControllers = [];
+    bool saving = false;
+
+    Map<String, TextEditingController> makeItemControllers() => {
+      'item': TextEditingController(),
+      'product_code': TextEditingController(),
+      'description': TextEditingController(),
+      'quantity': TextEditingController(text: '0'),
+      'unit': TextEditingController(text: 'EA'),
+      'value': TextEditingController(text: '0'),
+    };
+
+    void syncItemCount() {
+      final count = int.tryParse(countController.text.trim()) ?? 0;
+      if (count < 1 || count > 100) return;
+      while (itemControllers.length < count) {
+        itemControllers.add(makeItemControllers());
+      }
+      while (itemControllers.length > count) {
+        final removed = itemControllers.removeLast();
+        for (final c in removed.values) { c.dispose(); }
+      }
+    }
+
+    Future<void> pickDate(TextEditingController controller, BuildContext dialogContext) async {
+      final initial = DateTime.tryParse(controller.text) ?? DateTime.now();
+      final date = await showDatePicker(
+        context: dialogContext,
+        initialDate: initial,
+        firstDate: DateTime(2000),
+        lastDate: DateTime(2100),
+      );
+      if (date != null) controller.text = DateFormat('yyyy-MM-dd').format(date);
+    }
+
+    Future<void> chooseFactory(StateSetter setDialogState, BuildContext dialogContext) async {
+      if (_factoryDescriptions.isEmpty) await _loadFactoryNames();
+      final searchController = TextEditingController();
+      final picked = await showDialog<String>(
+        context: dialogContext,
+        builder: (factoryContext) => StatefulBuilder(
+          builder: (factoryContext, setFactoryState) {
+            final q = searchController.text.trim().toLowerCase();
+            final matches = _factoryDescriptions.entries.where((e) =>
+            e.key.toLowerCase().contains(q) || e.value.toLowerCase().contains(q)
+            ).take(100).toList();
+            return AlertDialog(
+              title: Text('Select Factory', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+              content: SizedBox(
+                width: 420,
+                height: 420,
+                child: Column(children: [
+                  TextField(
+                    controller: searchController,
+                    autofocus: true,
+                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search factory name or code'),
+                    onChanged: (_) => setFactoryState(() {}),
+                  ),
+                  const SizedBox(height: 10),
+                  Expanded(child: matches.isEmpty
+                      ? const Center(child: Text('No factories found'))
+                      : ListView.builder(
+                    itemCount: matches.length,
+                    itemBuilder: (_, i) {
+                      final entry = matches[i];
+                      return ListTile(
+                        dense: true,
+                        title: Text(entry.value.isEmpty ? entry.key : entry.value, style: GoogleFonts.cairo(fontSize: 13)),
+                        subtitle: Text('Code: ${_factoryCodes[entry.key] ?? entry.key}', style: GoogleFonts.cairo(fontSize: 11)),
+                        onTap: () => Navigator.pop(factoryContext, _factoryCodes[entry.key] ?? entry.key),
+                      );
+                    },
+                  )),
+                ]),
+              ),
+              actions: [TextButton(onPressed: () => Navigator.pop(factoryContext), child: const Text('Cancel'))],
+            );
+          },
+        ),
+      );
+      searchController.dispose();
+      if (picked != null) setDialogState(() => selectedFactoryCode = picked);
+    }
+
+    syncItemCount();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) {
+          final inputDecoration = (String label) => InputDecoration(
+            labelText: label,
+            labelStyle: GoogleFonts.cairo(fontSize: 12),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
+            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
+          );
+          Widget textField(TextEditingController c, String label, {bool numeric = false, int lines = 1}) => TextField(
+            controller: c,
+            style: GoogleFonts.cairo(fontSize: 13),
+            keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+            maxLines: lines,
+            decoration: inputDecoration(label),
+          );
+          Widget dateField(TextEditingController c, String label) => TextField(
+            controller: c,
+            readOnly: true,
+            style: GoogleFonts.cairo(fontSize: 13),
+            decoration: inputDecoration(label).copyWith(suffixIcon: const Icon(Icons.calendar_month)),
+            onTap: () => pickDate(c, dialogContext),
+          );
+
+          return AlertDialog(
+            title: Text('Add Contract', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+            content: SizedBox(
+              width: 760,
+              child: SingleChildScrollView(
+                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                  Row(children: [
+                    SizedBox(width: 150, child: textField(countController, 'Number of items', numeric: true)),
+                    const SizedBox(width: 10),
+                    ElevatedButton.icon(
+                      onPressed: saving ? null : () {
+                        final count = int.tryParse(countController.text.trim()) ?? 0;
+                        if (count < 1 || count > 100) {
+                          _showSnackBar('Enter a number between 1 and 100');
+                          return;
+                        }
+                        setDialogState(syncItemCount);
+                      },
+                      icon: const Icon(Icons.refresh), label: Text('Set items', style: GoogleFonts.cairo()),
+                    ),
+                  ]),
+                  const SizedBox(height: 16),
+                  Text('Contract information (shared by all items)', style: GoogleFonts.cairo(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 10),
+                  textField(customerController, 'Customer Name *'),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: textField(contractController, 'Contract Number')),
+                    const SizedBox(width: 10),
+                    Expanded(child: textField(designOrderController, 'Design Order')),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: dateField(orderDateController, 'Order Date')),
+                    const SizedBox(width: 10),
+                    Expanded(child: dateField(endDateController, 'End Date')),
+                    const SizedBox(width: 10),
+                    Expanded(child: dateField(deliveryDateController, 'Delivery Date')),
+                  ]),
+                  const SizedBox(height: 10),
+                  Row(children: [
+                    Expanded(child: textField(salesEngineerController, 'Sales Engineer (optional)')),
+                    const SizedBox(width: 10),
+                    Expanded(child: OutlinedButton.icon(
+                      onPressed: saving ? null : () => chooseFactory(setDialogState, dialogContext),
+                      icon: const Icon(Icons.factory_outlined),
+                      label: Text(selectedFactoryCode == null
+                          ? 'Search factory'
+                          : '${_factoryDescriptions[selectedFactoryCode!.toLowerCase()] ?? selectedFactoryCode}  •  $selectedFactoryCode',
+                          maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 12)),
+                    )),
+                  ]),
+                  const SizedBox(height: 20),
+                  Text('Contract items (${itemControllers.length})', style: GoogleFonts.cairo(fontWeight: FontWeight.w700, fontSize: 14)),
+                  const SizedBox(height: 8),
+                  ...List.generate(itemControllers.length, (index) {
+                    final item = itemControllers[index];
+                    return Card(
+                      margin: const EdgeInsets.only(bottom: 10),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
+                          Text('Item ${index + 1}', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+                          const SizedBox(height: 10),
+                          Row(children: [
+                            Expanded(child: textField(item['item']!, 'Item')),
+                            const SizedBox(width: 8),
+                            Expanded(child: textField(item['product_code']!, 'Product Code')),
+                          ]),
+                          const SizedBox(height: 8),
+                          textField(item['description']!, 'Description', lines: 2),
+                          const SizedBox(height: 8),
+                          Row(children: [
+                            Expanded(child: textField(item['quantity']!, 'Quantity', numeric: true)),
+                            const SizedBox(width: 8),
+                            Expanded(child: textField(item['unit']!, 'Unit')),
+                            const SizedBox(width: 8),
+                            Expanded(child: textField(item['value']!, 'Value', numeric: true)),
+                          ]),
+                        ]),
+                      ),
+                    );
+                  }),
+                ]),
+              ),
+            ),
+            actions: [
+              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext, false), child: Text('Cancel', style: GoogleFonts.cairo())),
+              ElevatedButton.icon(
+                onPressed: saving ? null : () {
+                  if (customerController.text.trim().isEmpty) {
+                    _showSnackBar('Customer Name is required');
+                    return;
+                  }
+                  if (itemControllers.isEmpty) {
+                    _showSnackBar('Set the number of contract items first');
+                    return;
+                  }
+                  Navigator.pop(dialogContext, true);
+                },
+                icon: const Icon(Icons.save),
+                label: Text('Create Contract', style: GoogleFonts.cairo()),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+
+    if (confirmed == true) {
+      setState(() => _isLoading = true);
+      try {
+        final nowDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
+        final rows = itemControllers.map((item) => <String, dynamic>{
+          'status': 'Tasks',
+          'customer_name': customerController.text.trim(),
+          'item_number': item['item']!.text.trim().isEmpty ? '0' : item['item']!.text.trim(),
+          'product_code': item['product_code']!.text.trim().isEmpty ? '0' : item['product_code']!.text.trim(),
+          'contract_number': contractController.text.trim().isEmpty ? '0' : contractController.text.trim(),
+          'description': item['description']!.text.trim(),
+          'design_order': designOrderController.text.trim().isEmpty ? '0' : designOrderController.text.trim(),
+          'quantity': double.tryParse(item['quantity']!.text.replaceAll(',', '')) ?? 0,
+          'unit_of_measure': item['unit']!.text.trim().isEmpty ? 'EA' : item['unit']!.text.trim(),
+          'value': double.tryParse(item['value']!.text.replaceAll(',', '').replaceAll('\$', '')) ?? 0,
+          'sales_engineer': salesEngineerController.text.trim().isEmpty ? null : salesEngineerController.text.trim(),
+          'order_date': orderDateController.text.trim().isEmpty ? nowDate : orderDateController.text.trim(),
+          'end_date': endDateController.text.trim().isEmpty ? null : endDateController.text.trim(),
+          'delivery_date': deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
+          // Store the factory/SLoc code, not its description.
+          'factory': selectedFactoryCode,
+          'design_team': widget.loggedInEmployee?.department,
+          'responsible_engineer': null,
+          'reviewer': null,
+          'correspondence_engineer': null,
+        }).toList();
+
+        final response = await Supabase.instance.client
+            .from('sap_main_orders')
+            .insert(rows)
+            .select();
+        final createdOrders = (response as List)
+            .map((row) => SAPMainOrder.fromJson(Map<String, dynamic>.from(row)))
+            .toList();
+        if (mounted) {
+          setState(() {
+            _allOrders.addAll(createdOrders);
+            for (final order in createdOrders) {
+              _orderIndexMap[order] = _allOrders.indexOf(order);
+            }
+            _isLoading = false;
+          });
+          _rebuildGroups();
+          _showSnackBar('Contract created successfully (${createdOrders.length} items)');
+        }
+      } catch (e) {
+        if (mounted) {
+          setState(() => _isLoading = false);
+          _showSnackBar('Error creating contract: $e');
+        }
+      }
+    }
+
+    countController.dispose();
+    customerController.dispose();
+    contractController.dispose();
+    designOrderController.dispose();
+    orderDateController.dispose();
+    endDateController.dispose();
+    deliveryDateController.dispose();
+    salesEngineerController.dispose();
+    for (final item in itemControllers) {
+      for (final controller in item.values) { controller.dispose(); }
     }
   }
 
@@ -3234,6 +3532,7 @@ class _OrdersPageState extends State<OrdersPage> {
           .select('s_loc, description');
 
       final descriptions = <String, String>{};
+      final codes = <String, String>{};
 
       for (final row in response) {
         final code = row['s_loc']?.toString().trim() ?? '';
@@ -3243,15 +3542,18 @@ class _OrdersPageState extends State<OrdersPage> {
           // Keep the factory code even when its description is empty.
           // Normalize whitespace/case so SAP values like " F001 " still match.
           descriptions[code.trim().toLowerCase()] = description.trim();
+          codes[code.trim().toLowerCase()] = code.trim();
         }
       }
 
       if (mounted) {
         setState(() {
           _factoryDescriptions = descriptions;
+          _factoryCodes = codes;
         });
       } else {
         _factoryDescriptions = descriptions;
+        _factoryCodes = codes;
       }
     } catch (e) {
       print('Error loading factory names: $e');
@@ -4650,6 +4952,9 @@ class _OrdersPageState extends State<OrdersPage> {
                 case 'add_task':
                   _showAddTaskDialog();
                   break;
+                case 'add_contract':
+                  _showAddContractDialog();
+                  break;
                 case 'factories':
                   _showFactorySearchDialog();
                   break;
@@ -4667,6 +4972,11 @@ class _OrdersPageState extends State<OrdersPage> {
               }
             },
             itemBuilder: (context) => [
+              if (!widget.readOnly && _isHedOrManager)
+                PopupMenuItem(
+                  value: 'add_contract',
+                  child: _menuAction(Icons.post_add_rounded, 'Add Contract'),
+                ),
               PopupMenuItem(
                 value: 'arrange',
                 child: _menuAction(Icons.swap_vert, 'Arrange'),
