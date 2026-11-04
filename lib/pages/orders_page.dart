@@ -1039,7 +1039,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  // Create a contract: shared fields are entered once, then item-specific rows.
+  // Create a contract: shared fields are entered once; item numbers auto-run 1001–1999 per contract.
   Future<void> _showAddContractDialog() async {
     final supabase = Supabase.instance.client;
     final countController = TextEditingController(text: '1');
@@ -1056,8 +1056,8 @@ class _OrdersPageState extends State<OrdersPage> {
     String? selectedReviewer;
     List<Map<String, TextEditingController>> itemControllers = [];
 
-    Map<String, TextEditingController> makeItemControllers() => {
-      'item': TextEditingController(),
+    Map<String, TextEditingController> makeItemControllers(int itemNumber) => {
+      'item': TextEditingController(text: itemNumber.toString()),
       'product_code': TextEditingController(),
       'description': TextEditingController(),
       'quantity': TextEditingController(text: '0'),
@@ -1067,9 +1067,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
     void syncItemCount() {
       final count = int.tryParse(countController.text.trim()) ?? 0;
-      if (count < 1 || count > 100) return;
+      if (count < 1 || count > 899) return;
       while (itemControllers.length < count) {
-        itemControllers.add(makeItemControllers());
+        // Item numbering restarts at 1001 for each new contract.
+        itemControllers.add(makeItemControllers(1001 + itemControllers.length));
       }
       while (itemControllers.length > count) {
         final removed = itemControllers.removeLast();
@@ -1454,7 +1455,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                     countController.text.trim()) ?? 0;
                                 if (count < 1 || count > 100) {
                                   _showSnackBar(
-                                      'Enter a number between 1 and 100');
+                                      'Enter a number between 1 and 899 (item numbers 1001–1999)');
                                   return;
                                 }
                                 setDialogState(syncItemCount);
@@ -1493,7 +1494,8 @@ class _OrdersPageState extends State<OrdersPage> {
                                   const SizedBox(height: 12),
                                   Row(children: [
                                     Expanded(child: textField(
-                                        item['item']!, 'Item')),
+                                        item['item']!, 'Item',
+                                        readOnly: true)),
                                     const SizedBox(width: 10),
                                     Expanded(child: textField(
                                         item['product_code']!, 'Product Code')),
@@ -5273,7 +5275,7 @@ class _OrdersPageState extends State<OrdersPage> {
               }
             },
             itemBuilder: (context) => [
-              if (!widget.readOnly && _isHedOrManager)
+              if (!widget.readOnly)
                 PopupMenuItem(
                   value: 'add_contract',
                   child: _menuAction(Icons.post_add_rounded, 'Add Contract'),
