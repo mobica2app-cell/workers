@@ -1041,17 +1041,20 @@ class _OrdersPageState extends State<OrdersPage> {
 
   // Create a contract: shared fields are entered once, then item-specific rows.
   Future<void> _showAddContractDialog() async {
+    final supabase = Supabase.instance.client;
     final countController = TextEditingController(text: '1');
     final customerController = TextEditingController();
     final contractController = TextEditingController();
-    final designOrderController = TextEditingController();
-    final orderDateController = TextEditingController();
+    final orderDateController = TextEditingController(
+      text: DateFormat('yyyy-MM-dd').format(DateTime.now()),
+    );
     final endDateController = TextEditingController();
     final deliveryDateController = TextEditingController();
     final salesEngineerController = TextEditingController();
     String? selectedFactoryCode;
+    String? selectedResponsibleEngineer;
+    String? selectedReviewer;
     List<Map<String, TextEditingController>> itemControllers = [];
-    bool saving = false;
 
     Map<String, TextEditingController> makeItemControllers() => {
       'item': TextEditingController(),
@@ -1070,11 +1073,16 @@ class _OrdersPageState extends State<OrdersPage> {
       }
       while (itemControllers.length > count) {
         final removed = itemControllers.removeLast();
-        for (final c in removed.values) { c.dispose(); }
+        for (final c in removed.values) {
+          c.dispose();
+        }
       }
     }
 
-    Future<void> pickDate(TextEditingController controller, BuildContext dialogContext) async {
+    Future<void> pickDate(
+        TextEditingController controller,
+        BuildContext dialogContext,
+        ) async {
       final initial = DateTime.tryParse(controller.text) ?? DateTime.now();
       final date = await showDatePicker(
         context: dialogContext,
@@ -1082,10 +1090,15 @@ class _OrdersPageState extends State<OrdersPage> {
         firstDate: DateTime(2000),
         lastDate: DateTime(2100),
       );
-      if (date != null) controller.text = DateFormat('yyyy-MM-dd').format(date);
+      if (date != null) {
+        controller.text = DateFormat('yyyy-MM-dd').format(date);
+      }
     }
 
-    Future<void> chooseFactory(StateSetter setDialogState, BuildContext dialogContext) async {
+    Future<void> chooseFactory(
+        StateSetter setDialogState,
+        BuildContext dialogContext,
+        ) async {
       if (_factoryDescriptions.isEmpty) await _loadFactoryNames();
       final searchController = TextEditingController();
       final picked = await showDialog<String>(
@@ -1094,45 +1107,91 @@ class _OrdersPageState extends State<OrdersPage> {
           builder: (factoryContext, setFactoryState) {
             final q = searchController.text.trim().toLowerCase();
             final matches = _factoryDescriptions.entries.where((e) =>
-            e.key.toLowerCase().contains(q) || e.value.toLowerCase().contains(q)
+            e.key.toLowerCase().contains(q) ||
+                e.value.toLowerCase().contains(q)
             ).take(100).toList();
             return AlertDialog(
-              title: Text('Select Factory', style: GoogleFonts.cairo(fontWeight: FontWeight.w600)),
+              title: Text('Select Factory',
+                  style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
               content: SizedBox(
-                width: 420,
-                height: 420,
+                width: 430,
+                height: 430,
                 child: Column(children: [
                   TextField(
                     controller: searchController,
                     autofocus: true,
-                    decoration: const InputDecoration(prefixIcon: Icon(Icons.search), hintText: 'Search factory name or code'),
+                    decoration: InputDecoration(
+                      hintText: 'Search by factory name or code',
+                      prefixIcon: const Icon(Icons.search),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                    ),
                     onChanged: (_) => setFactoryState(() {}),
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(child: matches.isEmpty
-                      ? const Center(child: Text('No factories found'))
-                      : ListView.builder(
-                    itemCount: matches.length,
-                    itemBuilder: (_, i) {
-                      final entry = matches[i];
-                      return ListTile(
-                        dense: true,
-                        title: Text(entry.value.isEmpty ? entry.key : entry.value, style: GoogleFonts.cairo(fontSize: 13)),
-                        subtitle: Text('Code: ${_factoryCodes[entry.key] ?? entry.key}', style: GoogleFonts.cairo(fontSize: 11)),
-                        onTap: () => Navigator.pop(factoryContext, _factoryCodes[entry.key] ?? entry.key),
-                      );
-                    },
-                  )),
+                  const SizedBox(height: 12),
+                  Expanded(
+                    child: matches.isEmpty
+                        ? const Center(child: Text('No factories found'))
+                        : ListView.separated(
+                      itemCount: matches.length,
+                      separatorBuilder: (_, __) => const Divider(height: 1),
+                      itemBuilder: (_, i) {
+                        final entry = matches[i];
+                        final code = _factoryCodes[entry.key] ?? entry.key;
+                        return ListTile(
+                          leading: const Icon(Icons.factory_outlined),
+                          title: Text(entry.value.isEmpty ? entry.key : entry.value),
+                          subtitle: Text('Code: $code'),
+                          onTap: () => Navigator.pop(factoryContext, code),
+                        );
+                      },
+                    ),
+                  ),
                 ]),
               ),
-              actions: [TextButton(onPressed: () => Navigator.pop(factoryContext), child: const Text('Cancel'))],
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(factoryContext),
+                  child: const Text('Cancel'),
+                ),
+              ],
             );
           },
         ),
       );
       searchController.dispose();
-      if (picked != null) setDialogState(() => selectedFactoryCode = picked);
+      if (picked != null) {
+        setDialogState(() => selectedFactoryCode = picked);
+      }
     }
+
+    // Find the next PDC number from the values already stored in Supabase.
+    try {
+      final existing = await supabase
+          .from('sap_main_orders')
+          .select('contract_number');
+      var highest = 1000;
+      for (final row in existing as List) {
+        final value = (row['contract_number'] ?? '').toString().trim();
+        final match = RegExp(r'^PDC(\d+)$', caseSensitive: false)
+            .firstMatch(value);
+        final number = int.tryParse(match?.group(1) ?? '');
+        if (number != null && number > highest) highest = number;
+      }
+      contractController.text = 'PDC${highest + 1}';
+    } catch (e) {
+      // Keep a safe starting value visible, but do not silently claim it is unique.
+      contractController.text = 'PDC1001';
+      _showSnackBar('Could not check existing contract numbers: $e');
+    }
+
+    final employeeNames = _allEmployees
+        .map((e) => e.fullName.trim())
+        .where((name) => name.isNotEmpty)
+        .toSet()
+        .toList()
+      ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
 
     syncItemCount();
     final confirmed = await showDialog<bool>(
@@ -1140,131 +1199,364 @@ class _OrdersPageState extends State<OrdersPage> {
       barrierDismissible: false,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) {
-          final inputDecoration = (String label) => InputDecoration(
-            labelText: label,
-            labelStyle: GoogleFonts.cairo(fontSize: 12),
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(8)),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 11),
-          );
-          Widget textField(TextEditingController c, String label, {bool numeric = false, int lines = 1}) => TextField(
+          final theme = Theme.of(dialogContext);
+          final primary = theme.colorScheme.primary;
+          final inputDecoration = (String label, {IconData? icon}) =>
+              InputDecoration(
+                labelText: label,
+                prefixIcon: icon == null ? null : Icon(icon, size: 19),
+                labelStyle: GoogleFonts.cairo(fontSize: 12),
+                filled: true,
+                fillColor: theme.colorScheme.surface,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.dividerColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: theme.dividerColor),
+                ),
+                contentPadding: const EdgeInsets.symmetric(
+                    horizontal: 14, vertical: 13),
+              );
+
+          Widget textField(
+              TextEditingController c,
+              String label, {
+                bool numeric = false,
+                int lines = 1,
+                IconData? icon,
+                bool readOnly = false,
+              }) => TextField(
             controller: c,
+            readOnly: readOnly,
             style: GoogleFonts.cairo(fontSize: 13),
-            keyboardType: numeric ? const TextInputType.numberWithOptions(decimal: true) : TextInputType.text,
+            keyboardType: numeric
+                ? const TextInputType.numberWithOptions(decimal: true)
+                : TextInputType.text,
             maxLines: lines,
-            decoration: inputDecoration(label),
+            decoration: inputDecoration(label, icon: icon),
           );
-          Widget dateField(TextEditingController c, String label) => TextField(
+
+          Widget dateField(
+              TextEditingController c,
+              String label, {
+                bool required = false,
+              }) => TextField(
             controller: c,
             readOnly: true,
             style: GoogleFonts.cairo(fontSize: 13),
-            decoration: inputDecoration(label).copyWith(suffixIcon: const Icon(Icons.calendar_month)),
+            decoration: inputDecoration(
+              required ? '$label *' : '$label (optional)',
+              icon: Icons.calendar_month_outlined,
+            ).copyWith(
+              suffixIcon: IconButton(
+                tooltip: 'Clear date',
+                icon: const Icon(Icons.close, size: 18),
+                onPressed: required ? null : () => setDialogState(c.clear),
+              ),
+            ),
             onTap: () => pickDate(c, dialogContext),
           );
 
-          return AlertDialog(
-            title: Text('Add Contract', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
-            content: SizedBox(
-              width: 760,
-              child: SingleChildScrollView(
-                child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                  Row(children: [
-                    SizedBox(width: 150, child: textField(countController, 'Number of items', numeric: true)),
-                    const SizedBox(width: 10),
-                    ElevatedButton.icon(
-                      onPressed: saving ? null : () {
-                        final count = int.tryParse(countController.text.trim()) ?? 0;
-                        if (count < 1 || count > 100) {
-                          _showSnackBar('Enter a number between 1 and 100');
-                          return;
-                        }
-                        setDialogState(syncItemCount);
-                      },
-                      icon: const Icon(Icons.refresh), label: Text('Set items', style: GoogleFonts.cairo()),
+          Widget sectionTitle(IconData icon, String title, String subtitle) =>
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Row(children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(.10),
+                      borderRadius: BorderRadius.circular(10),
                     ),
-                  ]),
-                  const SizedBox(height: 16),
-                  Text('Contract information (shared by all items)', style: GoogleFonts.cairo(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const SizedBox(height: 10),
-                  textField(customerController, 'Customer Name *'),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: textField(contractController, 'Contract Number')),
-                    const SizedBox(width: 10),
-                    Expanded(child: textField(designOrderController, 'Design Order')),
-                  ]),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: dateField(orderDateController, 'Order Date')),
-                    const SizedBox(width: 10),
-                    Expanded(child: dateField(endDateController, 'End Date')),
-                    const SizedBox(width: 10),
-                    Expanded(child: dateField(deliveryDateController, 'Delivery Date')),
-                  ]),
-                  const SizedBox(height: 10),
-                  Row(children: [
-                    Expanded(child: textField(salesEngineerController, 'Sales Engineer (optional)')),
-                    const SizedBox(width: 10),
-                    Expanded(child: OutlinedButton.icon(
-                      onPressed: saving ? null : () => chooseFactory(setDialogState, dialogContext),
-                      icon: const Icon(Icons.factory_outlined),
-                      label: Text(selectedFactoryCode == null
-                          ? 'Search factory'
-                          : '${_factoryDescriptions[selectedFactoryCode!.toLowerCase()] ?? selectedFactoryCode}  •  $selectedFactoryCode',
-                          maxLines: 1, overflow: TextOverflow.ellipsis, style: GoogleFonts.cairo(fontSize: 12)),
-                    )),
-                  ]),
-                  const SizedBox(height: 20),
-                  Text('Contract items (${itemControllers.length})', style: GoogleFonts.cairo(fontWeight: FontWeight.w700, fontSize: 14)),
-                  const SizedBox(height: 8),
-                  ...List.generate(itemControllers.length, (index) {
-                    final item = itemControllers[index];
-                    return Card(
-                      margin: const EdgeInsets.only(bottom: 10),
-                      child: Padding(
-                        padding: const EdgeInsets.all(12),
-                        child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                          Text('Item ${index + 1}', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
-                          const SizedBox(height: 10),
-                          Row(children: [
-                            Expanded(child: textField(item['item']!, 'Item')),
-                            const SizedBox(width: 8),
-                            Expanded(child: textField(item['product_code']!, 'Product Code')),
-                          ]),
-                          const SizedBox(height: 8),
-                          textField(item['description']!, 'Description', lines: 2),
-                          const SizedBox(height: 8),
-                          Row(children: [
-                            Expanded(child: textField(item['quantity']!, 'Quantity', numeric: true)),
-                            const SizedBox(width: 8),
-                            Expanded(child: textField(item['unit']!, 'Unit')),
-                            const SizedBox(width: 8),
-                            Expanded(child: textField(item['value']!, 'Value', numeric: true)),
-                          ]),
-                        ]),
-                      ),
-                    );
-                  }),
+                    child: Icon(icon, color: primary, size: 20),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(title, style: GoogleFonts.cairo(
+                          fontSize: 14, fontWeight: FontWeight.w700)),
+                      Text(subtitle, style: GoogleFonts.cairo(
+                          fontSize: 11, color: theme.hintColor)),
+                    ],
+                  )),
                 ]),
+              );
+
+          Widget employeeDropdown(
+              String label,
+              String? value,
+              ValueChanged<String?> onChanged,
+              ) => DropdownButtonFormField<String>(
+            value: value,
+            isExpanded: true,
+            decoration: inputDecoration(label, icon: Icons.person_outline),
+            items: [
+              const DropdownMenuItem<String>(
+                value: null,
+                child: Text('Not assigned'),
+              ),
+              ...employeeNames.map((name) => DropdownMenuItem(
+                value: name,
+                child: Text(name, overflow: TextOverflow.ellipsis),
+              )),
+            ],
+            onChanged: onChanged,
+          );
+
+          return Dialog(
+            insetPadding: const EdgeInsets.symmetric(
+                horizontal: 24, vertical: 20),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(20)),
+            child: SizedBox(
+              width: 850,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    padding: const EdgeInsets.fromLTRB(24, 20, 18, 18),
+                    decoration: BoxDecoration(
+                      color: primary.withOpacity(.08),
+                      borderRadius: const BorderRadius.vertical(
+                          top: Radius.circular(20)),
+                    ),
+                    child: Row(children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: primary.withOpacity(.14),
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: Icon(Icons.description_outlined,
+                            color: primary, size: 25),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text('Create New Contract',
+                              style: GoogleFonts.cairo(
+                                  fontSize: 18, fontWeight: FontWeight.w800)),
+                          Text('Enter shared details, then add contract items',
+                              style: GoogleFonts.cairo(
+                                  fontSize: 11, color: theme.hintColor)),
+                        ],
+                      )),
+                      IconButton(
+                        tooltip: 'Close',
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        icon: const Icon(Icons.close),
+                      ),
+                    ]),
+                  ),
+                  Flexible(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(22),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          sectionTitle(Icons.assignment_outlined,
+                              'Contract details',
+                              'These details will be applied to every item'),
+                          Row(children: [
+                            Expanded(
+                              flex: 2,
+                              child: textField(customerController,
+                                  'Customer Name *',
+                                  icon: Icons.business_outlined),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: textField(contractController,
+                                  'Contract Number',
+                                  icon: Icons.tag,
+                                  readOnly: true),
+                            ),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: dateField(orderDateController,
+                                'Order Date', required: true)),
+                            const SizedBox(width: 12),
+                            Expanded(child: dateField(endDateController,
+                                'End Date')),
+                            const SizedBox(width: 12),
+                            Expanded(child: dateField(deliveryDateController,
+                                'Delivery Date')),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: textField(salesEngineerController,
+                                'Sales Engineer (optional)',
+                                icon: Icons.person_outline)),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: OutlinedButton.icon(
+                                style: OutlinedButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12, vertical: 17),
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                ),
+                                onPressed: () => chooseFactory(
+                                    setDialogState, dialogContext),
+                                icon: const Icon(Icons.factory_outlined),
+                                label: Text(
+                                  selectedFactoryCode == null
+                                      ? 'Select factory'
+                                      : '${_factoryDescriptions[selectedFactoryCode!.toLowerCase()] ?? selectedFactoryCode} • $selectedFactoryCode',
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: GoogleFonts.cairo(fontSize: 12),
+                                ),
+                              ),
+                            ),
+                          ]),
+                          const SizedBox(height: 12),
+                          Row(children: [
+                            Expanded(child: employeeDropdown(
+                              'Responsible Engineer',
+                              selectedResponsibleEngineer,
+                                  (v) => setDialogState(
+                                      () => selectedResponsibleEngineer = v),
+                            )),
+                            const SizedBox(width: 12),
+                            Expanded(child: employeeDropdown(
+                              'Reviewer',
+                              selectedReviewer,
+                                  (v) => setDialogState(
+                                      () => selectedReviewer = v),
+                            )),
+                          ]),
+                          const SizedBox(height: 24),
+                          Row(children: [
+                            Expanded(child: sectionTitle(
+                              Icons.inventory_2_outlined,
+                              'Contract items',
+                              '${itemControllers.length} item(s) in this contract',
+                            )),
+                            SizedBox(
+                              width: 105,
+                              child: TextField(
+                                controller: countController,
+                                textAlign: TextAlign.center,
+                                keyboardType: TextInputType.number,
+                                decoration: inputDecoration('Item count'),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            IconButton.filledTonal(
+                              tooltip: 'Update item count',
+                              onPressed: () {
+                                final count = int.tryParse(
+                                    countController.text.trim()) ?? 0;
+                                if (count < 1 || count > 100) {
+                                  _showSnackBar(
+                                      'Enter a number between 1 and 100');
+                                  return;
+                                }
+                                setDialogState(syncItemCount);
+                              },
+                              icon: const Icon(Icons.refresh),
+                            ),
+                          ]),
+                          ...List.generate(itemControllers.length, (index) {
+                            final item = itemControllers[index];
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 12),
+                              padding: const EdgeInsets.all(15),
+                              decoration: BoxDecoration(
+                                border: Border.all(
+                                    color: theme.dividerColor),
+                                borderRadius: BorderRadius.circular(15),
+                                color: theme.colorScheme.surface,
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(children: [
+                                    CircleAvatar(
+                                      radius: 15,
+                                      backgroundColor: primary.withOpacity(.12),
+                                      child: Text('${index + 1}',
+                                          style: TextStyle(
+                                              color: primary,
+                                              fontWeight: FontWeight.w700)),
+                                    ),
+                                    const SizedBox(width: 9),
+                                    Text('Item ${index + 1}',
+                                        style: GoogleFonts.cairo(
+                                            fontWeight: FontWeight.w700)),
+                                  ]),
+                                  const SizedBox(height: 12),
+                                  Row(children: [
+                                    Expanded(child: textField(
+                                        item['item']!, 'Item')),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: textField(
+                                        item['product_code']!, 'Product Code')),
+                                  ]),
+                                  const SizedBox(height: 10),
+                                  textField(item['description']!,
+                                      'Description', lines: 2),
+                                  const SizedBox(height: 10),
+                                  Row(children: [
+                                    Expanded(child: textField(
+                                        item['quantity']!, 'Quantity',
+                                        numeric: true)),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: textField(
+                                        item['unit']!, 'Unit')),
+                                    const SizedBox(width: 10),
+                                    Expanded(child: textField(
+                                        item['value']!, 'Value',
+                                        numeric: true)),
+                                  ]),
+                                ],
+                              ),
+                            );
+                          }),
+                        ],
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(22, 12, 22, 18),
+                    child: Row(children: [
+                      TextButton(
+                        onPressed: () => Navigator.pop(dialogContext, false),
+                        child: Text('Cancel',
+                            style: GoogleFonts.cairo()),
+                      ),
+                      const Spacer(),
+                      FilledButton.icon(
+                        onPressed: () {
+                          if (customerController.text.trim().isEmpty) {
+                            _showSnackBar('Customer Name is required');
+                            return;
+                          }
+                          if (DateTime.tryParse(orderDateController.text) == null) {
+                            _showSnackBar('Please select the Order Date');
+                            return;
+                          }
+                          if (itemControllers.isEmpty) {
+                            _showSnackBar('Add at least one contract item');
+                            return;
+                          }
+                          Navigator.pop(dialogContext, true);
+                        },
+                        icon: const Icon(Icons.check_circle_outline),
+                        label: Text('Create Contract',
+                            style: GoogleFonts.cairo(
+                                fontWeight: FontWeight.w700)),
+                      ),
+                    ]),
+                  ),
+                ],
               ),
             ),
-            actions: [
-              TextButton(onPressed: saving ? null : () => Navigator.pop(dialogContext, false), child: Text('Cancel', style: GoogleFonts.cairo())),
-              ElevatedButton.icon(
-                onPressed: saving ? null : () {
-                  if (customerController.text.trim().isEmpty) {
-                    _showSnackBar('Customer Name is required');
-                    return;
-                  }
-                  if (itemControllers.isEmpty) {
-                    _showSnackBar('Set the number of contract items first');
-                    return;
-                  }
-                  Navigator.pop(dialogContext, true);
-                },
-                icon: const Icon(Icons.save),
-                label: Text('Create Contract', style: GoogleFonts.cairo()),
-              ),
-            ],
           );
         },
       ),
@@ -1273,36 +1565,43 @@ class _OrdersPageState extends State<OrdersPage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
-        final nowDate = DateFormat('yyyy-MM-dd').format(DateTime.now());
         final rows = itemControllers.map((item) => <String, dynamic>{
           'status': 'Tasks',
           'customer_name': customerController.text.trim(),
-          'item_number': item['item']!.text.trim().isEmpty ? '0' : item['item']!.text.trim(),
-          'product_code': item['product_code']!.text.trim().isEmpty ? '0' : item['product_code']!.text.trim(),
-          'contract_number': contractController.text.trim().isEmpty ? '0' : contractController.text.trim(),
+          'item_number': item['item']!.text.trim().isEmpty
+              ? '0' : item['item']!.text.trim(),
+          'product_code': item['product_code']!.text.trim().isEmpty
+              ? '0' : item['product_code']!.text.trim(),
+          'contract_number': contractController.text.trim(),
           'description': item['description']!.text.trim(),
-          'design_order': designOrderController.text.trim().isEmpty ? '0' : designOrderController.text.trim(),
-          'quantity': double.tryParse(item['quantity']!.text.replaceAll(',', '')) ?? 0,
-          'unit_of_measure': item['unit']!.text.trim().isEmpty ? 'EA' : item['unit']!.text.trim(),
-          'value': double.tryParse(item['value']!.text.replaceAll(',', '').replaceAll('\$', '')) ?? 0,
-          'sales_engineer': salesEngineerController.text.trim().isEmpty ? null : salesEngineerController.text.trim(),
-          'order_date': orderDateController.text.trim().isEmpty ? nowDate : orderDateController.text.trim(),
-          'end_date': endDateController.text.trim().isEmpty ? null : endDateController.text.trim(),
-          'delivery_date': deliveryDateController.text.trim().isEmpty ? null : deliveryDateController.text.trim(),
-          // Store the factory/SLoc code, not its description.
+          'design_order': null,
+          'quantity': double.tryParse(
+              item['quantity']!.text.replaceAll(',', '')) ?? 0,
+          'unit_of_measure': item['unit']!.text.trim().isEmpty
+              ? 'EA' : item['unit']!.text.trim(),
+          'value': double.tryParse(item['value']!.text
+              .replaceAll(',', '').replaceAll('\$', '')) ?? 0,
+          'sales_engineer': salesEngineerController.text.trim().isEmpty
+              ? null : salesEngineerController.text.trim(),
+          'order_date': orderDateController.text.trim(),
+          'end_date': endDateController.text.trim().isEmpty
+              ? null : endDateController.text.trim(),
+          'delivery_date': deliveryDateController.text.trim().isEmpty
+              ? null : deliveryDateController.text.trim(),
           'factory': selectedFactoryCode,
           'design_team': widget.loggedInEmployee?.department,
-          'responsible_engineer': null,
-          'reviewer': null,
+          'responsible_engineer': selectedResponsibleEngineer,
+          'reviewer': selectedReviewer,
           'correspondence_engineer': null,
         }).toList();
 
-        final response = await Supabase.instance.client
+        final response = await supabase
             .from('sap_main_orders')
             .insert(rows)
             .select();
         final createdOrders = (response as List)
-            .map((row) => SAPMainOrder.fromJson(Map<String, dynamic>.from(row)))
+            .map((row) => SAPMainOrder.fromJson(
+            Map<String, dynamic>.from(row)))
             .toList();
         if (mounted) {
           setState(() {
@@ -1313,7 +1612,8 @@ class _OrdersPageState extends State<OrdersPage> {
             _isLoading = false;
           });
           _rebuildGroups();
-          _showSnackBar('Contract created successfully (${createdOrders.length} items)');
+          _showSnackBar(
+              'Contract ${contractController.text} created successfully (${createdOrders.length} items)');
         }
       } catch (e) {
         if (mounted) {
@@ -1326,13 +1626,14 @@ class _OrdersPageState extends State<OrdersPage> {
     countController.dispose();
     customerController.dispose();
     contractController.dispose();
-    designOrderController.dispose();
     orderDateController.dispose();
     endDateController.dispose();
     deliveryDateController.dispose();
     salesEngineerController.dispose();
     for (final item in itemControllers) {
-      for (final controller in item.values) { controller.dispose(); }
+      for (final controller in item.values) {
+        controller.dispose();
+      }
     }
   }
 
