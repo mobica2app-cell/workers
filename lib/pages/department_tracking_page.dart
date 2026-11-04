@@ -1795,18 +1795,34 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                Text(
-                  'Departments',
-                  style: GoogleFonts.cairo(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                    color: _textColor,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 12),
+              child: Stack(
+                alignment: Alignment.center,
+                children: [
+                  Text(
+                    'Departments',
+                    style: GoogleFonts.cairo(
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                      color: _textColor,
+                    ),
                   ),
-                ),
-              ],
+                  Positioned(
+                    right: 0,
+                    child: IconButton(
+                      tooltip: 'Refresh data',
+                      onPressed: _isLoading ? null : _loadData,
+                      icon: Icon(
+                        Icons.refresh,
+                        color: _isLoading
+                            ? _secondaryTextColor.withOpacity(0.5)
+                            : Theme.of(context).colorScheme.primary,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
             ),
             // Graph is intentionally the first section of the page.
             Padding(
