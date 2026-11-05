@@ -595,10 +595,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       }) {
     final actualStage = _currentStageForStatus(order.status) ?? stage;
     final contractNumberValue = int.tryParse(order.contractNumber.trim());
-    final displayOrderReference =
-    showAssignmentEditors &&
-        contractNumberValue != null &&
-        contractNumberValue < 10
+    final isDesignOrderReference =
+        showAssignmentEditors &&
+            contractNumberValue != null &&
+            contractNumberValue < 10;
+    final displayOrderReference = isDesignOrderReference
         ? order.designOrder.trim()
         : order.contractNumber.trim();
     return Material(
@@ -626,10 +627,10 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                       Expanded(
                         child: Text(
                           displayOrderReference.isNotEmpty
-                              ? displayOrderReference
-                              : (showAssignmentEditors &&
-                              contractNumberValue != null &&
-                              contractNumberValue < 10
+                              ? (isDesignOrderReference
+                              ? 'Design $displayOrderReference'
+                              : displayOrderReference)
+                              : (isDesignOrderReference
                               ? 'no design order'
                               : 'no contract number'),
                           overflow: TextOverflow.ellipsis,
