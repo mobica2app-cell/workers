@@ -594,6 +594,13 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         void Function(SAPMainOrder updatedOrder)? onOrderUpdated,
       }) {
     final actualStage = _currentStageForStatus(order.status) ?? stage;
+    final contractNumberValue = int.tryParse(order.contractNumber.trim());
+    final displayOrderReference =
+    showAssignmentEditors &&
+        contractNumberValue != null &&
+        contractNumberValue < 10
+        ? order.designOrder.trim()
+        : order.contractNumber.trim();
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -618,9 +625,13 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                     children: [
                       Expanded(
                         child: Text(
-                          order.contractNumber.isNotEmpty
-                              ? order.contractNumber
-                              : 'no contract number',
+                          displayOrderReference.isNotEmpty
+                              ? displayOrderReference
+                              : (showAssignmentEditors &&
+                              contractNumberValue != null &&
+                              contractNumberValue < 10
+                              ? 'no design order'
+                              : 'no contract number'),
                           overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.cairo(
                             fontSize: 13,

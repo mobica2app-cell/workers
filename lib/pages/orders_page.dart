@@ -1039,7 +1039,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  // Create a contract: shared fields are entered once; item numbers auto-run 1001–1999 per contract.
+  // Create a contract: shared fields are entered once; item numbers auto-run 1000, 2000, 3000... per contract.
   Future<void> _showAddContractDialog() async {
     final supabase = Supabase.instance.client;
     final countController = TextEditingController(text: '1');
@@ -1067,10 +1067,10 @@ class _OrdersPageState extends State<OrdersPage> {
 
     void syncItemCount() {
       final count = int.tryParse(countController.text.trim()) ?? 0;
-      if (count < 1 || count > 899) return;
+      if (count < 1 || count > 100) return;
       while (itemControllers.length < count) {
-        // Item numbering restarts at 1001 for each new contract.
-        itemControllers.add(makeItemControllers(1001 + itemControllers.length));
+        // Item numbering restarts at 1000 and increases by 1000 for each item.
+        itemControllers.add(makeItemControllers(1000 * (itemControllers.length + 1)));
       }
       while (itemControllers.length > count) {
         final removed = itemControllers.removeLast();
@@ -1455,7 +1455,7 @@ class _OrdersPageState extends State<OrdersPage> {
                                     countController.text.trim()) ?? 0;
                                 if (count < 1 || count > 100) {
                                   _showSnackBar(
-                                      'Enter a number between 1 and 899 (item numbers 1001–1999)');
+                                      'Enter a number between 1 and 100');
                                   return;
                                 }
                                 setDialogState(syncItemCount);
