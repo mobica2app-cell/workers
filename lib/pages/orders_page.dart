@@ -2415,17 +2415,12 @@ class _OrdersPageState extends State<OrdersPage> {
       SAPMainOrder order,
       String newValue,
       ) async {
-
     final oldValue = order.designTeam;
+    final isImported =
+        order.status.trim().toLowerCase() == 'imported';
 
-    // Imported/Automated orders cannot change Design Team until all
-    // required SAP fields are filled.
-    final currentStatusIsImportedOrAutomated =
-        order.status.trim().toLowerCase() == 'imported' ||
-            order.status.trim().toLowerCase() == 'automated';
-
-    if (currentStatusIsImportedOrAutomated &&
-        !_hasRequiredStatusChangeFields(order)) {
+    // Only Imported orders require the SAP fields before changing Design Team.
+    if (isImported && !_hasRequiredStatusChangeFields(order)) {
       _showYellowWarning(
         '⚠️ Complete these fields before changing Design Team: '
             '${_missingRequiredStatusChangeFields(order)}',
@@ -2433,8 +2428,12 @@ class _OrdersPageState extends State<OrdersPage> {
       return;
     }
 
-    // Auto-map status based on design team
-    String getAutoStatus(String team) {
+    // Changing Design Team changes the Status/section ONLY for Imported orders.
+    String getAutoStatus(String team, String currentStatus) {
+      if (currentStatus.trim().toLowerCase() != 'imported') {
+        return currentStatus;
+      }
+
       switch (team) {
         case 'partition division':
         case 'product division':
@@ -2452,54 +2451,72 @@ class _OrdersPageState extends State<OrdersPage> {
         case 'planning':
           return 'planning';
         default:
-          return order.status;
+          return currentStatus;
       }
     }
 
-    final autoStatus = getAutoStatus(newValue);
-
     if (_isOrderLocked(order)) {
-      _showYellowWarning('⚠️ Cannot edit "Done", "Task Done", "Planning", or "Master Data" orders');
+      _showYellowWarning(
+        '⚠️ Cannot edit "Done", "Task Done", "Planning", or "Master Data" orders',
+      );
       return;
     }
 
-    // If multiple rows selected, apply to all
+    // If multiple rows are selected, apply the same Design Team to each row.
+    // Only Imported rows get the automatic Status/section transition.
     if (_selectedRowsIds.length > 1) {
       setState(() => _isLoading = true);
       final supabase = Supabase.instance.client;
       int updated = 0;
       int skipped = 0;
+      int statusChanged = 0;
 
-      for (var orderId in _selectedRowsIds) {
-        final selectedOrder = _allOrders
-            .where((o) => o.id == orderId)
-            .firstOrNull;
-        if (selectedOrder != null) {
-          // Skip locked orders
-          if (_isOrderLocked(selectedOrder)) {
-            skipped++;
-            continue;
-          }
+      for (final orderId in _selectedRowsIds) {
+        final selectedOrder =
+            _allOrders.where((o) => o.id == orderId).firstOrNull;
+        if (selectedOrder == null) continue;
 
-          try {
-            final selectedAutoStatus = getAutoStatus(newValue);
+        if (_isOrderLocked(selectedOrder)) {
+          skipped++;
+          continue;
+        }
 
-            await supabase
-                .from('sap_main_orders')
-                .update({'design_team': newValue, 'status': selectedAutoStatus})
-                .eq('id', selectedOrder.id);
+        final selectedIsImported =
+            selectedOrder.status.trim().toLowerCase() == 'imported';
 
-            await _auditService.logChange(
-              orderId: selectedOrder.id,
-              designOrder: selectedOrder.designOrder,
-              fieldName: 'design_team',
-              oldValue: selectedOrder.designTeam,
-              newValue: newValue,
-              changedBy: _currentUserName,
-              changedById: _currentUserId,
-              actionType: 'bulk_update',
-            );
+        if (selectedIsImported &&
+            !_hasRequiredStatusChangeFields(selectedOrder)) {
+          skipped++;
+          continue;
+        }
 
+        final selectedAutoStatus =
+        getAutoStatus(newValue, selectedOrder.status);
+        final updateValues = <String, dynamic>{
+          'design_team': newValue,
+        };
+        if (selectedAutoStatus != selectedOrder.status) {
+          updateValues['status'] = selectedAutoStatus;
+        }
+
+        try {
+          await supabase
+              .from('sap_main_orders')
+              .update(updateValues)
+              .eq('id', selectedOrder.id);
+
+          await _auditService.logChange(
+            orderId: selectedOrder.id,
+            designOrder: selectedOrder.designOrder,
+            fieldName: 'design_team',
+            oldValue: selectedOrder.designTeam,
+            newValue: newValue,
+            changedBy: _currentUserName,
+            changedById: _currentUserId,
+            actionType: 'bulk_update',
+          );
+
+          if (selectedAutoStatus != selectedOrder.status) {
             await _auditService.logChange(
               orderId: selectedOrder.id,
               designOrder: selectedOrder.designOrder,
@@ -2510,34 +2527,56 @@ class _OrdersPageState extends State<OrdersPage> {
               changedById: _currentUserId,
               actionType: 'bulk_update',
             );
-
-            updated++;
-          } catch (e) {
-            print('Failed: $e');
+            statusChanged++;
           }
+
+          updated++;
+          _updateOrderLocally(selectedOrder.id, 'design_team', newValue);
+          if (selectedAutoStatus != selectedOrder.status) {
+            _updateOrderLocally(
+              selectedOrder.id,
+              'status',
+              selectedAutoStatus,
+            );
+          }
+        } catch (e) {
+          print('Failed to update Design Team for ${selectedOrder.id}: $e');
+          skipped++;
         }
       }
 
-      setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
+
       if (skipped > 0) {
         _showSnackBar(
-          '✅ Design Team updated for $updated rows, '
-              '⚠️ $skipped rows skipped (locked or missing required fields)',
+          '✅ Design Team updated for $updated rows; '
+              '⚠️ $skipped rows skipped (locked or Imported rows missing required fields).',
+        );
+      } else if (statusChanged > 0) {
+        _showSnackBar(
+          '✅ Design Team updated for $updated rows; '
+              'Status/section changed for $statusChanged Imported rows.',
         );
       } else {
-        _showSnackBar('✅ Design Team & Status updated for $updated rows!');
+        _showSnackBar(
+          '✅ Design Team updated for $updated rows. Status/section unchanged.',
+        );
       }
-      _updateMultipleOrdersLocally('design_team', newValue);
-      _updateMultipleOrdersLocally('status', autoStatus);
       return;
     }
 
-    // Single row update
+    // Single-row update.
+    final autoStatus = getAutoStatus(newValue, order.status);
+    final updateValues = <String, dynamic>{'design_team': newValue};
+    if (autoStatus != order.status) {
+      updateValues['status'] = autoStatus;
+    }
+
     try {
       final supabase = Supabase.instance.client;
       await supabase
           .from('sap_main_orders')
-          .update({'design_team': newValue, 'status': autoStatus})
+          .update(updateValues)
           .eq('id', order.id);
 
       await _auditService.logChange(
@@ -2550,19 +2589,23 @@ class _OrdersPageState extends State<OrdersPage> {
         changedById: _currentUserId,
       );
 
-      await _auditService.logChange(
-        orderId: order.id,
-        designOrder: order.designOrder,
-        fieldName: 'status',
-        oldValue: order.status,
-        newValue: autoStatus,
-        changedBy: _currentUserName,
-        changedById: _currentUserId,
-      );
+      if (autoStatus != order.status) {
+        await _auditService.logChange(
+          orderId: order.id,
+          designOrder: order.designOrder,
+          fieldName: 'status',
+          oldValue: order.status,
+          newValue: autoStatus,
+          changedBy: _currentUserName,
+          changedById: _currentUserId,
+        );
+        _showSnackBar('Design Team → $newValue, Status → $autoStatus');
+        _updateOrderLocally(order.id, 'status', autoStatus);
+      } else {
+        _showSnackBar('Design Team updated → $newValue. Status unchanged.');
+      }
 
-      _showSnackBar('Design Team → $newValue, Status → $autoStatus');
       _updateOrderLocally(order.id, 'design_team', newValue);
-      _updateOrderLocally(order.id, 'status', autoStatus);
     } catch (e) {
       _showSnackBar('Error updating: $e');
     }
