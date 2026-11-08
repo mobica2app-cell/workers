@@ -3857,9 +3857,9 @@ class _OrdersPageState extends State<OrdersPage> {
     ).then((_) => _loadAllDataOnce());
   }
 
-  // Navigate to OrderTrackingPage (admin and managers only)
+  // Navigate to OrderTrackingPage (heads, managers, and Data Entry)
   void _navigateToOrderTracking(SAPMainOrder order) {
-    if (_isHedOrManager) {
+    if (_isHedOrManager || _isDataEntry) {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
@@ -7409,7 +7409,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ),
             ),
             // Add tracking icon for admin users
-            if (_isHedOrManager&&!_isDataEntry)
+            if (_isHedOrManager || _isDataEntry)
               SizedBox(
                 width: 36,
                 child: IconButton(
