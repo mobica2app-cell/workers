@@ -1619,7 +1619,7 @@ class _OrdersPageState extends State<OrdersPage> {
       setState(() => _isLoading = true);
       try {
         final rows = itemControllers.map((item) => <String, dynamic>{
-          'status': 'Tasks',
+          'status': 'Drawing Submittal',
           'customer_name': customerController.text.trim(),
           'item_number': item['item']!.text.trim().isEmpty
               ? '0' : item['item']!.text.trim(),
