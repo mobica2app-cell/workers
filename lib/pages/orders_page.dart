@@ -257,6 +257,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
   static const List<String> _defaultStatuses = [
     'Drawing Submittal',
+    'imported',
     'Approval',
     'modifications submitted',
     'Manufacturing Drawing',
@@ -273,7 +274,6 @@ class _OrdersPageState extends State<OrdersPage> {
     'partation  master data',
     'الادارة الهندسه',
     'design studio',
-    'imported',
     'ادارة تصميم المنتجات',
     'automated',
     'Partition Editing',
@@ -1051,7 +1051,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final endDateController = TextEditingController();
     final deliveryDateController = TextEditingController();
     final salesEngineerController = TextEditingController();
-    String? selectedFactoryCode;
+    final List<String?> itemFactoryCodes = [];
     String? selectedResponsibleEngineer;
     String? selectedReviewer;
     List<Map<String, TextEditingController>> itemControllers = [];
@@ -1071,8 +1071,10 @@ class _OrdersPageState extends State<OrdersPage> {
       while (itemControllers.length < count) {
         // Item numbering restarts at 1000 and increases by 1000 for each item.
         itemControllers.add(makeItemControllers(1000 * (itemControllers.length + 1)));
+        itemFactoryCodes.add(null);
       }
       while (itemControllers.length > count) {
+        itemFactoryCodes.removeLast();
         final removed = itemControllers.removeLast();
         for (final c in removed.values) {
           c.dispose();
@@ -1097,6 +1099,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
 
     Future<void> chooseFactory(
+        int itemIndex,
         StateSetter setDialogState,
         BuildContext dialogContext,
         ) async {
@@ -1163,7 +1166,7 @@ class _OrdersPageState extends State<OrdersPage> {
       );
       searchController.dispose();
       if (picked != null) {
-        setDialogState(() => selectedFactoryCode = picked);
+        setDialogState(() => itemFactoryCodes[itemIndex] = picked);
       }
     }
 
@@ -1289,21 +1292,67 @@ class _OrdersPageState extends State<OrdersPage> {
               String label,
               String? value,
               ValueChanged<String?> onChanged,
-              ) => DropdownButtonFormField<String>(
-            value: value,
-            isExpanded: true,
-            decoration: inputDecoration(label, icon: Icons.person_outline),
-            items: [
-              const DropdownMenuItem<String>(
-                value: null,
-                child: Text('Not assigned'),
-              ),
-              ...employeeNames.map((name) => DropdownMenuItem(
-                value: name,
-                child: Text(name, overflow: TextOverflow.ellipsis),
-              )),
-            ],
-            onChanged: onChanged,
+              ) => InkWell(
+            borderRadius: BorderRadius.circular(12),
+            onTap: () async {
+              final searchController = TextEditingController();
+              final picked = await showDialog<String>(
+                context: dialogContext,
+                builder: (pickerContext) => StatefulBuilder(
+                  builder: (pickerContext, setPickerState) {
+                    final query = searchController.text.trim().toLowerCase();
+                    final matches = employeeNames.where((name) =>
+                        name.toLowerCase().contains(query)).toList();
+                    return AlertDialog(
+                      title: Text('Select $label'),
+                      content: SizedBox(
+                        width: 420,
+                        height: 420,
+                        child: Column(children: [
+                          TextField(
+                            controller: searchController,
+                            autofocus: true,
+                            decoration: const InputDecoration(
+                              hintText: 'Search...',
+                              prefixIcon: Icon(Icons.search),
+                              border: OutlineInputBorder(),
+                            ),
+                            onChanged: (_) => setPickerState(() {}),
+                          ),
+                          const SizedBox(height: 8),
+                          ListTile(
+                            title: const Text('Not assigned'),
+                            onTap: () => Navigator.pop(pickerContext, ''),
+                          ),
+                          const Divider(height: 1),
+                          Expanded(child: matches.isEmpty
+                              ? const Center(child: Text('No results found'))
+                              : ListView.builder(
+                            itemCount: matches.length,
+                            itemBuilder: (_, i) => ListTile(
+                              title: Text(matches[i]),
+                              selected: matches[i] == value,
+                              onTap: () => Navigator.pop(pickerContext, matches[i]),
+                            ),
+                          )),
+                        ]),
+                      ),
+                    );
+                  },
+                ),
+              );
+              searchController.dispose();
+              if (picked != null) onChanged(picked.isEmpty ? null : picked);
+            },
+            child: InputDecorator(
+              decoration: inputDecoration(label, icon: Icons.person_search),
+              child: Row(children: [
+                Expanded(child: Text(value ?? 'Not assigned',
+                    overflow: TextOverflow.ellipsis,
+                    style: GoogleFonts.cairo(fontSize: 13))),
+                const Icon(Icons.arrow_drop_down),
+              ]),
+            ),
           );
 
           return Dialog(
@@ -1388,33 +1437,9 @@ class _OrdersPageState extends State<OrdersPage> {
                                 'Delivery Date')),
                           ]),
                           const SizedBox(height: 12),
-                          Row(children: [
-                            Expanded(child: textField(salesEngineerController,
-                                'Sales Engineer (optional)',
-                                icon: Icons.person_outline)),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 12, vertical: 17),
-                                  shape: RoundedRectangleBorder(
-                                      borderRadius: BorderRadius.circular(12)),
-                                ),
-                                onPressed: () => chooseFactory(
-                                    setDialogState, dialogContext),
-                                icon: const Icon(Icons.factory_outlined),
-                                label: Text(
-                                  selectedFactoryCode == null
-                                      ? 'Select factory'
-                                      : '${_factoryDescriptions[selectedFactoryCode!.toLowerCase()] ?? selectedFactoryCode} • $selectedFactoryCode',
-                                  maxLines: 1,
-                                  overflow: TextOverflow.ellipsis,
-                                  style: GoogleFonts.cairo(fontSize: 12),
-                                ),
-                              ),
-                            ),
-                          ]),
+                          textField(salesEngineerController,
+                              'Sales Engineer (optional)',
+                              icon: Icons.person_outline),
                           const SizedBox(height: 12),
                           Row(children: [
                             Expanded(child: employeeDropdown(
@@ -1445,6 +1470,14 @@ class _OrdersPageState extends State<OrdersPage> {
                                 textAlign: TextAlign.center,
                                 keyboardType: TextInputType.number,
                                 decoration: inputDecoration('Item count'),
+                                onSubmitted: (_) {
+                                  final count = int.tryParse(countController.text.trim()) ?? 0;
+                                  if (count < 1 || count > 100) {
+                                    _showSnackBar('Enter a number between 1 and 100');
+                                    return;
+                                  }
+                                  setDialogState(syncItemCount);
+                                },
                               ),
                             ),
                             const SizedBox(width: 8),
@@ -1503,6 +1536,24 @@ class _OrdersPageState extends State<OrdersPage> {
                                   const SizedBox(height: 10),
                                   textField(item['description']!,
                                       'Description', lines: 2),
+                                  const SizedBox(height: 10),
+                                  SizedBox(
+                                    width: double.infinity,
+                                    child: OutlinedButton.icon(
+                                      style: OutlinedButton.styleFrom(
+                                        padding: const EdgeInsets.symmetric(vertical: 14),
+                                        shape: RoundedRectangleBorder(
+                                            borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      onPressed: () => chooseFactory(
+                                          index, setDialogState, dialogContext),
+                                      icon: const Icon(Icons.factory_outlined),
+                                      label: Text(itemFactoryCodes[index] == null
+                                          ? 'Select factory for this item'
+                                          : '${_formatFactoryLabel(itemFactoryCodes[index]!)}',
+                                          maxLines: 1, overflow: TextOverflow.ellipsis),
+                                    ),
+                                  ),
                                   const SizedBox(height: 10),
                                   Row(children: [
                                     Expanded(child: textField(
@@ -1590,7 +1641,8 @@ class _OrdersPageState extends State<OrdersPage> {
               ? null : endDateController.text.trim(),
           'delivery_date': deliveryDateController.text.trim().isEmpty
               ? null : deliveryDateController.text.trim(),
-          'factory': selectedFactoryCode,
+          'factory': itemFactoryCodes.length > itemControllers.indexOf(item)
+              ? itemFactoryCodes[itemControllers.indexOf(item)] : null,
           'design_team': widget.loggedInEmployee?.department,
           'responsible_engineer': selectedResponsibleEngineer,
           'reviewer': selectedReviewer,
