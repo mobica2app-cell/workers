@@ -1161,24 +1161,43 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
 
-    // Find the next PDC number from the values already stored in Supabase.
+    // Find the next PDC number across active and archived orders.
+    // Fetch in pages so Supabase's row limit cannot hide the latest number.
     try {
-      final existing = await supabase
-          .from('sap_main_orders')
-          .select('contract_number');
       var highest = 1000;
-      for (final row in existing as List) {
-        final value = (row['contract_number'] ?? '').toString().trim();
-        final match = RegExp(r'^PDC(\d+)$', caseSensitive: false)
-            .firstMatch(value);
-        final number = int.tryParse(match?.group(1) ?? '');
-        if (number != null && number > highest) highest = number;
+      for (final table in ['sap_main_orders', 'sap_done_orders']) {
+        var offset = 0;
+        const pageSize = 1000;
+        while (true) {
+          final page = await supabase
+              .from(table)
+              .select('contract_number')
+              .range(offset, offset + pageSize - 1);
+
+          for (final row in page as List) {
+            final value = (row['contract_number'] ?? '').toString().trim();
+            final match = RegExp(r'^PDC(\d+)$', caseSensitive: false)
+                .firstMatch(value);
+            final number = int.tryParse(match?.group(1) ?? '');
+            if (number != null && number > highest) highest = number;
+          }
+
+          if (page.length < pageSize) break;
+          offset += pageSize;
+        }
       }
       contractController.text = 'PDC${highest + 1}';
     } catch (e) {
-      // Keep a safe starting value visible, but do not silently claim it is unique.
-      contractController.text = 'PDC1001';
-      _showSnackBar('Could not check existing contract numbers: $e');
+      // Never fall back to PDC1001: that could create a duplicate contract.
+      _showSnackBar('Could not verify the next contract number. Please try again. ($e)');
+      countController.dispose();
+      customerController.dispose();
+      contractController.dispose();
+      orderDateController.dispose();
+      endDateController.dispose();
+      deliveryDateController.dispose();
+      salesEngineerController.dispose();
+      return;
     }
 
     final employeeNames = _allEmployees
