@@ -8660,7 +8660,6 @@ class _OrdersPageState extends State<OrdersPage> {
         'الادارة الهندسه',
       },
       'approval': {
-        'sales',
         'as built',
         'master data',
         'planning',
