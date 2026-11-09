@@ -263,8 +263,6 @@ class _OrdersPageState extends State<OrdersPage> {
     'Manufacturing Drawing',
     'Done',
     'Task Done',
-    'مطلوب اكوادها الاسترشاديه',
-    'تحت المراجعة',
     'Review',
     'Master Data',
     'Sales',
@@ -280,19 +278,12 @@ class _OrdersPageState extends State<OrdersPage> {
   ];
 
   static const List<String> _allTeamStatuses = [
-    'تصميم المنتجات',
-    'imos team',
     'partition division',
     'product division',
-    'الادارة الهندسية',
-    'Master Data division',
-    'design studio',
     'تفصيل مصنع',
     'Chair & Sofa Division',
-    'sometimes',
     'purch',
     'cladding division',
-    'Unknown',
   ];
 
   void _loadStatusesFromStorage() {
