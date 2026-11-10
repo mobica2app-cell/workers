@@ -3658,7 +3658,8 @@ class _OrdersPageState extends State<OrdersPage> {
             (o) =>
         o.contractNumber.toLowerCase().contains(q) ||
             o.customerName.toLowerCase().contains(q) ||
-            o.designOrder.toLowerCase().contains(q),
+            o.designOrder.toLowerCase().contains(q) ||
+            o.description.toLowerCase().contains(q),
       )
           .toList();
     }
