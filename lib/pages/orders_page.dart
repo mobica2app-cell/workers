@@ -451,9 +451,19 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // Update the _isOrderEditable method
+  bool _canEditPdcContract(SAPMainOrder order) {
+    return _isHedOrManager &&
+        order.contractNumber.trim().toUpperCase().startsWith('PDC');
+  }
+
   bool _isOrderEditable(SAPMainOrder order) {
     if (widget.readOnly) return false;
-    // Locked orders cannot be edited by anyone
+
+    // Heads and managers can edit PDC contract rows, even when their status
+    // would normally lock the row.
+    if (_canEditPdcContract(order)) return true;
+
+    // Locked orders cannot be edited by anyone else.
     if (_isOrderLocked(order)) return false;
 
     // Data Entry users can edit any row
@@ -1046,6 +1056,8 @@ class _OrdersPageState extends State<OrdersPage> {
     String? selectedResponsibleEngineer;
     String? selectedReviewer;
     List<Map<String, TextEditingController>> itemControllers = [];
+    String? selectedExistingContract;
+    int nextItemNumber = 1000;
 
     Map<String, TextEditingController> makeItemControllers(int itemNumber) => {
       'item': TextEditingController(text: itemNumber.toString()),
@@ -1060,8 +1072,9 @@ class _OrdersPageState extends State<OrdersPage> {
       final count = int.tryParse(countController.text.trim()) ?? 0;
       if (count < 1 || count > 100) return;
       while (itemControllers.length < count) {
-        // Item numbering restarts at 1000 and increases by 1000 for each item.
-        itemControllers.add(makeItemControllers(1000 * (itemControllers.length + 1)));
+        // Continue item numbering from the selected contract, or start at 1000.
+        itemControllers.add(makeItemControllers(nextItemNumber));
+        nextItemNumber += 1000;
         itemFactoryCodes.add(null);
       }
       while (itemControllers.length > count) {
@@ -1161,6 +1174,105 @@ class _OrdersPageState extends State<OrdersPage> {
       }
     }
 
+    Future<void> chooseExistingContract(
+        StateSetter setDialogState, BuildContext dialogContext) async {
+      final contracts = _allOrders
+          .where((o) => o.contractNumber.trim().isNotEmpty &&
+          o.contractNumber.trim() != '0')
+          .map((o) => o.contractNumber.trim())
+          .toSet()
+          .toList()
+        ..sort((a, b) => a.toLowerCase().compareTo(b.toLowerCase()));
+      final searchController = TextEditingController();
+      final picked = await showDialog<String>(
+        context: dialogContext,
+        builder: (pickerContext) => StatefulBuilder(
+          builder: (pickerContext, setPickerState) {
+            final q = searchController.text.trim().toLowerCase();
+            final matches = contracts.where((c) => c.toLowerCase().contains(q)).toList();
+            return AlertDialog(
+              title: const Text('Select an Existing Contract'),
+              content: SizedBox(
+                width: 450,
+                height: 430,
+                child: Column(children: [
+                  TextField(
+                    controller: searchController,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Search contract number',
+                      prefixIcon: Icon(Icons.search),
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (_) => setPickerState(() {}),
+                  ),
+                  const SizedBox(height: 8),
+                  Expanded(
+                    child: ListView.builder(
+                      itemCount: matches.length,
+                      itemBuilder: (_, i) {
+                        final number = matches[i];
+                        final order = _allOrders.firstWhere(
+                                (o) => o.contractNumber.trim() == number);
+                        return ListTile(
+                          title: Text(number),
+                          subtitle: Text(order.customerName),
+                          onTap: () => Navigator.pop(pickerContext, number),
+                        );
+                      },
+                    ),
+                  ),
+                ]),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(pickerContext),
+                  child: const Text('Cancel'),
+                ),
+              ],
+            );
+          },
+        ),
+      );
+      searchController.dispose();
+      if (picked == null) return;
+
+      final existing = _allOrders
+          .where((o) => o.contractNumber.trim() == picked)
+          .toList();
+      if (existing.isEmpty) return;
+      existing.sort((a, b) =>
+          (int.tryParse(a.itemNumber) ?? 0).compareTo(int.tryParse(b.itemNumber) ?? 0));
+      final first = existing.first;
+      final maxItem = existing
+          .map((o) => int.tryParse(o.itemNumber) ?? 0)
+          .fold<int>(0, (a, b) => a > b ? a : b);
+
+      setDialogState(() {
+        selectedExistingContract = picked;
+        if (picked.toUpperCase().startsWith('PDC')) {
+          contractController.text = picked.substring(3);
+        } else {
+          contractController.text = picked;
+        }
+        customerController.text = first.customerName;
+        if (first.orderDate != null && first.orderDate!.isNotEmpty) {
+          orderDateController.text = first.orderDate!;
+        }
+        endDateController.text = first.endDate ?? '';
+        deliveryDateController.text = first.deliveryDate ?? '';
+        salesEngineerController.text = first.salesEngineer ?? '';
+        selectedResponsibleEngineer = first.responsibleEngineer;
+        selectedReviewer = first.reviewer;
+        nextItemNumber = maxItem >= 1000 ? maxItem + 1000 : 1000;
+        // Re-number any currently prepared blank items after the existing ones.
+        for (var i = 0; i < itemControllers.length; i++) {
+          itemControllers[i]['item']!.text = (nextItemNumber + i * 1000).toString();
+        }
+        nextItemNumber += itemControllers.length * 1000;
+      });
+    }
+
     // Find the next PDC number across active and archived orders.
     // Fetch in pages so Supabase's row limit cannot hide the latest number.
     try {
@@ -1186,7 +1298,7 @@ class _OrdersPageState extends State<OrdersPage> {
           offset += pageSize;
         }
       }
-      contractController.text = 'PDC${highest + 1}';
+      contractController.text = '${highest + 1}';
     } catch (e) {
       // Never fall back to PDC1001: that could create a duplicate contract.
       _showSnackBar('Could not verify the next contract number. Please try again. ($e)');
@@ -1396,10 +1508,10 @@ class _OrdersPageState extends State<OrdersPage> {
                       Expanded(child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('Create New Contract',
+                          Text(selectedExistingContract == null ? 'Create New Contract' : 'Add Items to Contract',
                               style: GoogleFonts.cairo(
                                   fontSize: 18, fontWeight: FontWeight.w800)),
-                          Text('Enter shared details, then add contract items',
+                          Text(selectedExistingContract == null ? 'Enter shared details, then add contract items' : 'Existing contract selected — new items will be added to it',
                               style: GoogleFonts.cairo(
                                   fontSize: 11, color: theme.hintColor)),
                         ],
@@ -1429,10 +1541,19 @@ class _OrdersPageState extends State<OrdersPage> {
                             ),
                             const SizedBox(width: 12),
                             Expanded(
-                              child: textField(contractController,
-                                  'Contract Number',
-                                  icon: Icons.tag,
-                                  readOnly: true),
+                              child: TextField(
+                                controller: contractController,
+                                readOnly: true,
+                                style: GoogleFonts.cairo(fontSize: 13),
+                                decoration: inputDecoration('Contract Number')
+                                    .copyWith(prefixText: selectedExistingContract == null ? 'PDC' : null),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            OutlinedButton.icon(
+                              onPressed: () => chooseExistingContract(setDialogState, dialogContext),
+                              icon: const Icon(Icons.history, size: 18),
+                              label: const Text('Old'),
                             ),
                           ]),
                           const SizedBox(height: 12),
@@ -1600,6 +1721,10 @@ class _OrdersPageState extends State<OrdersPage> {
                             _showSnackBar('Customer Name is required');
                             return;
                           }
+                          if (contractController.text.trim().isEmpty) {
+                            _showSnackBar('Contract Number is required');
+                            return;
+                          }
                           if (DateTime.tryParse(orderDateController.text) == null) {
                             _showSnackBar('Please select the Order Date');
                             return;
@@ -1628,6 +1753,10 @@ class _OrdersPageState extends State<OrdersPage> {
     if (confirmed == true) {
       setState(() => _isLoading = true);
       try {
+        final contractNumber = selectedExistingContract ??
+            (contractController.text.trim().toUpperCase().startsWith('PDC')
+                ? contractController.text.trim()
+                : 'PDC${contractController.text.trim()}');
         final rows = itemControllers.map((item) => <String, dynamic>{
           'status': 'Drawing Submittal',
           'customer_name': customerController.text.trim(),
@@ -1635,7 +1764,7 @@ class _OrdersPageState extends State<OrdersPage> {
               ? '0' : item['item']!.text.trim(),
           'product_code': item['product_code']!.text.trim().isEmpty
               ? '0' : item['product_code']!.text.trim(),
-          'contract_number': contractController.text.trim(),
+          'contract_number': contractNumber,
           'description': item['description']!.text.trim(),
           'design_order': null,
           'quantity': double.tryParse(
@@ -1677,7 +1806,7 @@ class _OrdersPageState extends State<OrdersPage> {
           });
           _rebuildGroups();
           _showSnackBar(
-              'Contract ${contractController.text} created successfully (${createdOrders.length} items)');
+              'Contract $contractNumber updated successfully (${createdOrders.length} items added)');
         }
       } catch (e) {
         if (mounted) {
@@ -7384,7 +7513,7 @@ class _OrdersPageState extends State<OrdersPage> {
             Expanded(
               child: (_editMode &&
                   _isOrderEditable(order) &&
-                  !_isOrderLocked(order))
+                  (!_isOrderLocked(order) || _canEditPdcContract(order)))
                   ? Builder(
                 builder: (context) {
                   const field = 'customer_name';
@@ -7968,7 +8097,8 @@ class _OrdersPageState extends State<OrdersPage> {
     // ============================================
     // EDIT MODE
     // ============================================
-    if (_editMode && canEdit && !_isOrderLocked(order)) {
+    if (_editMode && canEdit &&
+        (!_isOrderLocked(order) || _canEditPdcContract(order))) {
       final editKey = '${order.id}_$field';
 
       // Create controller only once for this cell
