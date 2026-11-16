@@ -62,7 +62,7 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _filterMyWork = false;
   String? _selectedWorkEmployee; // Head-only employee work selector
   bool _editMode = false;
-  String _sortBy = 'date_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
+  String _sortBy = 'item_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
 
   // Fast O(1) Lookups & Pre-computed Lists
   Map<SAPMainOrder, int> _orderIndexMap = {};
