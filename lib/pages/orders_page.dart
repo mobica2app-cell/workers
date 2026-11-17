@@ -56,6 +56,10 @@ class _OrdersPageState extends State<OrdersPage> {
   bool _doneOrdersLoaded = false;
   bool _isLoading = false;
   String _searchQuery = '';
+  List<SAPMainOrder>? _searchResults;
+  Timer? _searchDebounce;
+  int _searchRequestId = 0;
+  bool _isSearchingAllOrders = false;
   bool _searchExpanded = false;
   final FocusNode _searchFocusNode = FocusNode();
   String? _filterDesignTeam;
@@ -666,7 +670,8 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   Future<void> _initializePageData() async {
-    await _loadFactoryNames();
+    // Start loading the main orders immediately; factory labels can load in parallel.
+    unawaited(_loadFactoryNames());
     await _loadAllDataOnce();
 
     // Both Orders routes use one combined table; do not load a separate
@@ -678,6 +683,7 @@ class _OrdersPageState extends State<OrdersPage> {
     _horizontalScrollController.dispose();
     _leftVerticalScrollController.dispose();
     _rightVerticalScrollController.dispose();
+    _searchDebounce?.cancel();
     _searchController.dispose();
     _searchFocusNode.dispose();
     for (final timer in _inlineSaveTimers.values) {
@@ -2923,6 +2929,23 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _loadAllDataOnce() async {
     setState(() => _isLoading = true);
     try {
+      final supabase = Supabase.instance.client;
+
+      // Fetch and render the main table immediately; do not wait for tracking,
+      // employee metadata, or archived records before showing orders.
+      final activeOrders = await widget.sapService.getAllOrders();
+      if (!mounted) return;
+      setState(() {
+        _allOrders = activeOrders;
+        _archivedOrderIds.clear();
+        _orderIndexMap = {
+          for (int i = 0; i < activeOrders.length; i++) activeOrders[i]: i,
+        };
+        _initialLoadDone = true;
+        _isLoading = false;
+        _rebuildGroups();
+      });
+
       // The archived page only needs SAP order records to build the table.
       // Avoid loading unrelated tracking/job datasets there; these queries
       // are not required for the SAP Done Orders table and can fail if those
@@ -2946,32 +2969,32 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       // Load employees from employees_auth table
-      final supabase = Supabase.instance.client;
       final employeeAuthService = EmployeeAuthService(supabase);
       _allEmployees = await employeeAuthService.getAllEmployees();
 
-      // Load both Supabase tables sequentially for BOTH Orders routes, then
-      // display all records together in the same table after both requests end.
-      final activeOrders = await widget.sapService.getAllOrders();
-      final archivedOrders = await widget.sapService.getAllDoneOrders();
-      _archivedOrderIds
-        ..clear()
-        ..addAll(archivedOrders.map((order) => order.id));
-      final List<SAPMainOrder> allOrders = <SAPMainOrder>[
-        ...activeOrders,
-        ...archivedOrders,
-      ];
-      print('✅ Combined SAP table loaded: ${activeOrders.length} active + '
-          '${archivedOrders.length} archived = ${allOrders.length} total');
+      // Keep only the newest 200 archived rows in the normal page dataset.
+      // Older archived rows are fetched from both tables only when searching.
+      final archivedRows = await supabase
+          .from('sap_done_orders')
+          .select('*')
+          .order('created_at', ascending: false)
+          .limit(200);
+      final recentArchived = (archivedRows as List)
+          .map((row) => SAPMainOrder.fromJson(Map<String, dynamic>.from(row)))
+          .toList();
+      if (!mounted) return;
       setState(() {
-        _allOrders = allOrders;
+        _archivedOrderIds
+          ..clear()
+          ..addAll(recentArchived.map((order) => order.id));
+        _allOrders = [..._allOrders, ...recentArchived];
         _orderIndexMap = {
-          for (int i = 0; i < allOrders.length; i++) allOrders[i]: i,
+          for (int i = 0; i < _allOrders.length; i++) _allOrders[i]: i,
         };
-        _initialLoadDone = true;
-        _isLoading = false;
         _rebuildGroups();
       });
+      print('✅ Loaded ${activeOrders.length} active + '
+          '${recentArchived.length} recent archived orders.');
     } catch (e) {
       setState(() => _isLoading = false);
     }
@@ -3010,6 +3033,79 @@ class _OrdersPageState extends State<OrdersPage> {
     widget.sapService.getAllDoneOrders().then((orders) {
       if (!mounted) return;
       setState(() => _doneOrders = orders);
+    });
+  }
+
+  void _scheduleSearchAllOrders(String value) {
+    _searchDebounce?.cancel();
+    final query = value.trim();
+    final requestId = ++_searchRequestId;
+    if (query.isEmpty) {
+      setState(() {
+        _searchResults = null;
+        _isSearchingAllOrders = false;
+      });
+      _rebuildGroups();
+      return;
+    }
+
+    setState(() {
+      _searchResults = null;
+      _isSearchingAllOrders = true;
+    });
+    _searchDebounce = Timer(const Duration(milliseconds: 350), () async {
+      try {
+        final client = Supabase.instance.client;
+        final matches = <SAPMainOrder>[];
+        final archivedIds = <String>{};
+        const pageSize = 1000;
+        final safeQuery = query.replaceAll('%', r'\%').replaceAll('_', r'\_');
+        final orFilter = 'contract_number.ilike.%$safeQuery%,'
+            'customer_name.ilike.%$safeQuery%,'
+            'design_order.ilike.%$safeQuery%,'
+            'description.ilike.%$safeQuery%';
+
+        // Search every matching row in BOTH tables, paging beyond Supabase's
+        // default response limit so old archived contracts are not missed.
+        for (final table in ['sap_main_orders', 'sap_done_orders']) {
+          var offset = 0;
+          while (true) {
+            final rows = await client
+                .from(table)
+                .select('*')
+                .or(orFilter)
+                .order('created_at', ascending: false)
+                .range(offset, offset + pageSize - 1);
+            final batch = (rows as List)
+                .map((row) => SAPMainOrder.fromJson(
+                Map<String, dynamic>.from(row)))
+                .toList();
+            matches.addAll(batch);
+            if (table == 'sap_done_orders') {
+              archivedIds.addAll(batch.map((order) => order.id));
+            }
+            if (batch.length < pageSize) break;
+            offset += pageSize;
+          }
+        }
+
+        if (!mounted || requestId != _searchRequestId) return;
+        final unique = <String, SAPMainOrder>{};
+        for (final order in matches) {
+          unique[order.id] = order;
+        }
+        final results = unique.values.toList();
+        setState(() {
+          _searchResults = results;
+          _archivedOrderIds.addAll(archivedIds);
+          _isSearchingAllOrders = false;
+        });
+        _rebuildGroups();
+      } catch (e) {
+        if (!mounted || requestId != _searchRequestId) return;
+        setState(() => _isSearchingAllOrders = false);
+        _showSnackBar('Could not search all orders: $e');
+      }
     });
   }
 
@@ -3777,7 +3873,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   List<SAPMainOrder> _getFilteredOrders() {
-    var result = _allOrders;
+    var result = _searchQuery.trim().isNotEmpty && _searchResults != null
+        ? _searchResults!
+        : _allOrders;
 
     // Search remains a normal text search first.
     if (_searchQuery.isNotEmpty) {
@@ -4951,13 +5049,13 @@ class _OrdersPageState extends State<OrdersPage> {
                   TextField(
                     controller: _searchController,
                     focusNode: _searchFocusNode,
-                    onChanged: (value) { setState(() => _searchQuery = value); _rebuildGroups(); },
+                    onChanged: (value) { setState(() => _searchQuery = value); _scheduleSearchAllOrders(value); _rebuildGroups(); },
                     style: GoogleFonts.cairo(fontSize: 24, color: _textColor),
                     decoration: InputDecoration(
                       hintText: 'Search orders, customers, codes…',
                       hintStyle: GoogleFonts.cairo(fontSize: 20, color: _secondaryTextColor,),
                       prefixIcon: const Icon(Icons.search_rounded,size: 28),
-                      suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _rebuildGroups(); }) : null,
+                      suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _scheduleSearchAllOrders(''); _rebuildGroups(); }) : null,
                       filled: true, fillColor: _backgroundColor,
                       contentPadding: const EdgeInsets.symmetric(vertical: 14),
                       border: OutlineInputBorder(borderRadius: BorderRadius.circular(15), borderSide: BorderSide(color: _borderColor)),
@@ -6286,6 +6384,7 @@ class _OrdersPageState extends State<OrdersPage> {
             _searchQuery = value;
             _searchExpanded = !isEmpty;
           });
+          _scheduleSearchAllOrders(value);
           _rebuildGroups();
           if (isEmpty) {
             _searchFocusNode.unfocus();
