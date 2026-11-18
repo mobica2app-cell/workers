@@ -4175,10 +4175,20 @@ class _OrdersPageState extends State<OrdersPage> {
       Navigator.push(
         context,
         MaterialPageRoute(builder: (_) => OrderTrackingPage(order: order)),
-      ).then((_) {
-        // Reload data when returning from tracking page
-        _loadAllDataOnce();
-      });
+      ).then((_) => _refreshAfterTracking());
+    }
+  }
+
+  // Refresh the orders table after returning from Order Tracking. If the user
+  // was searching, refresh the all-orders search results too; otherwise the
+  // table could keep showing the pre-restore status from its search cache.
+  Future<void> _refreshAfterTracking() async {
+    await _loadAllDataOnce();
+    if (!mounted) return;
+
+    final query = _searchQuery.trim();
+    if (query.isNotEmpty) {
+      _scheduleSearchAllOrders(query);
     }
   }
 
@@ -7050,7 +7060,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         MaterialPageRoute(
                           builder: (_) => OrderTrackingPage(order: order),
                         ),
-                      );
+                      ).then((_) => _refreshAfterTracking());
                     },
                   );
                 }).toList(),
