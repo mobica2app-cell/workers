@@ -5327,6 +5327,7 @@ class _OrdersPageState extends State<OrdersPage> {
                         icon: Icon(Icons.more_vert, color: _textColor, size: 32),
                         onSelected: (value) {
                           switch (value) {
+                            case 'add_contract': _showAddContractDialog(); break;
                             case 'edit': setState(() => _editMode = !_editMode); break;
                             case 'arrange': _showStatusArrangementDialog(); break;
                             case 'factories': _showFactorySearchDialog(); break;
@@ -5345,6 +5346,8 @@ class _OrdersPageState extends State<OrdersPage> {
                           }
                         },
                         itemBuilder: (_) => [
+                          if (!widget.readOnly || _isHedOrManager)
+                            const PopupMenuItem(value: 'add_contract', child: Text('Add Contract')),
                           if (!widget.readOnly) PopupMenuItem(value: 'edit', child: Text(_editMode ? 'Turn edit mode off' : 'Turn edit mode on')),
                           const PopupMenuItem(value: 'arrange', child: Text('Arrange statuses')),
                           if (_isHedOrManager && !widget.approvalTrackingMode)
