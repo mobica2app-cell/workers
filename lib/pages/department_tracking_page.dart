@@ -625,7 +625,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                   Row(
                     children: [
                       Expanded(
-                        child: Text(
+                        child: SelectableText(
                           displayOrderReference.isNotEmpty
                               ? (isDesignOrderReference
                               ? 'Design $displayOrderReference'
@@ -633,7 +633,6 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               : (isDesignOrderReference
                               ? 'no design order'
                               : 'no contract number'),
-                          overflow: TextOverflow.ellipsis,
                           style: GoogleFonts.cairo(
                             fontSize: 13,
                             fontWeight: FontWeight.w700,
