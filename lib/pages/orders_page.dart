@@ -2180,69 +2180,91 @@ class _OrdersPageState extends State<OrdersPage> {
     }
   }
 
-  // Update order locally without full reload
+  // Update order locally without a full reload.
+  // Keep both the normal list and the all-table search cache in sync;
+  // otherwise a search result can keep showing the old value after a save.
   void _updateOrderLocally(String orderId, String field, dynamic newValue) {
+    SAPMainOrder updateOrder(SAPMainOrder oldOrder) {
+      return SAPMainOrder(
+        id: oldOrder.id,
+        status: field == 'status' ? newValue.toString() : oldOrder.status,
+        customerName: field == 'customer_name'
+            ? newValue.toString()
+            : oldOrder.customerName,
+        itemNumber: field == 'item_number'
+            ? newValue.toString()
+            : oldOrder.itemNumber,
+        productCode: field == 'product_code'
+            ? newValue.toString()
+            : oldOrder.productCode,
+        contractNumber: field == 'contract_number'
+            ? newValue.toString()
+            : oldOrder.contractNumber,
+        description: field == 'description'
+            ? newValue.toString()
+            : oldOrder.description,
+        designOrder: field == 'design_order'
+            ? newValue.toString()
+            : oldOrder.designOrder,
+        quantity: field == 'quantity'
+            ? (newValue as num).toDouble()
+            : oldOrder.quantity,
+        unitOfMeasure: field == 'unit_of_measure'
+            ? newValue.toString()
+            : oldOrder.unitOfMeasure,
+        value: field == 'value'
+            ? (newValue as num).toDouble()
+            : oldOrder.value,
+        salesEngineer: field == 'sales_engineer'
+            ? newValue.toString()
+            : oldOrder.salesEngineer,
+        orderDate: field == 'order_date'
+            ? newValue.toString()
+            : oldOrder.orderDate,
+        deliveryDate: field == 'delivery_date'
+            ? newValue?.toString()
+            : oldOrder.deliveryDate,
+        endDate: field == 'end_date'
+            ? newValue?.toString()
+            : oldOrder.endDate,
+        factory: field == 'factory'
+            ? newValue?.toString()
+            : oldOrder.factory,
+        designTeam: field == 'design_team'
+            ? newValue?.toString()
+            : oldOrder.designTeam,
+        responsibleEngineer: field == 'responsible_engineer'
+            ? newValue?.toString()
+            : oldOrder.responsibleEngineer,
+        reviewer: field == 'reviewer'
+            ? newValue?.toString()
+            : oldOrder.reviewer,
+        correspondenceEngineer: field == 'correspondence_engineer'
+            ? newValue?.toString()
+            : oldOrder.correspondenceEngineer,
+        createdAt: oldOrder.createdAt,
+      );
+    }
+
     setState(() {
       final index = _allOrders.indexWhere((o) => o.id == orderId);
       if (index != -1) {
         final oldOrder = _allOrders[index];
-        final updatedOrder = SAPMainOrder(
-          id: oldOrder.id,
-          status: field == 'status' ? newValue.toString() : oldOrder.status,
-          customerName: field == 'customer_name'
-              ? newValue.toString()
-              : oldOrder.customerName,
-          itemNumber: field == 'item_number'
-              ? newValue.toString()
-              : oldOrder.itemNumber,
-          productCode: field == 'product_code'
-              ? newValue.toString()
-              : oldOrder.productCode,
-          contractNumber: field == 'contract_number'
-              ? newValue.toString()
-              : oldOrder.contractNumber,
-          description: field == 'description'
-              ? newValue.toString()
-              : oldOrder.description,
-          designOrder: field == 'design_order'
-              ? newValue.toString()
-              : oldOrder.designOrder,
-          quantity: field == 'quantity'
-              ? (newValue as double)
-              : oldOrder.quantity,
-          unitOfMeasure: field == 'unit_of_measure'
-              ? newValue.toString()
-              : oldOrder.unitOfMeasure,
-          value: field == 'value' ? (newValue as double) : oldOrder.value,
-          salesEngineer: field == 'sales_engineer'
-              ? newValue.toString()
-              : oldOrder.salesEngineer,
-          orderDate: field == 'order_date'
-              ? newValue.toString()
-              : oldOrder.orderDate,
-          deliveryDate: field == 'delivery_date'
-              ? newValue.toString()
-              : oldOrder.deliveryDate,
-          endDate: field == 'end_date' ? newValue.toString() : oldOrder.endDate,
-          // ✅ ADD THIS
-          factory: field == 'factory' ? newValue.toString() : oldOrder.factory,
-          designTeam: field == 'design_team'
-              ? newValue.toString()
-              : oldOrder.designTeam,
-          responsibleEngineer: field == 'responsible_engineer'
-              ? newValue.toString()
-              : oldOrder.responsibleEngineer,
-          reviewer: field == 'reviewer'
-              ? newValue.toString()
-              : oldOrder.reviewer,
-          correspondenceEngineer: field == 'correspondence_engineer'
-              ? newValue.toString()
-              : oldOrder.correspondenceEngineer,
-          createdAt: oldOrder.createdAt,
-        );
+        final updatedOrder = updateOrder(oldOrder);
         _allOrders[index] = updatedOrder;
         _orderIndexMap.remove(oldOrder);
         _orderIndexMap[updatedOrder] = index;
+      }
+
+      final searchIndex =
+          _searchResults?.indexWhere((o) => o.id == orderId) ?? -1;
+      if (searchIndex != -1 && _searchResults != null) {
+        _searchResults![searchIndex] = updateOrder(_searchResults![searchIndex]);
+      }
+
+      final doneIndex = _doneOrders.indexWhere((o) => o.id == orderId);
+      if (doneIndex != -1) {
+        _doneOrders[doneIndex] = updateOrder(_doneOrders[doneIndex]);
       }
     });
     _rebuildGroups();
@@ -8488,7 +8510,9 @@ class _OrdersPageState extends State<OrdersPage> {
       }
 
       await supabase
-          .from('sap_main_orders')
+          .from(_archivedOrderIds.contains(order.id)
+          ? 'sap_done_orders'
+          : 'sap_main_orders')
           .update({
         field: parsedValue,
       })
@@ -8537,7 +8561,12 @@ class _OrdersPageState extends State<OrdersPage> {
     if (includeOrderId != null) targetIds.add(includeOrderId);
 
     // Check whether any target row is locked.
-    final lockedOrders = _allOrders
+    final availableOrders = <String, SAPMainOrder>{
+      for (final order in _allOrders) order.id: order,
+      for (final order in (_searchResults ?? const <SAPMainOrder>[]))
+        order.id: order,
+    };
+    final lockedOrders = availableOrders.values
         .where((o) => targetIds.contains(o.id) && _isOrderLocked(o))
         .toList();
 
@@ -8561,7 +8590,7 @@ class _OrdersPageState extends State<OrdersPage> {
     }
 
     for (var orderId in targetIds) {
-      final order = _allOrders.where((o) => o.id == orderId).firstOrNull;
+      final order = availableOrders[orderId];
       if (order != null) {
         // Skip locked orders
         if (_isOrderLocked(order)) {
@@ -8586,7 +8615,9 @@ class _OrdersPageState extends State<OrdersPage> {
 
         try {
           await supabase
-              .from('sap_main_orders')
+              .from(_archivedOrderIds.contains(order.id)
+              ? 'sap_done_orders'
+              : 'sap_main_orders')
               .update({field: parsedValue})
               .eq('id', order.id);
 
