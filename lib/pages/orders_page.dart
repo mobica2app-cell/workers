@@ -4356,6 +4356,12 @@ class _OrdersPageState extends State<OrdersPage> {
       'تاريخ التشغيل',
     ];
 
+    // Keep Created At consistent in the app and Excel: yyyy-MM-dd.
+    String formatCreatedAtForExcel(DateTime? value) {
+      if (value == null) return '';
+      return DateFormat('yyyy-MM-dd').format(value.toLocal());
+    }
+
     final rows = <List<String>>[headers];
     for (final order in orders) {
       final tracking = _approvalTrackingByOrder[order.id] ?? const {};
@@ -4379,7 +4385,7 @@ class _OrdersPageState extends State<OrdersPage> {
         order.reviewer,
         order.correspondenceEngineer,
         order.status,
-        order.createdAt?.toLocal().toString(),
+        formatCreatedAtForExcel(order.createdAt),
         tracking['drawing_approval_date'] ?? '',
         tracking['sales_approval_date'] ?? '',
         tracking['modifications_count'] ?? '0',
@@ -6098,6 +6104,10 @@ class _OrdersPageState extends State<OrdersPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
+                if (widget.approvalTrackingMode) ...[
+                  _buildApprovalBackButton(),
+                  const SizedBox(width: 12),
+                ],
                 // Keep the title pinned to the logical start of the app bar.
                 Align(
                   alignment: AlignmentDirectional.centerStart,
@@ -6112,10 +6122,6 @@ class _OrdersPageState extends State<OrdersPage> {
                     mainAxisAlignment: MainAxisAlignment.end,
                     crossAxisAlignment: CrossAxisAlignment.center,
                     children: [
-                      if (widget.approvalTrackingMode) ...[
-                        _buildApprovalBackButton(),
-                        const SizedBox(width: 8),
-                      ],
                       _buildSearchField(anchorRight: true),
                       const SizedBox(width: 8),
                       if (widget.approvalTrackingMode) ...[
@@ -6195,8 +6201,8 @@ class _OrdersPageState extends State<OrdersPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              title,
               if (widget.approvalTrackingMode) _buildApprovalBackButton(),
+              title,
               if (widget.approvalTrackingMode) _buildApprovalContractFilter(),
               if (widget.readOnly && !widget.approvalTrackingMode)
                 OutlinedButton.icon(
