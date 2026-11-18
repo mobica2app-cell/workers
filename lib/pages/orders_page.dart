@@ -4388,7 +4388,7 @@ class _OrdersPageState extends State<OrdersPage> {
       ].map(cell).toList());
     }
 
-    final csv = '\\uFEFF' + rows.map((row) => row.join(',')).join('\\r\\n');
+    final csv = '\uFEFF' + rows.map((row) => row.join(',')).join('\r\n');
     final blob = html.Blob([csv], 'text/csv;charset=utf-8;');
     final url = html.Url.createObjectUrlFromBlob(blob);
     final anchor = html.AnchorElement(href: url)
