@@ -4356,12 +4356,6 @@ class _OrdersPageState extends State<OrdersPage> {
       'تاريخ التشغيل',
     ];
 
-    // Keep Created At consistent in the app and Excel: yyyy-MM-dd.
-    String formatCreatedAtForExcel(DateTime? value) {
-      if (value == null) return '';
-      return DateFormat('yyyy-MM-dd').format(value.toLocal());
-    }
-
     final rows = <List<String>>[headers];
     for (final order in orders) {
       final tracking = _approvalTrackingByOrder[order.id] ?? const {};
@@ -4385,7 +4379,7 @@ class _OrdersPageState extends State<OrdersPage> {
         order.reviewer,
         order.correspondenceEngineer,
         order.status,
-        formatCreatedAtForExcel(order.createdAt),
+        order.createdAt?.toLocal().toString(),
         tracking['drawing_approval_date'] ?? '',
         tracking['sales_approval_date'] ?? '',
         tracking['modifications_count'] ?? '0',
@@ -6019,7 +6013,7 @@ class _OrdersPageState extends State<OrdersPage> {
               }
             },
             itemBuilder: (context) => [
-              if (!widget.readOnly)
+              if (!widget.readOnly || _isHedOrManager)
                 PopupMenuItem(
                   value: 'add_contract',
                   child: _menuAction(Icons.post_add_rounded, 'Add Contract'),
