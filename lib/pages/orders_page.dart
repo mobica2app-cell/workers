@@ -4379,7 +4379,9 @@ class _OrdersPageState extends State<OrdersPage> {
         order.reviewer,
         order.correspondenceEngineer,
         order.status,
-        order.createdAt?.toLocal().toString(),
+        order.createdAt == null
+            ? ''
+            : DateFormat('yyyy-MM-dd').format(order.createdAt!.toLocal()),
         tracking['drawing_approval_date'] ?? '',
         tracking['sales_approval_date'] ?? '',
         tracking['modifications_count'] ?? '0',
