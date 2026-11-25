@@ -32,8 +32,6 @@ class OrdersPage extends StatefulWidget {
   /// When true, reuse the same full table UI and combine main + archived SAP orders.
   final bool doneOrdersOnly;
   final bool readOnly;
-  /// Reuses the Orders layout for the separate approval-tracking view.
-  final bool approvalTrackingMode;
 
   const OrdersPage({
     super.key,
@@ -41,7 +39,6 @@ class OrdersPage extends StatefulWidget {
     this.loggedInEmployee,
     this.doneOrdersOnly = false,
     this.readOnly = false,
-    this.approvalTrackingMode = false,
   });
 
   @override
@@ -52,8 +49,6 @@ class _OrdersPageState extends State<OrdersPage> {
   // Data - Using SAPMainOrder instead of SAPOrderHeader
   List<SAPMainOrder> _allOrders = [];
   List<SAPMainOrder> _doneOrders = [];
-  // Approval milestone values derived from order_audit_log, keyed by order ID.
-  final Map<String, Map<String, String>> _approvalTrackingByOrder = {};
   // IDs originating from sap_done_orders when this page combines both tables.
   final Set<String> _archivedOrderIds = <String>{};
   bool _doneOrdersExpanded = false;
@@ -72,7 +67,6 @@ class _OrdersPageState extends State<OrdersPage> {
   String? _selectedWorkEmployee; // Head-only employee work selector
   bool _editMode = false;
   String _sortBy = 'item_asc'; // 'default', 'value_asc', 'value_desc', 'date_asc', 'date_desc'
-  String _approvalContractFilter = 'all';
 
   // Fast O(1) Lookups & Pre-computed Lists
   Map<SAPMainOrder, int> _orderIndexMap = {};
@@ -255,16 +249,7 @@ class _OrdersPageState extends State<OrdersPage> {
       'label': 'Alternative Eng.',
       'width': 120.0,
     },
-  ]..addAll(widget.approvalTrackingMode
-      ? [
-    {'key': 'created_at_tracking', 'label': 'Created At', 'width': 115.0},
-    {'key': 'drawing_approval_date', 'label': 'رسم الاعتماد', 'width': 125.0},
-    {'key': 'sales_approval_date', 'label': 'اعتماد البيع', 'width': 125.0},
-    {'key': 'modifications_count', 'label': 'التعديلات - العدد', 'width': 105.0},
-    {'key': 'modifications_last_date', 'label': 'التعديلات - آخر تاريخ', 'width': 125.0},
-    {'key': 'operation_date', 'label': 'تاريخ التشغيل', 'width': 125.0},
-  ]
-      : []);
+  ];
 
   double _columnWidth(String key) {
     final column = _tableColumns.firstWhere(
@@ -2963,133 +2948,7 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   // ==================== DATA LOADING ====================
-  Future<void> _loadApprovalTrackingOrders() async {
-    setState(() => _isLoading = true);
-    try {
-      final client = Supabase.instance.client;
-      const pageSize = 1000;
-      final ordersById = <String, SAPMainOrder>{};
-      final archivedIds = <String>{};
-
-      // This page intentionally loads every row from both tables, not only
-      // the recent archived subset used by the regular Orders screen.
-      for (final table in ['sap_main_orders', 'sap_done_orders']) {
-        var offset = 0;
-        while (true) {
-          final rows = await client
-              .from(table)
-              .select('*')
-              .order('created_at', ascending: false)
-              .range(offset, offset + pageSize - 1);
-          final batch = (rows as List)
-              .map((row) => SAPMainOrder.fromJson(
-            Map<String, dynamic>.from(row),
-          ))
-              .toList();
-          for (final order in batch) {
-            ordersById[order.id] = order;
-            if (table == 'sap_done_orders') archivedIds.add(order.id);
-          }
-          if (batch.length < pageSize) break;
-          offset += pageSize;
-        }
-      }
-
-      final auditByOrder = <String, List<Map<String, dynamic>>>{};
-      var auditOffset = 0;
-      while (true) {
-        final rows = await client
-            .from('order_audit_log')
-            .select('order_id, field_name, old_value, new_value, changed_at')
-            .eq('field_name', 'status')
-            .order('changed_at', ascending: true)
-            .range(auditOffset, auditOffset + pageSize - 1);
-        final batch = (rows as List)
-            .map((row) => Map<String, dynamic>.from(row))
-            .toList();
-        for (final audit in batch) {
-          final orderId = (audit['order_id'] ?? '').toString();
-          if (orderId.isEmpty) continue;
-          auditByOrder.putIfAbsent(orderId, () => []).add(audit);
-        }
-        if (batch.length < pageSize) break;
-        auditOffset += pageSize;
-      }
-
-      String dateOnly(dynamic raw) {
-        final parsed = DateTime.tryParse((raw ?? '').toString());
-        return parsed == null ? '' : DateFormat('yyyy-MM-dd').format(parsed.toLocal());
-      }
-
-      _approvalTrackingByOrder.clear();
-      for (final entry in auditByOrder.entries) {
-        final milestones = <String, String>{
-          'drawing_approval_date': '',
-          'sales_approval_date': '',
-          'modifications_count': '0',
-          'modifications_last_date': '',
-          'operation_date': '',
-        };
-        var modificationCount = 0;
-        for (final audit in entry.value) {
-          final oldStatus = (audit['old_value'] ?? '').toString().trim().toLowerCase();
-          final newStatus = (audit['new_value'] ?? '').toString().trim().toLowerCase();
-          final changedAt = dateOnly(audit['changed_at']);
-          if (changedAt.isEmpty) continue;
-
-          if (oldStatus == 'drawing submittal' && newStatus == 'approval' &&
-              milestones['drawing_approval_date']!.isEmpty) {
-            milestones['drawing_approval_date'] = changedAt;
-          }
-          if (oldStatus == 'approval' && newStatus == 'manufacturing drawing' &&
-              milestones['sales_approval_date']!.isEmpty) {
-            milestones['sales_approval_date'] = changedAt;
-          }
-          if (oldStatus == 'modifications submitted' && newStatus == 'approval') {
-            modificationCount++;
-            milestones['modifications_last_date'] = changedAt;
-          }
-          if ((oldStatus == 'manufacturing drawing' || oldStatus == 'review') &&
-              newStatus == 'master data' &&
-              milestones['operation_date']!.isEmpty) {
-            milestones['operation_date'] = changedAt;
-          }
-        }
-        milestones['modifications_count'] = modificationCount.toString();
-        _approvalTrackingByOrder[entry.key] = milestones;
-      }
-
-      if (!mounted) return;
-      final orders = ordersById.values.toList()
-        ..sort((a, b) => (b.createdAt ?? DateTime(1970))
-            .compareTo(a.createdAt ?? DateTime(1970)));
-      setState(() {
-        _allOrders = orders;
-        _archivedOrderIds
-          ..clear()
-          ..addAll(archivedIds);
-        _orderIndexMap = {
-          for (var i = 0; i < orders.length; i++) orders[i]: i,
-        };
-        _initialLoadDone = true;
-        _isLoading = false;
-        _rebuildGroups();
-      });
-    } catch (e, stack) {
-      debugPrint('Approval tracking load failed: $e\\n$stack');
-      if (mounted) setState(() {
-        _isLoading = false;
-        _initialLoadDone = true;
-      });
-      if (mounted) _showSnackBar('Could not load approval tracking: $e');
-    }
-  }
-
   Future<void> _loadAllDataOnce() async {
-    if (widget.approvalTrackingMode) {
-      await _loadApprovalTrackingOrders();
-      return;
-    }
     setState(() => _isLoading = true);
     try {
       final supabase = Supabase.instance.client;
@@ -3201,12 +3060,6 @@ class _OrdersPageState extends State<OrdersPage> {
 
   void _scheduleSearchAllOrders(String value) {
     _searchDebounce?.cancel();
-    if (widget.approvalTrackingMode) {
-      // All rows are already loaded for this report; filter locally by order ID.
-      _searchResults = null;
-      _rebuildGroups();
-      return;
-    }
     final query = value.trim();
     final requestId = ++_searchRequestId;
     if (query.isEmpty) {
@@ -4042,28 +3895,9 @@ class _OrdersPageState extends State<OrdersPage> {
   }
 
   List<SAPMainOrder> _getFilteredOrders() {
-    var result = _searchQuery.trim().isNotEmpty &&
-        _searchResults != null &&
-        !widget.approvalTrackingMode
+    var result = _searchQuery.trim().isNotEmpty && _searchResults != null
         ? _searchResults!
         : _allOrders;
-
-    if (widget.approvalTrackingMode && _approvalContractFilter != 'all') {
-      result = result.where((order) {
-        var contract = order.contractNumber.trim().toUpperCase();
-        if (contract.startsWith('PDC')) contract = contract.substring(3).trim();
-        switch (_approvalContractFilter) {
-          case 'five_digits':
-            return RegExp(r'^\d{5}$').hasMatch(contract);
-          case '91000':
-            return contract.startsWith('91000');
-          case '31000':
-            return contract.startsWith('31000');
-          default:
-            return true;
-        }
-      }).toList();
-    }
 
     // Search remains a normal text search first.
     if (_searchQuery.isNotEmpty) {
@@ -4074,7 +3908,6 @@ class _OrdersPageState extends State<OrdersPage> {
         o.contractNumber.toLowerCase().contains(q) ||
             o.customerName.toLowerCase().contains(q) ||
             o.designOrder.toLowerCase().contains(q) ||
-            o.id.toLowerCase().contains(q) ||
             o.description.toLowerCase().contains(q),
       )
           .toList();
@@ -4307,100 +4140,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
   Future<void> _saveOrders(List<SAPMainOrder> orders, String prefix) async {
     try {
-      if (widget.approvalTrackingMode) {
-        await _exportApprovalTrackingToCsv(orders);
-        return;
-      }
       final path = await ExcelExportService.exportOrdersToExcel(orders);
       _showSnackBar('✅ Saved: $path');
     } catch (e) {
       _showSnackBar('Error: $e');
     }
-  }
-
-  Future<void> _exportApprovalTrackingToCsv(
-      List<SAPMainOrder> orders) async {
-    // Export the same approval milestone values shown in the report table.
-    // CSV is Excel-compatible and avoids the regular Orders exporter, which
-    // only knows about the standard SAP order columns.
-    String cell(dynamic value) {
-      final text = (value ?? '').toString();
-      return '"${text.replaceAll('"', '""')}"';
-    }
-
-    final headers = <String>[
-      'Customer',
-      'Design Order',
-      'Contract Number',
-      'Item',
-      'Product Code',
-      'Description',
-      'QTY',
-      'Unit',
-      'Value',
-      'Sales Engineer',
-      'Order Date',
-      'End Date',
-      'Delivery Date',
-      'Factory',
-      'Design Team',
-      'Responsible Engineer',
-      'Reviewer',
-      'Alternative Engineer',
-      'Status',
-      'Created At',
-      'رسم الاعتماد',
-      'اعتماد البيع',
-      'التعديلات - العدد',
-      'التعديلات - آخر تاريخ',
-      'تاريخ التشغيل',
-    ];
-
-    final rows = <List<String>>[headers];
-    for (final order in orders) {
-      final tracking = _approvalTrackingByOrder[order.id] ?? const {};
-      rows.add([
-        order.customerName,
-        order.designOrder,
-        order.contractNumber,
-        order.itemNumber,
-        order.productCode,
-        order.description,
-        order.quantity,
-        order.unitOfMeasure,
-        order.value,
-        order.salesEngineer,
-        order.orderDate,
-        order.endDate,
-        order.deliveryDate,
-        order.factory,
-        order.designTeam,
-        order.responsibleEngineer,
-        order.reviewer,
-        order.correspondenceEngineer,
-        order.status,
-        order.createdAt == null
-            ? ''
-            : DateFormat('yyyy-MM-dd').format(order.createdAt!.toLocal()),
-        tracking['drawing_approval_date'] ?? '',
-        tracking['sales_approval_date'] ?? '',
-        tracking['modifications_count'] ?? '0',
-        tracking['modifications_last_date'] ?? '',
-        tracking['operation_date'] ?? '',
-      ].map(cell).toList());
-    }
-
-    final csv = '\uFEFF' + rows.map((row) => row.join(',')).join('\r\n');
-    final blob = html.Blob([csv], 'text/csv;charset=utf-8;');
-    final url = html.Url.createObjectUrlFromBlob(blob);
-    final anchor = html.AnchorElement(href: url)
-      ..download = 'Approval_Tracking_${DateFormat('yyyyMMdd_HHmm').format(DateTime.now())}.csv'
-      ..style.display = 'none';
-    html.document.body?.children.add(anchor);
-    anchor.click();
-    anchor.remove();
-    html.Url.revokeObjectUrl(url);
-    _showSnackBar('Excel-compatible file downloaded (${orders.length} orders)');
   }
 
   void _showSnackBar(String message) {
@@ -5304,61 +5048,34 @@ class _OrdersPageState extends State<OrdersPage> {
                     ),
                     const SizedBox(width: 14),
                     Expanded(child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-                      Text(widget.approvalTrackingMode ? 'Approval Tracking' : (widget.doneOrdersOnly ? 'Done Orders' : 'Orders'), style: GoogleFonts.cairo(fontSize: 24, height: 1.15, fontWeight: FontWeight.w800, color: _textColor)),
+                      Text(widget.doneOrdersOnly ? 'Done Orders' : 'Orders', style: GoogleFonts.cairo(fontSize: 24, height: 1.15, fontWeight: FontWeight.w800, color: _textColor)),
                       Text('${_getFilteredOrders().length} orders${_selectedRowsIds.isNotEmpty ? ' • ${_selectedRowsIds.length} selected' : ''}', style: GoogleFonts.cairo(fontSize: 13, color: _secondaryTextColor)),
                     ])),
-                    if (widget.approvalTrackingMode) ...[
-                      IconButton(
-                        tooltip: 'Back',
-                        onPressed: () => Navigator.of(context).maybePop(),
-                        icon: const Icon(Icons.arrow_back),
-                        color: _textColor,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                      IconButton(
-                        tooltip: 'Download Excel',
-                        onPressed: () => _saveOrders(_getFilteredOrders(), 'Approval Tracking'),
-                        icon: const Icon(Icons.file_download_outlined),
-                        color: _textColor,
-                        visualDensity: VisualDensity.compact,
-                      ),
-                    ] else ...[
-                      if (!widget.readOnly)
-                        IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary,size: 32,)),
-                      PopupMenuButton<String>(
-                        icon: Icon(Icons.more_vert, color: _textColor, size: 32),
-                        onSelected: (value) {
-                          switch (value) {
-                            case 'edit': setState(() => _editMode = !_editMode); break;
-                            case 'arrange': _showStatusArrangementDialog(); break;
-                            case 'factories': _showFactorySearchDialog(); break;
-                            case 'employees': _navigateToEmployeeManagement(); break;
-                            case 'import': _showImportDialog(); break;
-                            case 'export': if (_allOrders.isNotEmpty) _saveOrders(_allOrders, 'Orders'); break;
-                            case 'approval_tracking':
-                              Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => ApprovalTrackingPage(
-                                  sapService: widget.sapService,
-                                  loggedInEmployee: widget.loggedInEmployee,
-                                ),
-                              ));
-                              break;
-                            case 'clear': _clearSelection(); break;
-                          }
-                        },
-                        itemBuilder: (_) => [
-                          if (!widget.readOnly) PopupMenuItem(value: 'edit', child: Text(_editMode ? 'Turn edit mode off' : 'Turn edit mode on')),
-                          const PopupMenuItem(value: 'arrange', child: Text('Arrange statuses')),
-                          if (_isHedOrManager && !widget.approvalTrackingMode)
-                            const PopupMenuItem(value: 'approval_tracking', child: Text('Approval Tracking')),
-                          const PopupMenuItem(value: 'factories', child: Text('Factories')),
-                          if (isAdmin) const PopupMenuItem(value: 'employees', child: Text('Employees')),
-                          if (_canImportDelete) const PopupMenuItem(value: 'import', child: Text('Import orders')),
-                          const PopupMenuItem(value: 'export', child: Text('Export orders')),
-                          if (_selectedRowsIds.isNotEmpty) const PopupMenuItem(value: 'clear', child: Text('Clear selection')),
-                        ],
-                      ),
-                    ]
+                    if (!widget.readOnly)
+                      IconButton(tooltip: 'Add task', onPressed: _showAddTaskDialog, icon: Icon(Icons.add_circle_outline_rounded, color: primary,size: 32,)),
+                    PopupMenuButton<String>(
+                      icon: Icon(Icons.more_vert, color: _textColor, size: 32),
+                      onSelected: (value) {
+                        switch (value) {
+                          case 'edit': setState(() => _editMode = !_editMode); break;
+                          case 'arrange': _showStatusArrangementDialog(); break;
+                          case 'factories': _showFactorySearchDialog(); break;
+                          case 'employees': _navigateToEmployeeManagement(); break;
+                          case 'import': _showImportDialog(); break;
+                          case 'export': if (_allOrders.isNotEmpty) _saveOrders(_allOrders, 'Orders'); break;
+                          case 'clear': _clearSelection(); break;
+                        }
+                      },
+                      itemBuilder: (_) => [
+                        if (!widget.readOnly) PopupMenuItem(value: 'edit', child: Text(_editMode ? 'Turn edit mode off' : 'Turn edit mode on')),
+                        const PopupMenuItem(value: 'arrange', child: Text('Arrange statuses')),
+                        const PopupMenuItem(value: 'factories', child: Text('Factories')),
+                        if (isAdmin) const PopupMenuItem(value: 'employees', child: Text('Employees')),
+                        if (_canImportDelete) const PopupMenuItem(value: 'import', child: Text('Import orders')),
+                        const PopupMenuItem(value: 'export', child: Text('Export orders')),
+                        if (_selectedRowsIds.isNotEmpty) const PopupMenuItem(value: 'clear', child: Text('Clear selection')),
+                      ],
+                    ),
                   ]),
                   const SizedBox(height: 12),
                   TextField(
@@ -5367,7 +5084,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     onChanged: (value) { setState(() => _searchQuery = value); _scheduleSearchAllOrders(value); _rebuildGroups(); },
                     style: GoogleFonts.cairo(fontSize: 24, color: _textColor),
                     decoration: InputDecoration(
-                      hintText: widget.approvalTrackingMode ? 'Search by Order ID / Design Order…' : 'Search orders, customers, codes…',
+                      hintText: 'Search orders, customers, codes…',
                       hintStyle: GoogleFonts.cairo(fontSize: 20, color: _secondaryTextColor,),
                       prefixIcon: const Icon(Icons.search_rounded,size: 28),
                       suffixIcon: _searchController.text.isNotEmpty ? IconButton(icon: const Icon(Icons.close), onPressed: () { _searchController.clear(); setState(() => _searchQuery = ''); _scheduleSearchAllOrders(''); _rebuildGroups(); }) : null,
@@ -5381,14 +5098,10 @@ class _OrdersPageState extends State<OrdersPage> {
                   SingleChildScrollView(
                     scrollDirection: Axis.horizontal,
                     child: Row(children: [
-                      if (widget.approvalTrackingMode) ...[
-                        _buildApprovalContractFilter(),
-                        const SizedBox(width: 8),
-                      ],
                       _mobileToolChip(Icons.filter_list_rounded, 'Filters', _showFilterDialog),
                       const SizedBox(width: 8),
                       _mobileToolChip(Icons.sort_rounded, _getSortLabel(), () => _showMobileSortMenu()),
-                      if (!widget.approvalTrackingMode && !widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
+                      if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
                         const SizedBox(width: 8),
                         _buildEmployeeWorkDropdown(isMobile: true),
                       ],
@@ -5829,18 +5542,6 @@ class _OrdersPageState extends State<OrdersPage> {
           Row(children: [Expanded(child: detail(Icons.person_outline, 'Engineer', order.responsibleEngineer ?? 'Unassigned')), Expanded(child: detail(Icons.factory_outlined, 'Factory', order.factory ?? '—'))]),
           const SizedBox(height: 7),
           Row(children: [Expanded(child: detail(Icons.calendar_today_outlined, 'Order date', order.orderDate ?? '—')), Expanded(child: detail(Icons.local_shipping_outlined, 'Delivery', order.deliveryDate ?? '—'))]),
-          if (widget.approvalTrackingMode) ...[
-            const SizedBox(height: 7),
-            detail(Icons.event_available_outlined, 'Created At', _readOnlyCellText(order, 'created_at_tracking')),
-            const SizedBox(height: 7),
-            detail(Icons.draw_outlined, 'رسم الاعتماد', _readOnlyCellText(order, 'drawing_approval_date')),
-            const SizedBox(height: 7),
-            detail(Icons.verified_outlined, 'اعتماد البيع', _readOnlyCellText(order, 'sales_approval_date')),
-            const SizedBox(height: 7),
-            detail(Icons.edit_note_rounded, 'التعديلات', '${_readOnlyCellText(order, 'modifications_count')} | ${_readOnlyCellText(order, 'modifications_last_date')}'),
-            const SizedBox(height: 7),
-            detail(Icons.factory_outlined, 'تاريخ التشغيل', _readOnlyCellText(order, 'operation_date')),
-          ],
           const SizedBox(height: 11),
           Row(children: [
             if (!widget.readOnly) Expanded(child: OutlinedButton.icon(onPressed: () => _showMobileStatusPicker(order), icon: const Icon(Icons.swap_horiz_rounded, size: 16), label: Text('Status', style: GoogleFonts.cairo(fontSize: 10, fontWeight: FontWeight.w700)), style: OutlinedButton.styleFrom(minimumSize: const Size(0, 38), foregroundColor: statusColor, side: BorderSide(color: statusColor.withOpacity(.45)), shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(11))))),
@@ -5854,72 +5555,6 @@ class _OrdersPageState extends State<OrdersPage> {
             ],
           ]),
         ])),
-      ),
-    );
-  }
-
-  Widget _buildApprovalContractFilter() {
-    return Container(
-      height: 38,
-      padding: const EdgeInsets.symmetric(horizontal: 10),
-      decoration: BoxDecoration(
-        color: _surfaceColor,
-        border: Border.all(color: _borderColor),
-        borderRadius: BorderRadius.circular(7),
-      ),
-      child: DropdownButtonHideUnderline(
-        child: DropdownButton<String>(
-          value: _approvalContractFilter,
-          isDense: true,
-          dropdownColor: _surfaceColor,
-          style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
-          icon: Icon(Icons.keyboard_arrow_down, color: _secondaryTextColor),
-          items: const [
-            DropdownMenuItem(value: 'all', child: Text('All contracts')),
-            DropdownMenuItem(value: 'five_digits', child: Text('5-digit contracts')),
-            DropdownMenuItem(value: '91000', child: Text('Starts with 91000')),
-            DropdownMenuItem(value: '31000', child: Text('Starts with 31000')),
-          ],
-          onChanged: (value) {
-            if (value == null) return;
-            setState(() {
-              _approvalContractFilter = value;
-              _rebuildGroups();
-            });
-          },
-        ),
-      ),
-    );
-  }
-
-  Widget _buildApprovalExcelButton() {
-    return OutlinedButton.icon(
-      onPressed: () => _saveOrders(_getFilteredOrders(), 'Approval Tracking'),
-      icon: const Icon(Icons.file_download_outlined, size: 17),
-      label: Text('Excel Download', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _textColor,
-        backgroundColor: _surfaceColor,
-        side: BorderSide(color: _borderColor),
-        minimumSize: const Size(0, 38),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
-      ),
-    );
-  }
-
-  Widget _buildApprovalBackButton() {
-    return OutlinedButton.icon(
-      onPressed: () => Navigator.of(context).maybePop(),
-      icon: const Icon(Icons.arrow_back, size: 17),
-      label: Text('Back', style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600)),
-      style: OutlinedButton.styleFrom(
-        foregroundColor: _textColor,
-        backgroundColor: _surfaceColor,
-        side: BorderSide(color: _borderColor),
-        minimumSize: const Size(0, 38),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(7)),
       ),
     );
   }
@@ -5949,7 +5584,7 @@ class _OrdersPageState extends State<OrdersPage> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(
-                  widget.approvalTrackingMode ? 'Approval Tracking' : (widget.doneOrdersOnly ? 'SAP Done Orders' : 'Orders'),
+                  widget.doneOrdersOnly ? 'SAP Done Orders' : 'Orders',
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                   style: GoogleFonts.cairo(
@@ -5997,25 +5632,25 @@ class _OrdersPageState extends State<OrdersPage> {
                 case 'import':
                   _showImportDialog();
                   break;
-                case 'approval_tracking':
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => ApprovalTrackingPage(
-                        sapService: widget.sapService,
-                        loggedInEmployee: widget.loggedInEmployee,
-                      ),
-                    ),
-                  );
-                  break;
                 case 'export_excel':
                   if (_allOrders.isNotEmpty) {
                     _saveOrders(_allOrders, 'Orders');
                   }
                   break;
+                case 'approval_timeline':
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => ApprovalTimelinePage(
+                        loggedInEmployee: widget.loggedInEmployee,
+                      ),
+                    ),
+                  );
+                  break;
               }
             },
             itemBuilder: (context) => [
-              if (!widget.readOnly && _isHedOrManager)
+              if (!widget.readOnly)
                 PopupMenuItem(
                   value: 'add_contract',
                   child: _menuAction(Icons.post_add_rounded, 'Add Contract'),
@@ -6038,11 +5673,6 @@ class _OrdersPageState extends State<OrdersPage> {
                   value: 'add_task',
                   child: _menuAction(Icons.add_task, 'Add Task'),
                 ),
-              if (_isHedOrManager && !widget.approvalTrackingMode)
-                PopupMenuItem(
-                  value: 'approval_tracking',
-                  child: _menuAction(Icons.fact_check_outlined, 'Approval Tracking'),
-                ),
               PopupMenuItem(
                 value: 'factories',
                 child: _menuAction(Icons.factory_outlined, 'Factories'),
@@ -6056,6 +5686,11 @@ class _OrdersPageState extends State<OrdersPage> {
                 PopupMenuItem(
                   value: 'import',
                   child: _menuAction(Icons.upload_file, 'Import Excel'),
+                ),
+              if (_isHedOrManager)
+                PopupMenuItem(
+                  value: 'approval_timeline',
+                  child: _menuAction(Icons.timeline_rounded, 'رسم الاعتماد / Timeline'),
                 ),
               PopupMenuItem(
                 value: 'export_excel',
@@ -6100,10 +5735,6 @@ class _OrdersPageState extends State<OrdersPage> {
             return Row(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                if (widget.approvalTrackingMode) ...[
-                  _buildApprovalBackButton(),
-                  const SizedBox(width: 12),
-                ],
                 // Keep the title pinned to the logical start of the app bar.
                 Align(
                   alignment: AlignmentDirectional.centerStart,
@@ -6120,11 +5751,7 @@ class _OrdersPageState extends State<OrdersPage> {
                     children: [
                       _buildSearchField(anchorRight: true),
                       const SizedBox(width: 8),
-                      if (widget.approvalTrackingMode) ...[
-                        _buildApprovalContractFilter(),
-                        const SizedBox(width: 8),
-                      ],
-                      if (widget.readOnly && !widget.approvalTrackingMode)
+                      if (widget.readOnly)
                         OutlinedButton.icon(
                           onPressed: () {
                             Navigator.of(context).pushAndRemoveUntil(
@@ -6150,10 +5777,9 @@ class _OrdersPageState extends State<OrdersPage> {
                             ),
                           ),
                         ),
-                      if (!widget.approvalTrackingMode)
-                        SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
+                      SizedBox(width: 175, child: _buildDesignTeamFilterButton()),
                       const SizedBox(width: 8),
-                      if (!widget.approvalTrackingMode && !widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
+                      if (!widget.readOnly && (_isHeadRole || _isManagerRole)) ...[
                         _buildEmployeeWorkDropdown(),
                         if (_isManagerRole) ...[
                           const SizedBox(width: 8),
@@ -6161,7 +5787,7 @@ class _OrdersPageState extends State<OrdersPage> {
 
                         ],
                         const SizedBox(width: 8),
-                      ] else if (!widget.approvalTrackingMode && !widget.readOnly && _isEngineerRole) ...[
+                      ] else if (!widget.readOnly && _isEngineerRole) ...[
                         _buildMyWorkButton(),
                         const SizedBox(width: 8),
                       ],
@@ -6169,10 +5795,7 @@ class _OrdersPageState extends State<OrdersPage> {
                       const SizedBox(width: 8),
                       filtersButton,
                       const SizedBox(width: 8),
-                      if (widget.approvalTrackingMode)
-                        _buildApprovalExcelButton()
-                      else
-                        actionsMenu,
+                      actionsMenu,
                       if (_selectedRowsIds.isNotEmpty) ...[
                         const SizedBox(width: 4),
                         IconButton(
@@ -6197,10 +5820,8 @@ class _OrdersPageState extends State<OrdersPage> {
             spacing: 8,
             runSpacing: 8,
             children: [
-              if (widget.approvalTrackingMode) _buildApprovalBackButton(),
               title,
-              if (widget.approvalTrackingMode) _buildApprovalContractFilter(),
-              if (widget.readOnly && !widget.approvalTrackingMode)
+              if (widget.readOnly)
                 OutlinedButton.icon(
                   onPressed: () {
                     Navigator.of(context).pushAndRemoveUntil(
@@ -6225,14 +5846,14 @@ class _OrdersPageState extends State<OrdersPage> {
                   ),
                 ),
               _buildSearchField(),
-              if (!widget.approvalTrackingMode) _buildDesignTeamFilterButton(),
-              if (!widget.approvalTrackingMode && !widget.readOnly && (_isHeadRole || _isManagerRole))
+              _buildDesignTeamFilterButton(),
+              if (!widget.readOnly && (_isHeadRole || _isManagerRole))
                 _buildEmployeeWorkDropdown(),
-              if (!widget.approvalTrackingMode && !widget.readOnly && _isManagerRole) _buildMyWorkButton(),
-              if (!widget.approvalTrackingMode && !widget.readOnly && _isEngineerRole) _buildMyWorkButton(),
+              if (!widget.readOnly && _isManagerRole) _buildMyWorkButton(),
+              if (!widget.readOnly && _isEngineerRole) _buildMyWorkButton(),
               _buildSortButton(),
               filtersButton,
-              if (widget.approvalTrackingMode) _buildApprovalExcelButton() else actionsMenu,
+              actionsMenu,
               if (_selectedRowsIds.isNotEmpty)
                 TextButton.icon(
                   onPressed: _clearSelection,
@@ -6818,7 +6439,7 @@ class _OrdersPageState extends State<OrdersPage> {
         },
         style: GoogleFonts.cairo(fontSize: 11, color: _textColor),
         decoration: InputDecoration(
-          hintText: widget.approvalTrackingMode ? 'Search by Order ID / Design Order...' : 'Search orders...',
+          hintText: 'Search orders...',
           hintStyle: GoogleFonts.cairo(
             color: _secondaryTextColor,
             fontSize: 11,
@@ -8285,16 +7906,6 @@ class _OrdersPageState extends State<OrdersPage> {
       case 'responsible_engineer': return order.responsibleEngineer ?? '-';
       case 'reviewer': return order.reviewer ?? '-';
       case 'correspondence_engineer': return order.correspondenceEngineer ?? '-';
-      case 'created_at_tracking':
-        return order.createdAt == null
-            ? ''
-            : DateFormat('yyyy-MM-dd').format(order.createdAt!.toLocal());
-      case 'drawing_approval_date':
-      case 'sales_approval_date':
-      case 'modifications_count':
-      case 'modifications_last_date':
-      case 'operation_date':
-        return _approvalTrackingByOrder[order.id]?[key] ?? '';
       default: return '-';
     }
   }
@@ -8304,26 +7915,6 @@ class _OrdersPageState extends State<OrdersPage> {
       String key,
       double width,
       ) {
-    if (widget.approvalTrackingMode) {
-      return Container(
-        width: width,
-        height: 48,
-        alignment: Alignment.centerLeft,
-        padding: const EdgeInsets.symmetric(horizontal: 8),
-        child: Text(
-          _readOnlyCellText(order, key),
-          maxLines: 1,
-          overflow: TextOverflow.ellipsis,
-          style: GoogleFonts.cairo(
-            fontSize: 11,
-            color: _textColor,
-            fontWeight: key == 'modifications_count'
-                ? FontWeight.w700
-                : FontWeight.w400,
-          ),
-        ),
-      );
-    }
     if (widget.readOnly) {
       return Container(
         width: width,
@@ -9623,45 +9214,383 @@ class _StatusArrangementDialogState extends State<_StatusArrangementDialog> {
   }
 }
 
-/// Separate approval-tracking route. It deliberately reuses OrdersPage's
-/// established layout, toolbar, table styling, scroll behavior and filters,
-/// while enabling the additional audit-derived columns.
-class ApprovalTrackingPage extends StatelessWidget {
-  final SAPMainService sapService;
+
+/// Head/Manager overview of order milestone dates derived from order_audit_log.
+class ApprovalTimelinePage extends StatefulWidget {
   final EmployeeAuth? loggedInEmployee;
 
-  const ApprovalTrackingPage({
-    super.key,
-    required this.sapService,
-    this.loggedInEmployee,
-  });
+  const ApprovalTimelinePage({super.key, this.loggedInEmployee});
+
+  @override
+  State<ApprovalTimelinePage> createState() => _ApprovalTimelinePageState();
+}
+
+class _ApprovalTimelinePageState extends State<ApprovalTimelinePage> {
+  final _searchController = TextEditingController();
+  final _horizontalController = ScrollController();
+  List<_ApprovalTimelineRow> _rows = [];
+  bool _loading = true;
+  String _query = '';
+  String? _error;
+
+  bool get _canOpen =>
+      const {'head', 'manager'}.contains(
+        widget.loggedInEmployee?.role?.trim().toLowerCase() ?? '',
+      );
+
+  @override
+  void initState() {
+    super.initState();
+    if (_canOpen) {
+      _load();
+    } else {
+      _loading = false;
+      _error = 'This page is available to Head and Manager only.';
+    }
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _horizontalController.dispose();
+    super.dispose();
+  }
+
+  Future<List<Map<String, dynamic>>> _fetchAllRows(
+      String table,
+      ) async {
+    const pageSize = 1000;
+    var offset = 0;
+    final result = <Map<String, dynamic>>[];
+    while (true) {
+      final response = await Supabase.instance.client
+          .from(table)
+          .select('*')
+          .range(offset, offset + pageSize - 1);
+      final batch = (response as List)
+          .map((e) => Map<String, dynamic>.from(e as Map))
+          .toList();
+      result.addAll(batch);
+      if (batch.length < pageSize) break;
+      offset += pageSize;
+    }
+    return result;
+  }
+
+  Future<void> _load() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      final client = Supabase.instance.client;
+      final mainRows = await _fetchAllRows('sap_main_orders');
+      final doneRows = await _fetchAllRows('sap_done_orders');
+      final auditRows = await _fetchAllRows('order_audit_log');
+
+      final ordersById = <String, Map<String, dynamic>>{};
+      for (final row in [...mainRows, ...doneRows]) {
+        final id = (row['id'] ?? '').toString().trim();
+        if (id.isNotEmpty) ordersById[id] = row;
+      }
+
+      final auditByOrder = <String, List<Map<String, dynamic>>>{};
+      for (final audit in auditRows) {
+        final id = (audit['order_id'] ?? '').toString().trim();
+        if (id.isEmpty) continue;
+        auditByOrder.putIfAbsent(id, () => []).add(audit);
+      }
+
+      final result = <_ApprovalTimelineRow>[];
+      for (final entry in ordersById.entries) {
+        final audits = auditByOrder[entry.key] ?? const [];
+        DateTime? drawingApproval;
+        DateTime? salesApproval;
+        DateTime? lastModification;
+        DateTime? operationDate;
+        var modificationCount = 0;
+
+        for (final audit in audits) {
+          final field = (audit['field_name'] ??
+              audit['field'] ??
+              audit['column_name'] ??
+              '')
+              .toString()
+              .trim()
+              .toLowerCase();
+          if (field != 'status') continue;
+
+          final oldStatus = (audit['old_value'] ?? '').toString().trim();
+          final newStatus = (audit['new_value'] ?? '').toString().trim();
+          final changedAt = _auditDate(audit);
+
+          if (oldStatus == 'Drawing Submittal' && newStatus == 'Approval') {
+            drawingApproval = _later(drawingApproval, changedAt);
+          }
+          if (oldStatus == 'Approval' && newStatus == 'Manufacturing Drawing') {
+            salesApproval = _later(salesApproval, changedAt);
+          }
+          if (oldStatus == 'modifications submitted' && newStatus == 'Approval') {
+            modificationCount++;
+            lastModification = _later(lastModification, changedAt);
+          }
+          if ((oldStatus == 'Manufacturing Drawing' || oldStatus == 'Review') &&
+              newStatus == 'Master Data') {
+            operationDate = _later(operationDate, changedAt);
+          }
+        }
+
+        result.add(_ApprovalTimelineRow(
+          order: SAPMainOrder.fromJson(entry.value),
+          drawingApproval: drawingApproval,
+          salesApproval: salesApproval,
+          modificationCount: modificationCount,
+          lastModification: lastModification,
+          operationDate: operationDate,
+        ));
+      }
+
+      result.sort((a, b) {
+        final aDate = a.order.createdAt;
+        final bDate = b.order.createdAt;
+        if (aDate == null && bDate == null) return a.order.id.compareTo(b.order.id);
+        if (aDate == null) return 1;
+        if (bDate == null) return -1;
+        return bDate.compareTo(aDate);
+      });
+
+      if (!mounted) return;
+      setState(() {
+        _rows = result;
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Could not load timeline data: $e';
+      });
+    }
+  }
+
+  static DateTime? _auditDate(Map<String, dynamic> row) {
+    for (final key in [
+      'changed_at',
+      'created_at',
+      'timestamp',
+      'changed_on',
+      'updated_at',
+    ]) {
+      final value = row[key];
+      if (value == null) continue;
+      final parsed = DateTime.tryParse(value.toString());
+      if (parsed != null) return parsed;
+    }
+    return null;
+  }
+
+  static DateTime? _later(DateTime? current, DateTime? candidate) {
+    if (candidate == null) return current;
+    if (current == null || candidate.isAfter(current)) return candidate;
+    return current;
+  }
+
+  String _dateText(DateTime? date) {
+    if (date == null) return '';
+    return DateFormat('yyyy-MM-dd').format(date.toLocal());
+  }
 
   @override
   Widget build(BuildContext context) {
-    // Approval Tracking is pushed from inside the app's zoomable content area.
-    // Give it an explicit viewport size and its own Material surface so that
-    // PopupMenuButton / InkWell controls have a Material ancestor and the
-    // toolbar's LayoutBuilder receives finite width constraints.
-    final viewport = MediaQuery.sizeOf(context);
+    final theme = Theme.of(context);
+    final filtered = _rows.where((row) {
+      final q = _query.trim().toLowerCase();
+      if (q.isEmpty) return true;
+      return row.order.id.toLowerCase().contains(q);
+    }).toList();
 
-    return SizedBox(
-      width: viewport.width,
-      height: viewport.height,
-      child: Scaffold(
-        backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-        body: Material(
-          color: Theme.of(context).scaffoldBackgroundColor,
-          child: OrdersPage(
-            sapService: sapService,
-            loggedInEmployee: loggedInEmployee,
-            // Keep the same permissions and full controls as the Orders page.
-            // Approval Tracking only changes the displayed tracking columns.
-            readOnly: false,
-            approvalTrackingMode: true,
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('رسم الاعتماد', style: GoogleFonts.cairo(fontWeight: FontWeight.w700)),
+        actions: [
+          IconButton(
+            tooltip: 'Refresh',
+            onPressed: _loading ? null : _load,
+            icon: const Icon(Icons.refresh),
           ),
-        ),
+          const SizedBox(width: 8),
+        ],
+      ),
+      body: Column(
+        children: [
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _searchController,
+                    onChanged: (value) => setState(() => _query = value),
+                    decoration: InputDecoration(
+                      hintText: 'Search by Order ID',
+                      prefixIcon: const Icon(Icons.search),
+                      suffixIcon: _query.isEmpty
+                          ? null
+                          : IconButton(
+                        onPressed: () {
+                          _searchController.clear();
+                          setState(() => _query = '');
+                        },
+                        icon: const Icon(Icons.close),
+                      ),
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      isDense: true,
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Text(
+                  '${filtered.length} / ${_rows.length}',
+                  style: GoogleFonts.cairo(
+                    color: theme.colorScheme.onSurfaceVariant,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator())
+                : _error != null
+                ? Center(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(_error!, textAlign: TextAlign.center),
+                    const SizedBox(height: 12),
+                    ElevatedButton.icon(
+                      onPressed: _load,
+                      icon: const Icon(Icons.refresh),
+                      label: const Text('Retry'),
+                    ),
+                  ],
+                ),
+              ),
+            )
+                : filtered.isEmpty
+                ? const Center(child: Text('No orders found'))
+                : Scrollbar(
+              controller: _horizontalController,
+              thumbVisibility: true,
+              child: SingleChildScrollView(
+                controller: _horizontalController,
+                scrollDirection: Axis.horizontal,
+                child: SingleChildScrollView(
+                  child: DataTable(
+                    headingRowHeight: 52,
+                    dataRowMinHeight: 48,
+                    dataRowMaxHeight: 64,
+                    columnSpacing: 22,
+                    headingTextStyle: GoogleFonts.cairo(
+                      fontWeight: FontWeight.w700,
+                      color: theme.colorScheme.onSurface,
+                      fontSize: 12,
+                    ),
+                    dataTextStyle: GoogleFonts.cairo(fontSize: 11),
+                    columns: const [
+                      DataColumn(label: Text('Order ID')),
+                      DataColumn(label: Text('Status')),
+                      DataColumn(label: Text('Customer')),
+                      DataColumn(label: Text('Item')),
+                      DataColumn(label: Text('Product Code')),
+                      DataColumn(label: Text('Contract')),
+                      DataColumn(label: Text('Description')),
+                      DataColumn(label: Text('Design Order')),
+                      DataColumn(label: Text('QTY')),
+                      DataColumn(label: Text('Unit')),
+                      DataColumn(label: Text('Value')),
+                      DataColumn(label: Text('Sales Engineer')),
+                      DataColumn(label: Text('O-Date')),
+                      DataColumn(label: Text('End Date')),
+                      DataColumn(label: Text('Delivery Date')),
+                      DataColumn(label: Text('Factory')),
+                      DataColumn(label: Text('Design Team')),
+                      DataColumn(label: Text('Resp. Engineer')),
+                      DataColumn(label: Text('Reviewer')),
+                      DataColumn(label: Text('Alternative Eng.')),
+                      DataColumn(label: Text('Created At')),
+                      DataColumn(label: Text('رسم الاعتماد')),
+                      DataColumn(label: Text('اعتماد البيع')),
+                      DataColumn(label: Text('عدد التعديلات')),
+                      DataColumn(label: Text('آخر تعديل')),
+                      DataColumn(label: Text('تاريخ التشغيل')),
+                    ],
+                    rows: filtered.map((row) {
+                      final order = row.order;
+                      return DataRow(cells: [
+                        DataCell(SelectableText(order.id)),
+                        DataCell(Text(order.status)),
+                        DataCell(SelectableText(order.customerName)),
+                        DataCell(Text(order.itemNumber)),
+                        DataCell(Text(order.productCode)),
+                        DataCell(Text(order.contractNumber)),
+                        DataCell(SelectableText(order.description)),
+                        DataCell(Text(order.designOrder)),
+                        DataCell(Text(order.quantity.toString())),
+                        DataCell(Text(order.unitOfMeasure)),
+                        DataCell(Text(order.value.toString())),
+                        DataCell(Text(order.salesEngineer ?? '')),
+                        DataCell(Text(order.orderDate ?? '')),
+                        DataCell(Text(order.endDate ?? '')),
+                        DataCell(Text(order.deliveryDate ?? '')),
+                        DataCell(Text(order.factory ?? '')),
+                        DataCell(Text(order.designTeam ?? '')),
+                        DataCell(Text(order.responsibleEngineer ?? '')),
+                        DataCell(Text(order.reviewer ?? '')),
+                        DataCell(Text(order.correspondenceEngineer ?? '')),
+                        DataCell(Text(order.createdAt == null
+                            ? ''
+                            : DateFormat('yyyy-MM-dd HH:mm')
+                            .format(order.createdAt!.toLocal()))),
+                        DataCell(Text(_dateText(row.drawingApproval))),
+                        DataCell(Text(_dateText(row.salesApproval))),
+                        DataCell(Text(row.modificationCount == 0
+                            ? ''
+                            : row.modificationCount.toString())),
+                        DataCell(Text(_dateText(row.lastModification))),
+                        DataCell(Text(_dateText(row.operationDate))),
+                      ]);
+                    }).toList(),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
 }
 
+class _ApprovalTimelineRow {
+  final SAPMainOrder order;
+  final DateTime? drawingApproval;
+  final DateTime? salesApproval;
+  final int modificationCount;
+  final DateTime? lastModification;
+  final DateTime? operationDate;
+
+  const _ApprovalTimelineRow({
+    required this.order,
+    required this.drawingApproval,
+    required this.salesApproval,
+    required this.modificationCount,
+    required this.lastModification,
+    required this.operationDate,
+  });
+}
