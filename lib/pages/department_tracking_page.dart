@@ -1959,8 +1959,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
                             if (count <= 0) return;
 
+                            // Keep the full employee name for data matching.
+                            // The shortened name is only for UI labels; using it here
+                            // causes long names to match zero assigned orders.
                             final orders = _allOrdersForEmployeeStage(
-                              displayEmployeeName(employee.key),
+                              employee.key,
                               stage,
                             );
 
@@ -2043,9 +2046,10 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                         ),
                         barGroups: employeeEntries.asMap().entries.map((entry) {
                           final index = entry.key;
-                          final employeeName = displayEmployeeName(entry.value.key);
+                          // Workload mode is keyed by the full normalized name.
+                          // Use the display name only in the chart labels.
                           final stages = _displayedWorkloadStages(
-                            employeeName,
+                            entry.value.key,
                             entry.value.value,
                           );
 
