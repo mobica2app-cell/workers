@@ -415,7 +415,7 @@ class _OrdersPageState extends State<OrdersPage> {
     final responsible =
         order.responsibleEngineer?.trim().toLowerCase() ?? '';
 
-    return responsible == 'no one' && !_isAdmin;
+    return responsible == 'no one' && !_isHedOrManager;
   }
 
   String _getSortLabel() {
