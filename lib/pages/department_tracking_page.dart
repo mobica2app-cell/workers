@@ -533,6 +533,16 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     }
   }
 
+  // Keep long employee names compact in the UI while preserving the
+  // original full name for matching, saving, and audit records.
+  String _displayEmployeeName(String fullName) {
+    final name = fullName.trim();
+    if (name.length <= 15) return name;
+
+    final parts = name.split(RegExp(r'\s+'));
+    return parts.length > 1 ? parts.take(2).join(' ') : name;
+  }
+
   String _normalize(String value) =>
       value.trim().toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
 
@@ -1547,7 +1557,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    employee.fullName,
+                                    _displayEmployeeName(employee.fullName),
                                     overflow: TextOverflow.ellipsis,
                                     style: GoogleFonts.cairo(
                                       color: _textColor,
@@ -1671,9 +1681,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       });
     final employeeNames = {
       for (final employee in _allEmployees)
-        _normalize(employee.fullName): employee.fullName,
+        _normalize(employee.fullName): _displayEmployeeName(employee.fullName),
     };
-    String displayEmployeeName(String key) => employeeNames[key] ?? key;
+    String displayEmployeeName(String key) => _displayEmployeeName(employeeNames[key] ?? key);
 
     final maxTotal = employeeEntries
         .map((entry) {
@@ -2370,7 +2380,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            employee.fullName,
+                            _displayEmployeeName(employee.fullName),
                             overflow: TextOverflow.ellipsis,
                             style: GoogleFonts.cairo(
                               fontSize: 11,
@@ -2640,7 +2650,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Row(children: [
-                    Text(employee.fullName, style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor)),
+                    Text(_displayEmployeeName(employee.fullName), style: GoogleFonts.cairo(fontSize: 13, fontWeight: FontWeight.w600, color: _textColor)),
                     if (employee.role != null) ...[
                       const SizedBox(width: 8),
                       _buildBadge(employee.role!, Colors.purple),
@@ -2782,7 +2792,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          employee.fullName,
+                          _displayEmployeeName(employee.fullName),
                           style: GoogleFonts.cairo(
                             fontSize: 18,
                             fontWeight: FontWeight.w700,
