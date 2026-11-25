@@ -102,9 +102,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       // Employee assignment
       bool belongsToEmployee = false;
 
-      if (order.correspondenceEngineer == employee.fullName) {
+      if (_samePerson(order.correspondenceEngineer, employee.fullName)) {
         belongsToEmployee = true;
-      } else if (order.responsibleEngineer == employee.fullName) {
+      } else if (_samePerson(order.responsibleEngineer, employee.fullName)) {
         belongsToEmployee = true;
       }
 
@@ -444,9 +444,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     final assignedOrders = <String, SAPMainOrder>{};
 
     for (var order in _allOrders) {
-      if (order.correspondenceEngineer == employee.fullName) {
+      if (_samePerson(order.correspondenceEngineer, employee.fullName)) {
         assignedOrders[order.id] = order;
-      } else if (order.responsibleEngineer == employee.fullName) {
+      } else if (_samePerson(order.responsibleEngineer, employee.fullName)) {
         if (!assignedOrders.containsKey(order.id)) {
           assignedOrders[order.id] = order;
         }
@@ -463,9 +463,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     for (var order in _allOrders) {
       bool belongsToEmployee = false;
 
-      if (order.correspondenceEngineer == employee.fullName) {
+      if (_samePerson(order.correspondenceEngineer, employee.fullName)) {
         belongsToEmployee = true;
-      } else if (order.responsibleEngineer == employee.fullName) {
+      } else if (_samePerson(order.responsibleEngineer, employee.fullName)) {
         belongsToEmployee = true;
       }
 
@@ -612,14 +612,17 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         void Function(SAPMainOrder updatedOrder)? onOrderUpdated,
       }) {
     final actualStage = _currentStageForStatus(order.status) ?? stage;
-    final contractNumberValue = int.tryParse(order.contractNumber.trim());
-    final isDesignOrderReference =
-        showAssignmentEditors &&
-            contractNumberValue != null &&
-            contractNumberValue < 10;
-    final displayOrderReference = isDesignOrderReference
-        ? order.designOrder.trim()
-        : order.contractNumber.trim();
+    final rawContractNumber = order.contractNumber.toString().trim();
+    final contractNumberValue = int.tryParse(rawContractNumber);
+    // Some SAP rows have no contract number, or only a one-digit placeholder.
+    // In workload and Not Assigned cards, show the actual order number instead.
+    final isOrderNumberFallback = rawContractNumber.isEmpty ||
+        rawContractNumber.toLowerCase() == 'null' ||
+        (contractNumberValue != null && contractNumberValue < 10);
+    final orderNumber = order.designOrder.toString().trim();
+    final displayOrderReference = isOrderNumberFallback && orderNumber.isNotEmpty
+        ? orderNumber
+        : rawContractNumber;
     return Material(
       color: Colors.transparent,
       child: InkWell(
@@ -645,11 +648,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                       Expanded(
                         child: SelectableText(
                           displayOrderReference.isNotEmpty
-                              ? (isDesignOrderReference
-                              ? 'Design $displayOrderReference'
-                              : displayOrderReference)
-                              : (isDesignOrderReference
-                              ? 'no design order'
+                              ? displayOrderReference
+                              : (isOrderNumberFallback
+                              ? 'no order number'
                               : 'no contract number'),
                           style: GoogleFonts.cairo(
                             fontSize: 13,
