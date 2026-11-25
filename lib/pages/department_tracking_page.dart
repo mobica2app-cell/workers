@@ -46,6 +46,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   Set<String> _ordersWithoutAudit = {};
 
   final Set<String> _contractCountEmployees = <String>{};
+  // Manual display order for employees with Engineer/Manager roles.
+  List<String> _employeeDisplayOrder = <String>[];
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -1308,9 +1310,169 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return _contractWorkloadByStage(employeeName);
   }
 
+
+  bool _isEngineerOrManager(EmployeeAuth employee) {
+    final role = (employee.role ?? '').trim().toLowerCase();
+    return role.contains('engineer') || role.contains('manager');
+  }
+
+  List<EmployeeAuth> _employeesInDisplayOrder() {
+    final eligible = _allEmployees.where(_isEngineerOrManager).toList();
+    final byName = {
+      for (final employee in eligible) _normalize(employee.fullName): employee,
+    };
+    final ordered = <EmployeeAuth>[];
+
+    for (final name in _employeeDisplayOrder) {
+      final employee = byName.remove(_normalize(name));
+      if (employee != null) ordered.add(employee);
+    }
+
+    final remaining = byName.values.toList()
+      ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+    ordered.addAll(remaining);
+    return ordered;
+  }
+
+  void _showEmployeeOrderDialog() {
+    final employees = _employeesInDisplayOrder();
+    final reordered = employees.map((employee) => employee.fullName).toList();
+
+    showDialog<void>(
+      context: context,
+      builder: (dialogContext) => StatefulBuilder(
+        builder: (dialogContext, setDialogState) => AlertDialog(
+          backgroundColor: _cardColor,
+          title: Row(
+            children: [
+              Icon(Icons.swap_vert, color: Theme.of(context).colorScheme.primary),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Arrange Engineers & Managers',
+                  style: GoogleFonts.cairo(
+                    color: _textColor,
+                    fontSize: 17,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          content: SizedBox(
+            width: 420,
+            height: math.min(
+              MediaQuery.of(context).size.height * 0.6,
+              math.max(220.0, reordered.length * 62.0),
+            ).toDouble(),
+            child: reordered.isEmpty
+                ? Center(
+              child: Text(
+                'No employees with Engineer or Manager roles found.',
+                textAlign: TextAlign.center,
+                style: GoogleFonts.cairo(color: _secondaryTextColor),
+              ),
+            )
+                : ReorderableListView.builder(
+              itemCount: reordered.length,
+              onReorder: (oldIndex, newIndex) {
+                setDialogState(() {
+                  if (newIndex > oldIndex) newIndex--;
+                  final name = reordered.removeAt(oldIndex);
+                  reordered.insert(newIndex, name);
+                });
+              },
+              itemBuilder: (context, index) {
+                final employee = employees.firstWhere(
+                      (item) => _samePerson(item.fullName, reordered[index]),
+                );
+                return Container(
+                  key: ValueKey(_normalize(employee.fullName)),
+                  margin: const EdgeInsets.only(bottom: 7),
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
+                  decoration: BoxDecoration(
+                    color: _mutedColor,
+                    borderRadius: BorderRadius.circular(9),
+                    border: Border.all(color: _borderColor),
+                  ),
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        radius: 16,
+                        backgroundColor: Colors.blue.withOpacity(0.12),
+                        child: Text(
+                          employee.initials,
+                          style: GoogleFonts.cairo(
+                            color: Colors.blue,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              employee.fullName,
+                              overflow: TextOverflow.ellipsis,
+                              style: GoogleFonts.cairo(
+                                color: _textColor,
+                                fontWeight: FontWeight.w600,
+                                fontSize: 12,
+                              ),
+                            ),
+                            Text(
+                              employee.role ?? '',
+                              style: GoogleFonts.cairo(
+                                color: _secondaryTextColor,
+                                fontSize: 10,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      Icon(Icons.drag_handle, color: _secondaryTextColor),
+                    ],
+                  ),
+                );
+              },
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: Text('Cancel', style: GoogleFonts.cairo()),
+            ),
+            FilledButton.icon(
+              onPressed: () {
+                setState(() => _employeeDisplayOrder = List<String>.from(reordered));
+                Navigator.pop(dialogContext);
+                _showSnackBar('Employee order updated');
+              },
+              icon: const Icon(Icons.check, size: 17),
+              label: Text('Apply order', style: GoogleFonts.cairo()),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildCurrentWorkloadGraph(bool compact) {
 
     final workload = _currentWorkloadByEmployee();
+    const emptyStages = <String, int>{
+      'Drawing Submittal': 0,
+      'Modification': 0,
+      'Manufacturing': 0,
+      'Review': 0,
+      'partation  master data': 0,
+    };
+    for (final employee in _employeesInDisplayOrder()) {
+      workload.putIfAbsent(_normalize(employee.fullName), () => Map<String, int>.from(emptyStages));
+    }
     final unassignedCounts = _unassignedWorkloadCounts();
     if (workload.isEmpty && unassignedCounts.values.every((count) => count == 0)) {
       return const SizedBox.shrink();
@@ -1332,16 +1494,29 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       'partation  master data': Colors.brown,
     };
 
+    final employeeOrder = _employeesInDisplayOrder()
+        .map((employee) => _normalize(employee.fullName))
+        .toList();
     final employeeEntries = workload.entries.toList()
       ..sort((a, b) {
-        final aTotal =
-        a.value.values.fold<int>(0, (sum, value) => sum + value);
-        final bTotal =
-        b.value.values.fold<int>(0, (sum, value) => sum + value);
+        final aIndex = employeeOrder.indexOf(a.key);
+        final bIndex = employeeOrder.indexOf(b.key);
+        if (aIndex != -1 || bIndex != -1) {
+          if (aIndex == -1) return 1;
+          if (bIndex == -1) return -1;
+          return aIndex.compareTo(bIndex);
+        }
+        final aTotal = a.value.values.fold<int>(0, (sum, value) => sum + value);
+        final bTotal = b.value.values.fold<int>(0, (sum, value) => sum + value);
         final byTotal = bTotal.compareTo(aTotal);
         if (byTotal != 0) return byTotal;
         return a.key.compareTo(b.key);
       });
+    final employeeNames = {
+      for (final employee in _allEmployees)
+        _normalize(employee.fullName): employee.fullName,
+    };
+    String displayEmployeeName(String key) => employeeNames[key] ?? key;
 
     final maxTotal = employeeEntries
         .map((entry) {
@@ -1451,6 +1626,23 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
             },
           ),
           const SizedBox(height: 8),
+          Align(
+            alignment: Alignment.centerLeft,
+            child: OutlinedButton.icon(
+              onPressed: _showEmployeeOrderDialog,
+              icon: const Icon(Icons.reorder, size: 17),
+              label: Text(
+                'Arrange Engineers & Managers (${_employeesInDisplayOrder().length})',
+                style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
+              ),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: Theme.of(context).colorScheme.primary,
+                side: BorderSide(color: Theme.of(context).colorScheme.primary.withOpacity(0.35)),
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ),
+          const SizedBox(height: 8),
           Text(
             'Each bar normally counts order rows. Use the checkbox on top of a bar to count unique contract numbers for that employee. Clicking a bar still opens all matching order rows.',
             style: GoogleFonts.cairo(
@@ -1552,7 +1744,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               );
 
                               return BarTooltipItem(
-                                '${employee.key}\n'
+                                '${displayEmployeeName(employee.key)}\n'
                                     'Drawing Submittal: $drawing\n'
                                     'Modification: $modification\n'
                                     'Manufacturing: $manufacturing\n'
@@ -1600,12 +1792,12 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                             if (count <= 0) return;
 
                             final orders = _allOrdersForEmployeeStage(
-                              employee.key,
+                              displayEmployeeName(employee.key),
                               stage,
                             );
 
                             _showWorkloadStageOrders(
-                              employee.key,
+                              displayEmployeeName(employee.key),
                               stage,
                               orders,
                             );
@@ -1651,7 +1843,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                   return const SizedBox.shrink();
                                 }
 
-                                final employeeName = employeeEntries[index].key;
+                                final employeeName = displayEmployeeName(employeeEntries[index].key);
                                 final normalizedName = _normalize(employeeName);
                                 return SideTitleWidget(
                                   meta: meta,
@@ -1683,7 +1875,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                         ),
                         barGroups: employeeEntries.asMap().entries.map((entry) {
                           final index = entry.key;
-                          final employeeName = entry.value.key;
+                          final employeeName = displayEmployeeName(entry.value.key);
                           final stages = _displayedWorkloadStages(
                             employeeName,
                             entry.value.value,
