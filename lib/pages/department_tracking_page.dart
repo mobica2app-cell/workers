@@ -46,8 +46,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
   Set<String> _ordersWithoutAudit = {};
 
   final Set<String> _contractCountEmployees = <String>{};
-  // Manual display order for employees with Engineer/Manager roles.
-  List<String> _employeeDisplayOrder = <String>[];
+  // Shared employee visibility and display order (persisted in Supabase).
+  List<String> _employeeDisplayOrder = <String>[]; // Employee IDs
+  Set<String> _selectedEmployeeIds = <String>{};
+  bool _isSavingEmployeeSettings = false;
+  static const String _employeeSettingsTable = 'department_employee_display_settings';
 
   // Theme helper getters
   bool get _isDark => Theme.of(context).brightness == Brightness.dark;
@@ -167,6 +170,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     try {
       final employees = await _authService.getAllEmployees();
       final orders = await _sapService.getAllOrders();
+      final employeeSettings = await _loadEmployeeDisplaySettings(employees);
 
       // Fetch only status changes to Done/Task Done/planning from audit logs
       final supabase = Supabase.instance.client;
@@ -254,6 +258,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
       setState(() {
         _allEmployees = employees;
+        _employeeDisplayOrder = employeeSettings['order'] as List<String>;
+        _selectedEmployeeIds = employeeSettings['selected'] as Set<String>;
         _allOrders = orders;
         _auditLogs = doneAuditLogs;
         _departmentsMap = deptMap;
@@ -1316,30 +1322,115 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     return role.contains('engineer') || role.contains('manager');
   }
 
+  Future<Map<String, dynamic>> _loadEmployeeDisplaySettings(
+      List<EmployeeAuth> employees) async {
+    final eligible = employees.where(_isEngineerOrManager).toList();
+    final eligibleById = <String, EmployeeAuth>{
+      for (final employee in eligible) employee.id: employee,
+    };
+
+    try {
+      final row = await _supabase
+          .from(_employeeSettingsTable)
+          .select('employee_order, selected_employee_ids')
+          .eq('id', 1)
+          .maybeSingle();
+
+      if (row != null) {
+        final savedOrder = (row['employee_order'] as List? ?? const [])
+            .map((value) => value.toString())
+            .where(eligibleById.containsKey)
+            .toList();
+
+        final savedSelected = (row['selected_employee_ids'] as List? ?? const [])
+            .map((value) => value.toString())
+            .where(eligibleById.containsKey)
+            .toSet();
+
+        // Newly added eligible employees are appended and enabled by default.
+        final newlyAdded = eligible
+            .where((employee) => !savedOrder.contains(employee.id))
+            .toList()
+          ..sort((a, b) =>
+              a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+
+        savedOrder.addAll(newlyAdded.map((employee) => employee.id));
+        savedSelected.addAll(newlyAdded.map((employee) => employee.id));
+
+        return {'order': savedOrder, 'selected': savedSelected};
+      }
+    } catch (e) {
+      debugPrint('Could not load shared employee display settings: $e');
+      // Keep the page usable with defaults if the SQL script has not yet run.
+    }
+
+    final defaults = [...eligible]
+      ..sort((a, b) =>
+          a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+    return {
+      'order': defaults.map((employee) => employee.id).toList(),
+      'selected': defaults.map((employee) => employee.id).toSet(),
+    };
+  }
+
   List<EmployeeAuth> _employeesInDisplayOrder() {
     final eligible = _allEmployees.where(_isEngineerOrManager).toList();
-    final byName = {
-      for (final employee in eligible) _normalize(employee.fullName): employee,
+    final byId = {
+      for (final employee in eligible) employee.id: employee,
     };
     final ordered = <EmployeeAuth>[];
 
-    for (final name in _employeeDisplayOrder) {
-      final employee = byName.remove(_normalize(name));
+    for (final employeeId in _employeeDisplayOrder) {
+      final employee = byId.remove(employeeId);
       if (employee != null) ordered.add(employee);
     }
 
-    final remaining = byName.values.toList()
-      ..sort((a, b) => a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
+    final remaining = byId.values.toList()
+      ..sort((a, b) =>
+          a.fullName.toLowerCase().compareTo(b.fullName.toLowerCase()));
     ordered.addAll(remaining);
     return ordered;
   }
 
+  Future<bool> _saveEmployeeDisplaySettings(
+      List<String> orderedIds, Set<String> selectedIds) async {
+    if (_isSavingEmployeeSettings) return false;
+    setState(() => _isSavingEmployeeSettings = true);
+
+    try {
+      await _supabase.from(_employeeSettingsTable).upsert({
+        'id': 1,
+        'employee_order': orderedIds,
+        'selected_employee_ids': selectedIds.toList(),
+        'updated_at': DateTime.now().toUtc().toIso8601String(),
+      }, onConflict: 'id');
+
+      if (!mounted) return false;
+      setState(() {
+        _employeeDisplayOrder = List<String>.from(orderedIds);
+        _selectedEmployeeIds = Set<String>.from(selectedIds);
+      });
+      _showSnackBar('Employee selection and order saved for everyone');
+      return true;
+    } catch (e) {
+      debugPrint('Could not save employee display settings: $e');
+      if (mounted) {
+        _showSnackBar('Could not save employee settings. Check the Supabase table and permissions.');
+      }
+      return false;
+    } finally {
+      if (mounted) setState(() => _isSavingEmployeeSettings = false);
+    }
+  }
+
   void _showEmployeeOrderDialog() {
     final employees = _employeesInDisplayOrder();
-    final reordered = employees.map((employee) => employee.fullName).toList();
+    final reorderedIds = employees.map((employee) => employee.id).toList();
+    final selectedIds = Set<String>.from(_selectedEmployeeIds);
 
     showDialog<void>(
       context: context,
+      barrierDismissible: !_isSavingEmployeeSettings,
       builder: (dialogContext) => StatefulBuilder(
         builder: (dialogContext, setDialogState) => AlertDialog(
           backgroundColor: _cardColor,
@@ -1349,10 +1440,10 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
               const SizedBox(width: 8),
               Expanded(
                 child: Text(
-                  'Arrange Engineers & Managers',
+                  'Select & Arrange Engineers / Managers',
                   style: GoogleFonts.cairo(
                     color: _textColor,
-                    fontSize: 17,
+                    fontSize: 16,
                     fontWeight: FontWeight.w700,
                   ),
                 ),
@@ -1360,12 +1451,12 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
             ],
           ),
           content: SizedBox(
-            width: 420,
+            width: 460,
             height: math.min(
-              MediaQuery.of(context).size.height * 0.6,
-              math.max(220.0, reordered.length * 62.0),
+              MediaQuery.of(context).size.height * 0.62,
+              math.max(240.0, reorderedIds.length * 66.0),
             ).toDouble(),
-            child: reordered.isEmpty
+            child: reorderedIds.isEmpty
                 ? Center(
               child: Text(
                 'No employees with Engineer or Manager roles found.',
@@ -1373,86 +1464,143 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                 style: GoogleFonts.cairo(color: _secondaryTextColor),
               ),
             )
-                : ReorderableListView.builder(
-              itemCount: reordered.length,
-              onReorder: (oldIndex, newIndex) {
-                setDialogState(() {
-                  if (newIndex > oldIndex) newIndex--;
-                  final name = reordered.removeAt(oldIndex);
-                  reordered.insert(newIndex, name);
-                });
-              },
-              itemBuilder: (context, index) {
-                final employee = employees.firstWhere(
-                      (item) => _samePerson(item.fullName, reordered[index]),
-                );
-                return Container(
-                  key: ValueKey(_normalize(employee.fullName)),
-                  margin: const EdgeInsets.only(bottom: 7),
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 9),
-                  decoration: BoxDecoration(
-                    color: _mutedColor,
-                    borderRadius: BorderRadius.circular(9),
-                    border: Border.all(color: _borderColor),
-                  ),
-                  child: Row(
-                    children: [
-                      CircleAvatar(
-                        radius: 16,
-                        backgroundColor: Colors.blue.withOpacity(0.12),
-                        child: Text(
-                          employee.initials,
-                          style: GoogleFonts.cairo(
-                            color: Colors.blue,
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
+                : Column(
+              children: [
+                Row(
+                  children: [
+                    Text(
+                      '${selectedIds.length} of ${reorderedIds.length} selected',
+                      style: GoogleFonts.cairo(
+                        color: _secondaryTextColor,
+                        fontSize: 11,
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                    ),
+                    const Spacer(),
+                    TextButton(
+                      onPressed: () => setDialogState(() {
+                        selectedIds.addAll(reorderedIds);
+                      }),
+                      child: Text('Select all', style: GoogleFonts.cairo(fontSize: 11)),
+                    ),
+                    TextButton(
+                      onPressed: () => setDialogState(selectedIds.clear),
+                      child: Text('Clear', style: GoogleFonts.cairo(fontSize: 11)),
+                    ),
+                  ],
+                ),
+                const Divider(height: 1),
+                Expanded(
+                  child: ReorderableListView.builder(
+                    itemCount: reorderedIds.length,
+                    onReorder: (oldIndex, newIndex) {
+                      setDialogState(() {
+                        if (newIndex > oldIndex) newIndex--;
+                        final employeeId = reorderedIds.removeAt(oldIndex);
+                        reorderedIds.insert(newIndex, employeeId);
+                      });
+                    },
+                    itemBuilder: (context, index) {
+                      final employeeId = reorderedIds[index];
+                      final employee = employees.firstWhere(
+                            (item) => item.id == employeeId,
+                      );
+                      final isSelected = selectedIds.contains(employeeId);
+
+                      return Container(
+                        key: ValueKey(employeeId),
+                        margin: const EdgeInsets.only(bottom: 6),
+                        decoration: BoxDecoration(
+                          color: _mutedColor,
+                          borderRadius: BorderRadius.circular(9),
+                          border: Border.all(color: _borderColor),
+                        ),
+                        child: Row(
                           children: [
-                            Text(
-                              employee.fullName,
-                              overflow: TextOverflow.ellipsis,
-                              style: GoogleFonts.cairo(
-                                color: _textColor,
-                                fontWeight: FontWeight.w600,
-                                fontSize: 12,
+                            Checkbox(
+                              value: isSelected,
+                              activeColor: Theme.of(context).colorScheme.primary,
+                              onChanged: (checked) {
+                                setDialogState(() {
+                                  if (checked == true) {
+                                    selectedIds.add(employeeId);
+                                  } else {
+                                    selectedIds.remove(employeeId);
+                                  }
+                                });
+                              },
+                            ),
+                            CircleAvatar(
+                              radius: 15,
+                              backgroundColor: Colors.blue.withOpacity(0.12),
+                              child: Text(
+                                employee.initials,
+                                style: GoogleFonts.cairo(
+                                  color: Colors.blue,
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                ),
                               ),
                             ),
-                            Text(
-                              employee.role ?? '',
-                              style: GoogleFonts.cairo(
-                                color: _secondaryTextColor,
-                                fontSize: 10,
+                            const SizedBox(width: 9),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    employee.fullName,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: GoogleFonts.cairo(
+                                      color: _textColor,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                  Text(
+                                    employee.role ?? '',
+                                    style: GoogleFonts.cairo(
+                                      color: _secondaryTextColor,
+                                      fontSize: 10,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
+                            Icon(Icons.drag_handle, color: _secondaryTextColor),
+                            const SizedBox(width: 8),
                           ],
                         ),
-                      ),
-                      Icon(Icons.drag_handle, color: _secondaryTextColor),
-                    ],
+                      );
+                    },
                   ),
-                );
-              },
+                ),
+              ],
             ),
           ),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(dialogContext),
+              onPressed: _isSavingEmployeeSettings
+                  ? null
+                  : () => Navigator.pop(dialogContext),
               child: Text('Cancel', style: GoogleFonts.cairo()),
             ),
             FilledButton.icon(
-              onPressed: () {
-                setState(() => _employeeDisplayOrder = List<String>.from(reordered));
-                Navigator.pop(dialogContext);
-                _showSnackBar('Employee order updated');
+              onPressed: _isSavingEmployeeSettings
+                  ? null
+                  : () async {
+                final saved = await _saveEmployeeDisplaySettings(reorderedIds, selectedIds);
+                if (saved && dialogContext.mounted) Navigator.pop(dialogContext);
               },
-              icon: const Icon(Icons.check, size: 17),
-              label: Text('Apply order', style: GoogleFonts.cairo()),
+              icon: _isSavingEmployeeSettings
+                  ? const SizedBox(
+                width: 16,
+                height: 16,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              )
+                  : const Icon(Icons.save, size: 17),
+              label: Text(
+                _isSavingEmployeeSettings ? 'Saving...' : 'Save for everyone',
+                style: GoogleFonts.cairo(),
+              ),
             ),
           ],
         ),
@@ -1473,6 +1621,14 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     for (final employee in _employeesInDisplayOrder()) {
       workload.putIfAbsent(_normalize(employee.fullName), () => Map<String, int>.from(emptyStages));
     }
+
+    // Only employees checked in the shared settings are displayed in this graph.
+    final visibleEmployeeKeys = _employeesInDisplayOrder()
+        .where((employee) => _selectedEmployeeIds.contains(employee.id))
+        .map((employee) => _normalize(employee.fullName))
+        .toSet();
+    workload.removeWhere((employeeKey, _) => !visibleEmployeeKeys.contains(employeeKey));
+
     final unassignedCounts = _unassignedWorkloadCounts();
     if (workload.isEmpty && unassignedCounts.values.every((count) => count == 0)) {
       return const SizedBox.shrink();
@@ -1495,6 +1651,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     };
 
     final employeeOrder = _employeesInDisplayOrder()
+        .where((employee) => _selectedEmployeeIds.contains(employee.id))
         .map((employee) => _normalize(employee.fullName))
         .toList();
     final employeeEntries = workload.entries.toList()
@@ -1629,10 +1786,10 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
           Align(
             alignment: Alignment.centerLeft,
             child: OutlinedButton.icon(
-              onPressed: _showEmployeeOrderDialog,
+              onPressed: _isSavingEmployeeSettings ? null : _showEmployeeOrderDialog,
               icon: const Icon(Icons.reorder, size: 17),
               label: Text(
-                'Arrange Engineers & Managers (${_employeesInDisplayOrder().length})',
+                'Select & Arrange Employees (${_selectedEmployeeIds.length}/${_employeesInDisplayOrder().length})',
                 style: GoogleFonts.cairo(fontSize: 11, fontWeight: FontWeight.w600),
               ),
               style: OutlinedButton.styleFrom(
