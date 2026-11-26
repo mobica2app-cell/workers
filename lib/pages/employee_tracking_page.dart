@@ -396,6 +396,38 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     return counts;
   }
 
+  // Keep every employee's status-change breakdown in the same workflow order,
+  // independent of the number of changes in each status.
+  int _transitionSortOrder(String transition) {
+    final from = _normalize(transition.split('→').first);
+
+    if (from == 'drawing submittal' ||
+        from == 'drawing submission' ||
+        from == 'drawing submitted') {
+      return 0;
+    }
+    if (from == 'modification' ||
+        from == 'modifications' ||
+        from == 'modification submitted' ||
+        from == 'modifications submitted') {
+      return 1;
+    }
+    if (from == 'manufacturing drawing' ||
+        from == 'manufacturing' ||
+        from == 'manifactury') {
+      return 2;
+    }
+    if (from == 'partation master data' || from == 'partition editing') {
+      return 3;
+    }
+
+    // Keep other tracked transitions visible after the four main stages.
+    if (from == 'tasks' || from == 'task' || from == 'task done') return 4;
+    if (from == 'review') return 5;
+    if (from == 'rework manifactury') return 6;
+    return 7;
+  }
+
   bool _samePerson(String? a, String? b) {
     if (a == null || b == null) return false;
 
@@ -1485,7 +1517,15 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
     }
 
     final entries = counts.entries.toList()
-      ..sort((a, b) => b.value.compareTo(a.value));
+      ..sort((a, b) {
+        final orderCompare =
+        _transitionSortOrder(a.key).compareTo(_transitionSortOrder(b.key));
+        if (orderCompare != 0) return orderCompare;
+
+        // Keep multiple transitions from the same stage in a predictable
+        // order, rather than letting their counts change the layout.
+        return _normalize(a.key).compareTo(_normalize(b.key));
+      });
 
     return Container(
       width: double.infinity,
