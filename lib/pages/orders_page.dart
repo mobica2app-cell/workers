@@ -3414,6 +3414,14 @@ class _OrdersPageState extends State<OrdersPage> {
     return lockedStatuses.contains(order.status.toLowerCase());
   }
 
+
+  // These normally locked workflow stages may move specifically to Rework Manifactury.
+  // All other edits remain locked, and the normal assignment rules still apply.
+  bool _canMoveLockedOrderToRework(SAPMainOrder order) {
+    const eligibleCurrentStatuses = {'master data', 'done', 'planning'};
+    return eligibleCurrentStatuses.contains(order.status.trim().toLowerCase());
+  }
+
   // Add this method to _OrdersPageState class
   Future<void> _deleteSelectedOrders() async {
     if (_selectedRowsIds.isEmpty) {
@@ -3726,7 +3734,11 @@ class _OrdersPageState extends State<OrdersPage> {
 
     // Keep archived rows locked against normal edits, but allow status changes
     // that move them back to the active table.
-    if (_isOrderLocked(order) && !isReturningToActive) {
+    final isReworkDestination =
+        newStatus.trim().toLowerCase() == 'rework manifactury';
+    final allowedLockedToRework =
+        isReworkDestination && _canMoveLockedOrderToRework(order);
+    if (_isOrderLocked(order) && !isReturningToActive && !allowedLockedToRework) {
       _showYellowWarning(
         '⚠️ Cannot change status for "Done", "Task Done", "Planning", or "Master Data" orders',
       );
@@ -3850,7 +3862,12 @@ class _OrdersPageState extends State<OrdersPage> {
         final currentlyArchived = _archivedOrderIds.contains(selectedOrder.id);
         final targetArchived = widget.sapService.isArchivedStatus(newStatus);
         final returningToActive = currentlyArchived && !targetArchived;
-        if (_isOrderLocked(selectedOrder) && !returningToActive) {
+        final canMoveLockedToRework =
+            newStatus.trim().toLowerCase() == 'rework manifactury' &&
+                _canMoveLockedOrderToRework(selectedOrder);
+        if (_isOrderLocked(selectedOrder) &&
+            !returningToActive &&
+            !canMoveLockedToRework) {
           skipped++;
           continue;
         }
@@ -5849,8 +5866,13 @@ class _OrdersPageState extends State<OrdersPage> {
   Future<void> _showMobileStatusPicker(SAPMainOrder order) async {
     final currentStatus = order.status;
     final archived = _archivedOrderIds.contains(order.id);
-    final locked = _isOrderLocked(order) && !(widget.doneOrdersOnly && archived);
     final allowedStatuses = _getAllowedStatusesForOrder(order);
+    final canChooseRework =
+        _canMoveLockedOrderToRework(order) &&
+            allowedStatuses.any((s) => s.trim().toLowerCase() == 'rework manifactury');
+    final locked = _isOrderLocked(order) &&
+        !(widget.doneOrdersOnly && archived) &&
+        !canChooseRework;
 
     if (widget.readOnly) return;
     if (locked) {
@@ -9397,6 +9419,15 @@ class _OrdersPageState extends State<OrdersPage> {
         'Master Data',
       ],
       'master data': [
+        'Rework Manifactury',
+      ],
+      'rework manifactury': [
+        'Master Data',
+        'Done',
+        'planning',
+      ],
+      'done': [
+        'Rework Manifactury',
       ],
       'sales': [
         'Drawing Submittal',
@@ -9406,6 +9437,7 @@ class _OrdersPageState extends State<OrdersPage> {
       ],
       'planning': [
         'Drawing Submittal',
+        'Rework Manifactury',
       ],
       'partation  master data': [
         'Done',
