@@ -330,7 +330,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
         (oldValue == 'manufacturing drawing' && newValue == 'master data') ||
         (oldValue == 'review' && newValue == 'master data') ||
         (oldValue == 'partation master data' && newValue == 'done') ||
-        (oldValue == 'partition editing' && newValue == 'done');
+        (oldValue == 'partition editing' && newValue == 'done') ||
+        (oldValue == 'rework manifactury' &&
+            (newValue == 'master data' || newValue == 'done' || newValue == 'planning'));
   }
 
   String _transitionLabel(Map<String, dynamic> log) {
@@ -346,6 +348,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       'Task': 0,
       'Modification': 0,
       'Manufacturing': 0,
+      'Rework Manifactury': 0,
     };
 
     for (final change in changes) {
@@ -370,6 +373,8 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
           from == 'manufacturing' ||
           from == 'manifactury') {
         counts['Manufacturing'] = counts['Manufacturing']! + 1;
+      } else if (from == 'rework manifactury') {
+        counts['Rework Manifactury'] = counts['Rework Manifactury']! + 1;
       }
     }
 
@@ -1120,6 +1125,8 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
         return Colors.deepPurple;
       case 'master data':
         return Colors.teal;
+      case 'rework manifactury':
+        return Colors.deepOrange;
       default:
         return Colors.grey;
     }
@@ -2263,6 +2270,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
         value == 'manifactury') {
       return 'Manufacturing';
     }
+    if (value == 'rework manifactury' || value == 'rework manufacturing') {
+      return 'Rework Manifactury';
+    }
     return null;
   }
 
@@ -2307,6 +2317,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
           'Task': 0,
           'Modification': 0,
           'Manufacturing': 0,
+          'Rework Manifactury': 0,
         },
       );
     }
@@ -2348,7 +2359,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
 
     for (final order in _orders) {
       final currentStage = _currentStageForStatus(order.status);
-      if (currentStage == null) continue;
+      if (currentStage != stage) continue;
 
       final alternative = order.correspondenceEngineer?.trim() ?? '';
       final responsible = order.responsibleEngineer?.trim() ?? '';
@@ -2779,6 +2790,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       'Task': <String>{},
       'Modification': <String>{},
       'Manufacturing': <String>{},
+      'Rework Manifactury': <String>{},
     };
 
     for (final order in _orders) {
@@ -2842,6 +2854,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       'Task',
       'Modification',
       'Manufacturing',
+      'Rework Manifactury',
     ];
 
     final stageColors = <String, Color>{
@@ -2849,6 +2862,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
       'Task': Colors.indigo,
       'Modification': Colors.orange,
       'Manufacturing': Colors.deepPurple,
+      'Rework Manifactury': Colors.deepOrange,
     };
 
     final employeeEntries = workload.entries.toList()
@@ -3043,8 +3057,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                       final task = stages['Task'] ?? 0;
                       final modification = stages['Modification'] ?? 0;
                       final manufacturing = stages['Manufacturing'] ?? 0;
+                      final reworkManifactury = stages['Rework Manifactury'] ?? 0;
                       final displayedTotal =
-                          drawing + task + modification + manufacturing;
+                          drawing + task + modification + manufacturing + reworkManifactury;
                       final totalOrders = orderStages.values.fold<int>(
                         0,
                             (sum, value) => sum + value,
@@ -3061,6 +3076,7 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                             'Task: $task\n'
                             'Modification: $modification\n'
                             'Manufacturing: $manufacturing\n'
+                            'Rework Manifactury: $reworkManifactury\n'
                             '${contractMode ? 'Displayed: $displayedTotal contracts\n' : ''}'
                             'Total Orders: $totalOrders\n'
                             'Total Contracts: $totalContracts',
@@ -3220,8 +3236,9 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                   final task = stages['Task'] ?? 0;
                   final modification = stages['Modification'] ?? 0;
                   final manufacturing = stages['Manufacturing'] ?? 0;
+                  final reworkManifactury = stages['Rework Manifactury'] ?? 0;
                   final displayedTotal =
-                      drawing + task + modification + manufacturing;
+                      drawing + task + modification + manufacturing + reworkManifactury;
 
                   return BarChartGroupData(
                     x: index,
@@ -3248,8 +3265,13 @@ class _EmployeeTrackingPageState extends State<EmployeeTrackingPage> {
                           ),
                           BarChartRodStackItem(
                             (drawing + task + modification).toDouble(),
-                            displayedTotal.toDouble(),
+                            (drawing + task + modification + manufacturing).toDouble(),
                             stageColors['Manufacturing']!,
+                          ),
+                          BarChartRodStackItem(
+                            (drawing + task + modification + manufacturing).toDouble(),
+                            displayedTotal.toDouble(),
+                            stageColors['Rework Manifactury']!,
                           ),
                         ],
                       ),

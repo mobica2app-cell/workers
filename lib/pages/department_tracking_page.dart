@@ -928,6 +928,8 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
         return Colors.green;
       case 'master data':
         return Colors.teal;
+      case 'rework manifactury':
+        return Colors.deepOrange;
       case 'manufacturing drawing':
       case 'manufacturing':
         return Colors.deepPurple;
@@ -992,6 +994,9 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
     if (value == 'review') {
       return 'Review';
     }
+    if (value == 'rework manifactury' || value == 'rework manufacturing') {
+      return 'Rework Manifactury';
+    }
     // _normalize collapses repeated spaces, so compare using the normalized
     // form while keeping the exact graph label requested by the user.
     if (value == 'partation master data') {
@@ -1041,6 +1046,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
           'Modification': 0,
           'Manufacturing': 0,
           'Review': 0,
+          'Rework Manifactury': 0,
           'partation  master data': 0,
         },
       );
@@ -1083,7 +1089,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
 
     for (final order in _allOrders) {
       final currentStage = _currentStageForStatus(order.status);
-      if (currentStage == null) continue;
+      if (currentStage != stage) continue;
 
       final alternative = order.correspondenceEngineer?.trim() ?? '';
       final responsible = order.responsibleEngineer?.trim() ?? '';
@@ -1276,6 +1282,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       'Modification': <String>{},
       'Manufacturing': <String>{},
       'Review': <String>{},
+      'Rework Manifactury': <String>{},
       'partation  master data': <String>{},
     };
 
@@ -1627,6 +1634,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       'Modification': 0,
       'Manufacturing': 0,
       'Review': 0,
+      'Rework Manifactury': 0,
       'partation  master data': 0,
     };
     for (final employee in _employeesInDisplayOrder()) {
@@ -1650,6 +1658,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       'Modification',
       'Manufacturing',
       'Review',
+      'Rework Manifactury',
       'partation  master data',
     ];
 
@@ -1658,6 +1667,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
       'Modification': Colors.orange,
       'Manufacturing': Colors.deepPurple,
       'Review': Colors.teal,
+      'Rework Manifactury': Colors.deepOrange,
       'partation  master data': Colors.brown,
     };
 
@@ -1893,6 +1903,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                               final modification = stages['Modification'] ?? 0;
                               final manufacturing = stages['Manufacturing'] ?? 0;
                               final review = stages['Review'] ?? 0;
+                              final reworkManifactury = stages['Rework Manifactury'] ?? 0;
                               final partationMasterData =
                                   stages['partation  master data'] ?? 0;
                               final displayedTotal =
@@ -1900,6 +1911,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                       modification +
                                       manufacturing +
                                       review +
+                                      reworkManifactury +
                                       partationMasterData;
                               final totalOrders = orderStages.values.fold<int>(
                                 0,
@@ -1917,6 +1929,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                     'Modification: $modification\n'
                                     'Manufacturing: $manufacturing\n'
                                     'Review: $review\n'
+                                    'Rework Manifactury: $reworkManifactury\n'
                                     'partation  master data: $partationMasterData\n'
                                     '${contractMode ? 'Displayed: $displayedTotal contracts\n' : ''}'
                                     'Total Orders: $totalOrders\n'
@@ -2057,6 +2070,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                           final modification = stages['Modification'] ?? 0;
                           final manufacturing = stages['Manufacturing'] ?? 0;
                           final review = stages['Review'] ?? 0;
+                          final reworkManifactury = stages['Rework Manifactury'] ?? 0;
                           final partationMasterData =
                               stages['partation  master data'] ?? 0;
                           final displayedTotal =
@@ -2064,6 +2078,7 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                   modification +
                                   manufacturing +
                                   review +
+                                  reworkManifactury +
                                   partationMasterData;
 
                           return BarChartGroupData(
@@ -2096,6 +2111,11 @@ class _DepartmentTrackingPageState extends State<DepartmentTrackingPage> {
                                   ),
                                   BarChartRodStackItem(
                                     (drawing + modification + manufacturing + review).toDouble(),
+                                    (drawing + modification + manufacturing + review + reworkManifactury).toDouble(),
+                                    stageColors['Rework Manifactury']!,
+                                  ),
+                                  BarChartRodStackItem(
+                                    (drawing + modification + manufacturing + review + reworkManifactury).toDouble(),
                                     displayedTotal.toDouble(),
                                     stageColors['partation  master data']!,
                                   ),

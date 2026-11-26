@@ -286,6 +286,7 @@ class _OrdersPageState extends State<OrdersPage> {
     'Task Done',
     'Review',
     'Master Data',
+    'Rework Manifactury',
     'Sales',
     'As Built',
     'Tasks',
@@ -3376,6 +3377,8 @@ class _OrdersPageState extends State<OrdersPage> {
         return Colors.amber;
       case 'Master Data':
         return Colors.cyan;
+      case 'Rework Manifactury':
+        return Colors.deepOrange;
       case 'Sales':
         return Colors.deepOrange;
       case 'As Built':
